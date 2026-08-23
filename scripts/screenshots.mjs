@@ -55,7 +55,16 @@ const SHOTS = [
   { name: 'tasks', path: '/tasks' },
   { name: 'calendar', path: '/calendar' },
   { name: 'money', path: '/money' },
-  { name: 'notes', path: '/notes' },
+  {
+    name: 'notes',
+    path: '/notes',
+    // Same reason as mail below: with no note picked, two thirds of the
+    // frame is a "pick a note" pane, and the editor is the point here
+    async prepare(page) {
+      await page.getByText('Shopping list').first().click();
+      await page.waitForTimeout(300);
+    },
+  },
   {
     name: 'mail',
     path: '/mail',
