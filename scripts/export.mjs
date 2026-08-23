@@ -28,7 +28,7 @@ if (!existsSync(dbPath)) {
 }
 
 const stamp = new Date().toISOString().slice(0, 10);
-const archive = join(outDir, `family-hub-${stamp}.tar.gz`);
+const archive = join(outDir, `neiliro-${stamp}.tar.gz`);
 const staging = mkdtempSync(join(tmpdir(), 'hub-export-'));
 
 function countRows(db, table) {

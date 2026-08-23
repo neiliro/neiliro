@@ -704,7 +704,7 @@ export function Settings() {
 
       <section className="mb-5 break-inside-avoid rounded-card border border-line bg-surface p-5">
         <h2 className="eyebrow mb-4">{t('About')}</h2>
-        <p className="font-mono text-sm text-ink">Family Hub v{VERSION}</p>
+        <p className="font-mono text-sm text-ink">Neiliro v{VERSION}</p>
         {BUILD_SHA && (
           <p className="mt-1 font-mono text-xs text-muted">{t('Build {sha}', { sha: BUILD_SHA })}</p>
         )}

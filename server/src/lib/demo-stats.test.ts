@@ -36,8 +36,8 @@ describe('apiModule', () => {
 
 describe('normalizeReferrer', () => {
   it('keeps host and path, drops the query string and trailing slash', () => {
-    expect(normalizeReferrer('https://github.com/burtsdenis/family-hub/')).toBe(
-      'github.com/burtsdenis/family-hub',
+    expect(normalizeReferrer('https://github.com/neiliro/neiliro/')).toBe(
+      'github.com/neiliro/neiliro',
     );
     expect(normalizeReferrer('https://news.ycombinator.com/item?id=1')).toBe(
       'news.ycombinator.com/item',
@@ -62,7 +62,7 @@ describe('normalizeReferrer', () => {
 describe('sandbox session lifecycle', () => {
   it('records start and end in demo-stats.db', () => {
     initDemoStats();
-    const id = statsSessionStarted('https://github.com/burtsdenis/family-hub', 'TestAgent/1.0');
+    const id = statsSessionStarted('https://github.com/neiliro/neiliro', 'TestAgent/1.0');
     expect(id).not.toBeNull();
     statsSessionEnded(id, 'logout', {
       requests: 7,
@@ -85,7 +85,7 @@ describe('sandbox session lifecycle', () => {
     db.close();
 
     expect(row.created_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-    expect(row.referrer).toBe('github.com/burtsdenis/family-hub');
+    expect(row.referrer).toBe('github.com/neiliro/neiliro');
     expect(row.user_agent).toBe('TestAgent/1.0');
     expect(row.ended_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
     expect(row.end_reason).toBe('logout');

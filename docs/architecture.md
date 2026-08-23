@@ -102,7 +102,7 @@ A hand-rolled `docker build` should pass `--build-arg BUILD_SHA=…`; without it
 2. Bump the version in all three `package.json` files in that day's last pull request, before tagging. Settings → About and the sidebar read it, so a manifest left behind announces the wrong release.
 3. `git tag vX.Y.Z && git push origin vX.Y.Z`.
 4. The tag starts `release.yml`: a multi-arch image (amd64 + arm64) to GHCR, 6–9 minutes, most of it arm64 under emulation.
-5. Write the release page by hand — [v1.0.0](https://github.com/burtsdenis/family-hub/releases/tag/v1.0.0) is the shape: a title that names the release, what it means in a paragraph, a section per headline feature, and an **Upgrading** block naming the migrations that will run and the exact image to pull. Generated notes do not do that job.
+5. Write the release page by hand — [v1.0.0](https://github.com/neiliro/neiliro/releases/tag/v1.0.0) is the shape: a title that names the release, what it means in a paragraph, a section per headline feature, and an **Upgrading** block naming the migrations that will run and the exact image to pull. Generated notes do not do that job.
 6. Close the milestone, if one is open.
 
-The git tag carries a `v` and the image tag does not — `v1.1.0` in the repository, `ghcr.io/burtsdenis/family-hub:1.1.0` in the registry. That is `docker/metadata-action` following registry convention (`node:22`, `postgres:16` carry no prefix), not a prefix going missing. It reads like a bug often enough to be worth writing down.
+The git tag carries a `v` and the image tag does not — `v1.1.0` in the repository, `ghcr.io/neiliro/neiliro:1.1.0` in the registry. That is `docker/metadata-action` following registry convention (`node:22`, `postgres:16` carry no prefix), not a prefix going missing. It reads like a bug often enough to be worth writing down.

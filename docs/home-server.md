@@ -80,7 +80,7 @@ Nightly backup at 03:00 — a database snapshot, notes exported to markdown, `ag
 
 ```bash
 crontab -e
-0 3 * * * cd /path/to/family-hub && AGE_RECIPIENT=age1... ./scripts/backup.sh
+0 3 * * * cd /path/to/neiliro && AGE_RECIPIENT=age1... ./scripts/backup.sh
 ```
 
 Attachments do not go to git — a machine-level backup (e.g. Time Machine) covers them.
@@ -95,7 +95,7 @@ On the old machine:
 npm run export -- ~/Desktop
 ```
 
-This produces `family-hub-YYYY-MM-DD.tar.gz`: the database, attachments and a manifest. No need to stop the server — the database is exported via `VACUUM INTO`, i.e. opened as a database rather than copied as a file. A plain copy of `hub.db` would lose fresh writes: they live in the WAL journal next to it.
+This produces `neiliro-YYYY-MM-DD.tar.gz`: the database, attachments and a manifest. No need to stop the server — the database is exported via `VACUUM INTO`, i.e. opened as a database rather than copied as a file. A plain copy of `hub.db` would lose fresh writes: they live in the WAL journal next to it.
 
 Transfer the archive however you like. It contains everything, private notes and personal accounts included.
 
@@ -103,7 +103,7 @@ On the new machine:
 
 ```bash
 npm install
-npm run import -- ~/Downloads/family-hub-2026-08-03.tar.gz
+npm run import -- ~/Downloads/neiliro-2026-08-03.tar.gz
 npm run dev
 ```
 

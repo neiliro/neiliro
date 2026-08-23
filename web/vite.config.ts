@@ -38,8 +38,8 @@ export default defineConfig({
       injectRegister: false,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Family Hub',
-        short_name: 'Family Hub',
+        name: 'Neiliro',
+        short_name: 'Neiliro',
         description: 'Tasks, notes, calendar and money for a household',
         start_url: '/',
         display: 'standalone',

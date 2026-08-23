@@ -56,8 +56,8 @@ describe('totp against RFC 6238 vectors', () => {
 describe('otpauthUri', () => {
   it('encodes the account and issuer', () => {
     const uri = otpauthUri('denis@hub.local', 'ABC234');
-    expect(uri).toContain('otpauth://totp/Family%20Hub:denis%40hub.local');
+    expect(uri).toContain('otpauth://totp/Neiliro:denis%40hub.local');
     expect(uri).toContain('secret=ABC234');
-    expect(uri).toContain('issuer=Family%20Hub');
+    expect(uri).toContain('issuer=Neiliro');
   });
 });

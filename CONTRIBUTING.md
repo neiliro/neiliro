@@ -51,7 +51,7 @@ For anything larger than a bug fix, open an issue first and let's agree
 on the shape. It is a small codebase with strong opinions; a day of your
 work is worth ten minutes of arguing about the approach.
 
-[gfi]: https://github.com/burtsdenis/family-hub/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22
+[gfi]: https://github.com/neiliro/neiliro/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22
 
 ## Before you open a pull request
 
