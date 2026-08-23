@@ -79,8 +79,8 @@ export async function seedDemo(): Promise<void> {
     // ── Family ──
     db.prepare(
       `INSERT INTO users (id, email, name, role, password_hash, color, created_at) VALUES
-       (?, 'alex@family.hub', 'Alex', 'admin', ?, '#2E6F8E', ?),
-       (?, 'sam@family.hub', 'Sam', 'member', ?, '#B4654A', ?)`,
+       (?, 'alex@neiliro.example', 'Alex', 'admin', ?, '#2E6F8E', ?),
+       (?, 'sam@neiliro.example', 'Sam', 'member', ?, '#B4654A', ?)`,
     ).run(alex, passwordHash, now(), sam, passwordHash, now());
 
     // ── Projects and tasks ──
@@ -167,12 +167,12 @@ export async function seedDemo(): Promise<void> {
     db.prepare(
       `INSERT INTO mail_messages (id, kind, from_address, from_name, to_address, subject,
                                   body_text, sent_at, received_at, read_at) VALUES
-       (?, 'in', 'office@riverside-school.example', 'Riverside School', 'family@hub.example',
+       (?, 'in', 'office@riverside-school.example', 'Riverside School', 'family@neiliro.example',
         'Parent-teacher evening on Thursday',
         'Dear parents,' || char(10) || char(10) ||
         'We look forward to seeing you this Thursday at 17:30 in the main hall. Please confirm your attendance by replying to this email.' || char(10) || char(10) ||
         'Riverside School office', ?, ?, NULL),
-       (?, 'in', 'no-reply@citypower.example', 'City Power & Light', 'family@hub.example',
+       (?, 'in', 'no-reply@citypower.example', 'City Power & Light', 'family@neiliro.example',
         'Your electricity bill for July',
         'Your bill for July is ready: 64.20 EUR, due by the 25th.' || char(10) ||
         'The detailed statement is attached as a PDF in the original message.', ?, ?, ?)`,

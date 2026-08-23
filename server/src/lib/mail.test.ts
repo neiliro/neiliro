@@ -8,7 +8,7 @@ const PDF_BASE64 = Buffer.from('%PDF-1.4 fake').toString('base64');
 const RAW_WITH_ATTACHMENT = [
   'Message-ID: <trip-42@school.example>',
   'From: "Riverside School" <office@school.example>',
-  'To: family@hub.example',
+  'To: family@neiliro.example',
   'Subject: Trip consent form',
   'Date: Thu, 14 Aug 2026 09:00:00 +0200',
   'MIME-Version: 1.0',
@@ -31,7 +31,7 @@ const RAW_WITH_ATTACHMENT = [
 const RAW_HTML_ONLY = [
   'Message-ID: <bill-7@power.example>',
   'From: no-reply@power.example',
-  'To: family@hub.example',
+  'To: family@neiliro.example',
   'Subject: Your bill',
   'MIME-Version: 1.0',
   'Content-Type: text/html; charset=utf-8',
