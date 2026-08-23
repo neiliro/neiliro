@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Nightly backup: database snapshot, notes export to markdown, encryption, git push.
 # Goes into cron at 03:00. Attachments are not included — Time Machine covers them.
+# On a hosted server (a families/ directory in DATA_DIR) the shape changes:
+# one encrypted archive per family, attachments included — see below.
 set -euo pipefail
 
 DATA_DIR="${DATA_DIR:-$HOME/.family-hub}"
@@ -22,6 +24,67 @@ report() {
 trap 'status=$?; if [ "$status" -eq 0 ]; then report ""; else report "/fail"; fi' EXIT
 
 mkdir -p "$BACKUP_DIR"
+
+# ── Hosted: one server, many families ───────────────────────────────────────
+# family = subdomain = one SQLite file in families/<id>/ (see
+# docs/architecture.md, "Hosted mode"). Each family becomes its own
+# encrypted archive: database snapshot PLUS attachments — unlike the
+# single-family install below, there is no Time Machine behind a hosted
+# server, and the attachments are other people's data. The registry
+# (slug → id mapping) is snapshotted alongside, so any archive can be
+# matched to its family even after renames. Notes are not exported to
+# markdown here: that insurance is for reading one's own data without
+# the app, and hosted families get the in-app export for that.
+if [ -d "$DATA_DIR/families" ]; then
+  if [ -z "$AGE_RECIPIENT" ]; then
+    echo "AGE_RECIPIENT is not set — refusing to write other people's data unencrypted." >&2
+    exit 1
+  fi
+
+  DAY_DIR="$BACKUP_DIR/$STAMP"
+  mkdir -p "$DAY_DIR"
+
+  sqlite3 "$DATA_DIR/registry.db" ".backup '$DAY_DIR/registry.db'"
+
+  count=0
+  for family_dir in "$DATA_DIR/families"/*/; do
+    [ -f "$family_dir/hub.db" ] || continue
+    family_id=$(basename "$family_dir")
+
+    # The slug in the filename is ops convenience (which archive is whose);
+    # the id is the stable truth — restores match by id.
+    slug=$(sqlite3 "$DAY_DIR/registry.db" \
+      "SELECT slug FROM families WHERE id = '$family_id';" 2>/dev/null || true)
+    name="${slug:-unknown}.$family_id"
+
+    snap_dir="$DAY_DIR/$family_id.snap"
+    mkdir -p "$snap_dir"
+    sqlite3 "$family_dir/hub.db" ".backup '$snap_dir/hub.db'"
+
+    if [ -d "$family_dir/attachments" ]; then
+      tar -czf "$DAY_DIR/$name.tar.gz" -C "$snap_dir" hub.db -C "$family_dir" attachments
+    else
+      tar -czf "$DAY_DIR/$name.tar.gz" -C "$snap_dir" hub.db
+    fi
+    rm -rf "$snap_dir"
+
+    age -r "$AGE_RECIPIENT" -o "$DAY_DIR/$name.tar.gz.age" "$DAY_DIR/$name.tar.gz"
+    rm -f "$DAY_DIR/$name.tar.gz"
+    count=$((count + 1))
+  done
+
+  age -r "$AGE_RECIPIENT" -o "$DAY_DIR/registry.db.age" "$DAY_DIR/registry.db"
+  # The slug SELECTs above open the snapshot and, since WAL mode is
+  # persisted in the file, leave empty -wal/-shm companions — sweep them
+  # together with the plaintext snapshot.
+  rm -f "$DAY_DIR/registry.db" "$DAY_DIR/registry.db-wal" "$DAY_DIR/registry.db-shm"
+
+  # Keep two weeks of daily directories, like the single-family path
+  find "$BACKUP_DIR" -maxdepth 1 -type d -name '20*' -mtime +14 -exec rm -rf {} + 2>/dev/null || true
+
+  echo "Hosted backup $STAMP is ready: $count families."
+  exit 0
+fi
 
 # 1. Consistent database snapshot (safe while the app is running)
 sqlite3 "$DATA_DIR/hub.db" ".backup '$BACKUP_DIR/hub-$STAMP.db'"
