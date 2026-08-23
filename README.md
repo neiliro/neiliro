@@ -124,10 +124,10 @@ hub in [deploy-vps.md](docs/deploy-vps.md).
 
 The roadmap lives where you can see and influence it:
 
-- **[Roadmap board](https://github.com/users/burtsdenis/projects/1)** —
+- **[Roadmap board](https://github.com/orgs/neiliro/projects/1)** —
   Now / Next / Later at a glance.
 - **[Releases](https://github.com/neiliro/neiliro/releases)** —
-  what landed and when; v1.0.0 is the current one.
+  what landed and when.
 - **[Issues](https://github.com/neiliro/neiliro/issues)** — vote
   with a 👍 on what you want most; that is genuinely how things get
   prioritized here.
