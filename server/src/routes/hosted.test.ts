@@ -58,10 +58,11 @@ describe('createFamily', () => {
 
 describe('host routing', () => {
   let app: FastifyInstance;
+  let smithsId: string;
 
   beforeAll(async () => {
     tenants.initHosted();
-    tenants.createFamily('smiths-a1b2');
+    smithsId = tenants.createFamily('smiths-a1b2').familyId;
     tenants.createFamily('jones-c3d4');
     app = await buildApp();
   });
@@ -127,6 +128,42 @@ describe('host routing', () => {
       payload: { name: 'Eve', email: 'eve@evil.test', password: 'longenoughpass' },
     });
     expect(setup.statusCode).toBe(403);
+  });
+
+  it('counts module requests into per-family day stats, never the ghost', async () => {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: onHost('smiths-a1b2.neiliro.test'),
+      payload: { email: 'sam@smiths.test', password: 'correct horse battery' },
+    });
+    const session = login.cookies.find((c) => c.name === 'hub_session')!;
+
+    const tasks = await app.inject({
+      url: '/api/tasks',
+      headers: { ...onHost('smiths-a1b2.neiliro.test'), cookie: `hub_session=${session.value}` },
+    });
+    expect(tasks.statusCode).toBe(200);
+
+    const stats = await import('../lib/hosted-stats.js');
+    stats.flushHostedStats();
+    const { default: Database } = await import('better-sqlite3');
+    const { join } = await import('node:path');
+    const { env } = await import('../env.js');
+    const db = new Database(join(env.dataDir, 'hosted-stats.db'), { readonly: true });
+    const rows = db.prepare('SELECT family_id, requests, active_users FROM family_days').all() as {
+      family_id: string;
+      requests: number;
+      active_users: number;
+    }[];
+    db.close();
+
+    // Exactly one family has activity — and it is a real one, not the
+    // ghost: probes at unknown subdomains must leave no trace here
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.family_id).toBe(smithsId);
+    expect(rows[0]!.requests).toBeGreaterThanOrEqual(1);
+    expect(rows[0]!.active_users).toBe(1);
   });
 
   it('runs background jobs once per family, each inside its own database', async () => {
