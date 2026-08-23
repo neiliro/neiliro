@@ -318,7 +318,6 @@ export const ru: Record<string, string> = {
   'Highlight': 'Выделение',
   'History': 'История',
   'History is empty — the note has not been edited since creation.': 'История пуста — заметку ещё не правили после создания.',
-  'Home': 'Дом',
   'I': 'К',
   'In progress': 'В работе',
   'Inbox': 'Входящие',

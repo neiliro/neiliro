@@ -13,12 +13,10 @@ import { onEnter } from '../lib/keys';
 */
 function Frame({
   title,
-  hint,
   note,
   children,
 }: {
   title: string;
-  hint: string;
   note?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -26,8 +24,11 @@ function Frame({
     <div className="flex min-h-dvh items-center justify-center bg-surface-2 px-5">
       <div className="w-full max-w-sm">
         <div className="mb-7 text-center">
-          <p className="font-display text-2xl font-bold tracking-tight text-ink">{t('Home')}</p>
-          <p className="mt-1.5 text-sm text-muted">{hint}</p>
+          {/* The brand is a proper noun, not a UI string: the same word in
+              both languages, so it never goes through t(). Every caller
+              used to pass it a second time as a subtitle under a
+              localized "Home" — one brand, one line. (#136) */}
+          <p className="font-display text-2xl font-bold tracking-tight text-ink">Neiliro</p>
         </div>
         <div className="rounded-card border border-line bg-surface p-6">
           <h1 className="eyebrow mb-5">{title}</h1>
@@ -168,7 +169,6 @@ export function Login() {
     return (
       <Frame
       title={t('Demo')}
-      hint="Neiliro"
       note={
         <p>
           {t('Run your own: one Docker container, the data stays at home.')}{' '}
@@ -196,7 +196,7 @@ export function Login() {
 
   return (
     mfaToken ? (
-    <Frame title={t('Enter the code')} hint="Neiliro">
+    <Frame title={t('Enter the code')}>
       <form onSubmit={submitMfa} className="space-y-4">
         <p className="text-sm text-muted">
           {t('The six-digit code from your authenticator app.')}
@@ -232,7 +232,7 @@ export function Login() {
       </form>
     </Frame>
     ) : (
-    <Frame title={t('Sign in')} hint="Neiliro">
+    <Frame title={t('Sign in')}>
       <form onSubmit={submit} className="space-y-4">
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">{t('Login')}</span>
@@ -332,7 +332,7 @@ function Setup() {
   }
 
   return (
-    <Frame title={t('First run')} hint="Neiliro">
+    <Frame title={t('First run')}>
       <p className="mb-5 text-sm text-muted">
         {t('Create the first account — it becomes the administrator: it can invite family members and reset passwords.')}
       </p>
@@ -403,7 +403,7 @@ function Join() {
   if (valid === null) return null;
   if (!valid) {
     return (
-      <Frame title={t('Invitation')} hint="Neiliro">
+      <Frame title={t('Invitation')}>
         <p className="text-sm text-muted">
           {t('This link is no longer valid: it has expired or was already used. Ask the person who runs the hub for a new one.')}
         </p>
@@ -412,7 +412,7 @@ function Join() {
   }
 
   return (
-    <Frame title={t('Invitation')} hint="Neiliro">
+    <Frame title={t('Invitation')}>
       <p className="mb-5 text-sm text-muted">{t('You have been invited to Neiliro. Set up your account:')}</p>
       <form onSubmit={(e) => void submit(e)} className="space-y-4">
         <label className="block">
@@ -472,7 +472,7 @@ export function ChangePassword() {
 
   if (done) {
     return (
-      <Frame title={t('Password changed')} hint="Neiliro">
+      <Frame title={t('Password changed')}>
         <p className="mb-5 text-sm text-muted">
           {t('Password updated. All devices were signed out — sign in again with the new password.')}
         </p>
@@ -484,7 +484,7 @@ export function ChangePassword() {
   }
 
   return (
-    <Frame title={t('Change password')} hint="Neiliro">
+    <Frame title={t('Change password')}>
       <p className="mb-5 text-sm text-muted">
         {t('The issued password was shown once. Set your own before continuing.')}
       </p>

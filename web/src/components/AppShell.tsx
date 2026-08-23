@@ -278,7 +278,7 @@ export function AppShell() {
         {/* The theme toggle lives in the header: next to Sign out a missed
             click cost a whole session — a price out of scale for the button */}
         <div className="mb-8 flex items-center justify-between px-2">
-          <span className="font-display text-lg font-bold tracking-tight text-ink">{t('Home')}</span>
+          <span className="font-display text-lg font-bold tracking-tight text-ink">Neiliro</span>
           <ThemeToggle />
         </div>
 
