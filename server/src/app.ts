@@ -138,6 +138,21 @@ export async function buildApp(): Promise<FastifyInstance> {
       done();
     });
   }
+
+  /*
+    Hosted: route the request to its family by the Host header — the same
+    contract as the demo hook above, with a permanent family instead of a
+    throwaway sandbox (lib/tenants.ts). Every request gets a tenant:
+    unknown subdomains get the ghost, which answers like a family
+    rejecting a wrong password — so names cannot be enumerated.
+  */
+  if (env.hostedMode) {
+    const { resolveTenant } = await import('./lib/tenants.js');
+    const { runWithTenant } = await import('./db/index.js');
+    app.addHook('onRequest', (req, _reply, done) => {
+      return runWithTenant(resolveTenant(req.headers.host), done);
+    });
+  }
   await app.register(fastifyMultipart, {
     limits: { fileSize: MAX_FILE_BYTES, files: 10 },
   });

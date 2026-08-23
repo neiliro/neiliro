@@ -171,11 +171,19 @@ export async function pollMail(): Promise<{ fetched: number } | { error: string 
 
 const POLL_MS = 3 * 60_000;
 
-/** Background polling. A hub with no mailbox configured idles for free. */
-export function startMailPoller(): void {
+/**
+ * Background polling. A hub with no mailbox configured idles for free.
+ *
+ * The caller supplies the iteration context: a single-family install
+ * passes a run-once wrapper, hosted mode passes forEachFamily — this
+ * module stays ignorant of tenants, the same way routes are.
+ */
+export function startMailPoller(each: (fn: () => unknown) => Promise<void>): void {
   setInterval(() => {
-    if (!getMailAccount()) return;
-    void pollMail();
+    void each(async () => {
+      if (!getMailAccount()) return;
+      await pollMail();
+    });
   }, POLL_MS).unref();
 }
 

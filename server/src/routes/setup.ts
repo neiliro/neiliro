@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { db, id, now } from '../db/index.js';
+import { currentTenant, db, id, now } from '../db/index.js';
 import { createSession, setSessionCookie } from '../lib/auth.js';
 import { hashPassword } from '../lib/password.js';
 import { log } from '../lib/log.js';
@@ -73,6 +73,12 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     insert run in one transaction.
   */
   app.post('/api/auth/setup', strictRate, async (req, reply) => {
+    // The hosted ghost (an unknown subdomain) claims to be set up, and
+    // must act it: its shared decoy database may never grow an admin —
+    // whoever "set it up" would own every nonexistent subdomain at once.
+    if (currentTenant().ghost) {
+      return reply.code(403).send({ error: 'The hub is already set up' });
+    }
     const parsed = z
       .object({ name: nameField, email: emailField, password: passwordField })
       .safeParse(req.body);

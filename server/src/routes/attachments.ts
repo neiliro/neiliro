@@ -5,8 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import { createWriteStream } from 'node:fs';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { db, id, now, today } from '../db/index.js';
-import { paths } from '../env.js';
+import { currentTenant, db, id, now, today } from '../db/index.js';
 
 /** The per-file ceiling. Beyond it this is no longer a note but file storage. */
 export const MAX_FILE_BYTES = 50 * 1024 * 1024;
@@ -102,7 +101,7 @@ export async function saveMailAttachment(
 
   const storageName = storageNameFor(file.filename);
   const month = today().slice(0, 7);
-  const folder = join(paths.attachments, month);
+  const folder = join(currentTenant().attachmentsDir, month);
   await mkdir(folder, { recursive: true });
   await writeFile(join(folder, storageName), file.content);
 
@@ -160,7 +159,7 @@ async function receiveFiles(
     const storageName = storageNameFor(part.filename);
     // The month folder — by the local clock, like everything else in the app
     const month = today().slice(0, 7);
-    const folder = join(paths.attachments, month);
+    const folder = join(currentTenant().attachmentsDir, month);
     await mkdir(folder, { recursive: true });
     const fullPath = join(folder, storageName);
 
@@ -267,9 +266,9 @@ export async function registerAttachmentRoutes(app: FastifyInstance): Promise<vo
     const attachment = loadVisible(attachmentId, req.user?.id ?? '');
     if (!attachment) return reply.code(404).send({ error: 'File not found' });
 
-    const fullPath = resolve(paths.attachments, attachment.storage_path);
+    const fullPath = resolve(currentTenant().attachmentsDir, attachment.storage_path);
     // Insurance against escaping the attachments directory
-    if (!fullPath.startsWith(resolve(paths.attachments))) {
+    if (!fullPath.startsWith(resolve(currentTenant().attachmentsDir))) {
       return reply.code(400).send({ error: 'Invalid path' });
     }
 
@@ -296,7 +295,7 @@ export async function registerAttachmentRoutes(app: FastifyInstance): Promise<vo
 
     db.prepare('DELETE FROM attachments WHERE id = ?').run(attachmentId);
     // The record is deleted either way; a file missing from disk is no reason to crash
-    await unlink(resolve(paths.attachments, attachment.storage_path)).catch(() => {});
+    await unlink(resolve(currentTenant().attachmentsDir, attachment.storage_path)).catch(() => {});
 
     return { ok: true };
   });

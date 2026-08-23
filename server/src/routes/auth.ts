@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { log } from '../lib/log.js';
 import { z } from 'zod';
-import { db, now } from '../db/index.js';
+import { currentTenant, db, now } from '../db/index.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { env } from '../env.js';
 import {
@@ -74,7 +74,12 @@ const loginInput = z.object({
   simply means signing in again. The attempt counter caps guessing at
   5 codes per successful password entry.
 */
-const pendingMfa = new Map<string, { userId: string; until: number; attempts: number }>();
+// host pins the ticket to the family it was issued on: in hosted mode a
+// ticket must not be redeemable against another family's database.
+const pendingMfa = new Map<
+  string,
+  { userId: string; host: string; until: number; attempts: number }
+>();
 const MFA_TTL_MS = 5 * 60_000;
 
 setInterval(() => {
@@ -96,6 +101,10 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     // happens in sandboxes), but the initial setup screen must not be
     // shown, and there is one way in — the "Try the demo" button.
     if (env.demoMode) return { initialized: true, google: false, demo: true };
+    // A hosted subdomain that doesn't exist claims to be set up: showing
+    // the first-run screen only on real families would let anyone map
+    // which names exist by probing. See lib/tenants.ts, the ghost.
+    if (currentTenant().ghost) return { initialized: true, google: false, demo: false };
     const n = (db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n;
     return {
       initialized: n > 0,
@@ -123,7 +132,14 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
     const email = parsed.data.email.trim().toLowerCase();
 
-    if (throttled(email, MAX_ATTEMPTS_LOGIN) || throttled(`ip:${req.ip}`, MAX_ATTEMPTS_IP)) {
+    // The per-login key carries the host: in hosted mode the same email
+    // can belong to different people in different families, and one
+    // family's typos must not lock the other's door. The per-IP key stays
+    // global on purpose — a dictionary sweep hopping subdomains is still
+    // one sweep from one address.
+    const loginKey = `${req.headers.host ?? ''}|${email}`;
+
+    if (throttled(loginKey, MAX_ATTEMPTS_LOGIN) || throttled(`ip:${req.ip}`, MAX_ATTEMPTS_IP)) {
       log.warn(`login blocked by the brake: ${email} from ${req.ip}`);
       return reply
         .code(429)
@@ -150,7 +166,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (!user || !ok) {
-      registerFailure(email);
+      registerFailure(loginKey);
       registerFailure(`ip:${req.ip}`);
       log.warn(`failed login: ${email} from ${req.ip}`);
       return reply.code(401).send({ error: 'Wrong login or password' });
@@ -162,7 +178,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     // address could interleave their own sign-ins to keep the sweep alive
     // forever. A family's honest typos ride out the 15-minute window
     // instead — the 20-per-address threshold is sized for exactly that.
-    attempts.delete(email);
+    attempts.delete(loginKey);
 
     // Second factor: the password alone opens nothing when TOTP is
     // confirmed — the client gets a short-lived ticket and owes a code
@@ -171,7 +187,12 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       .get(user.id) as { totp_secret: string | null; totp_confirmed_at: string | null };
     if (mfa.totp_confirmed_at && mfa.totp_secret) {
       const ticket = crypto.randomUUID();
-      pendingMfa.set(ticket, { userId: user.id, until: Date.now() + MFA_TTL_MS, attempts: 0 });
+      pendingMfa.set(ticket, {
+        userId: user.id,
+        host: req.headers.host ?? '',
+        until: Date.now() + MFA_TTL_MS,
+        attempts: 0,
+      });
       log.info(`login: ${email} passed the password, awaiting TOTP`);
       return { mfa_required: true, mfa_token: ticket };
     }
@@ -207,7 +228,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: 'Enter the code' });
 
     const pending = pendingMfa.get(parsed.data.mfa_token);
-    if (!pending || Date.now() > pending.until) {
+    if (!pending || Date.now() > pending.until || pending.host !== (req.headers.host ?? '')) {
       pendingMfa.delete(parsed.data.mfa_token);
       return reply.code(401).send({ error: 'Sign-in expired — start over' });
     }
