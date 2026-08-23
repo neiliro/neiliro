@@ -83,29 +83,58 @@ export function openDatabase(file: string): Database.Database {
 const mainDb = openDatabase(paths.db);
 
 /*
-  Which database serves the current request.
+  Which family serves the current request.
 
-  In normal mode there is one database and the context is always empty —
-  mainDb does the work. In demo mode every visitor lives in their own
-  sandbox: the hook in index.ts puts its database into AsyncLocalStorage
-  for the duration of the request, and all code below — routes, auth,
-  migrations, seeding — transparently works with it through the exported
-  Proxy. No route knows about sandboxes.
+  A tenant is a database plus the directories that belong to it: routing
+  the database alone is not enough — attachments and backups are files
+  on disk, and they must switch together with the data or one family's
+  photos would land in another family's folder. Demo dodged this by
+  blocking uploads in sandboxes; hosted mode cannot.
 
-  This is a deliberate prototype of the future hosted "database per
-  family" mode: the layer can already route a request to its database,
-  only the mapping source needs replacing (sandbox cookie → permanent
-  family).
+  In normal mode the context is always empty and the default tenant
+  (the single family) does the work. In demo mode every visitor lives in
+  their own sandbox; in hosted mode every family lives on its own
+  subdomain (lib/tenants.ts). Either way a hook wraps the request in its
+  tenant, and all code below — routes, auth, migrations, seeding —
+  transparently works with it through the exported Proxy. No route knows
+  about tenants.
 */
-const dbContext = new AsyncLocalStorage<Database.Database>();
-
-export function currentDb(): Database.Database {
-  return dbContext.getStore() ?? mainDb;
+export interface Tenant {
+  db: Database.Database;
+  attachmentsDir: string;
+  backupsDir: string;
+  /** Only the hosted decoy behind unknown subdomains. See lib/tenants.ts */
+  ghost?: boolean;
 }
 
-/** Run fn (async included) so that all code inside sees database d. */
+const defaultTenant: Tenant = {
+  db: mainDb,
+  attachmentsDir: paths.attachments,
+  backupsDir: paths.backups,
+};
+
+const dbContext = new AsyncLocalStorage<Tenant>();
+
+export function currentTenant(): Tenant {
+  return dbContext.getStore() ?? defaultTenant;
+}
+
+export function currentDb(): Database.Database {
+  return currentTenant().db;
+}
+
+/** Run fn (async included) so that all code inside sees this tenant. */
+export function runWithTenant<T>(tenant: Tenant, fn: () => T): T {
+  return dbContext.run(tenant, fn);
+}
+
+/**
+ * Database-only override: the file directories stay the default ones.
+ * Enough for demo sandboxes and tests, where uploads are blocked or
+ * irrelevant; hosted tenants must use runWithTenant.
+ */
 export function runWithDb<T>(d: Database.Database, fn: () => T): T {
-  return dbContext.run(d, fn);
+  return dbContext.run({ ...defaultTenant, db: d }, fn);
 }
 
 /*

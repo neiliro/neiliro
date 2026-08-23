@@ -66,10 +66,24 @@ export const env = {
   // Public sandbox: a throwaway database per visitor.
   // See server/src/lib/sandbox.ts and lib/demo.ts
   demoMode: boolFrom('DEMO_MODE'),
+  // Hosted mode: many families on one server, one database file each,
+  // routed by the Host header. See server/src/lib/tenants.ts
+  hostedMode: boolFrom('HOSTED_MODE'),
+  // The apex all family subdomains hang off (e.g. neiliro.com):
+  // a request to <slug>.<domain> is routed to that family's database.
+  hostedDomain: (process.env.HOSTED_DOMAIN ?? '').trim().toLowerCase(),
   // debug | info | warn | error | silent. Default warn:
   // in normal operation only warnings and errors are interesting.
   logLevel: process.env.LOG_LEVEL ?? 'warn',
 } as const;
+
+// A typo'd combination must stop startup, not surface as odd routing later.
+if (env.hostedMode && env.demoMode) {
+  throw new Error('HOSTED_MODE and DEMO_MODE are mutually exclusive — run the demo as its own process');
+}
+if (env.hostedMode && !/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(env.hostedDomain)) {
+  throw new Error('HOSTED_MODE=true requires HOSTED_DOMAIN (the apex domain, e.g. example.com)');
+}
 
 export const paths = {
   db: resolve(env.dataDir, 'hub.db'),

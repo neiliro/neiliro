@@ -2,8 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { db, id, now, today } from '../db/index.js';
-import { paths } from '../env.js';
+import { currentTenant, db, id, now, today } from '../db/index.js';
 
 interface NoteRow {
   id: string;
@@ -519,7 +518,7 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
     db.prepare('DELETE FROM notes WHERE id = ?').run(noteId);
 
     for (const file of files) {
-      await unlink(resolve(paths.attachments, file.storage_path)).catch(() => {});
+      await unlink(resolve(currentTenant().attachmentsDir, file.storage_path)).catch(() => {});
     }
     return { ok: true };
   });

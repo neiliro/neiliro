@@ -82,6 +82,16 @@ Visitors can create, edit and delete anything — nobody else will ever see it, 
 
 Deploying a public demo next to a production hub: [deploy-vps.md](deploy-vps.md), "Public demo".
 
+## Hosted mode
+
+`HOSTED_MODE=true` (plus `HOSTED_DOMAIN`) turns one server into many hubs: **family = subdomain = one SQLite file**, routed by the `Host` header through the same `AsyncLocalStorage` context the demo proved out. Route code is identical in all modes — a request is wrapped in its tenant (database *and* its attachments/backups directories) before any handler runs, and background chores (mail polling, session pruning, recurring transactions) iterate the families instead of running once.
+
+Families live in `families/<internal-id>/` under the data directory and are listed in `registry.db` next to them — the slug is registry cosmetics, renames never move files. Provisioning is one command (`node server/dist/cli/create-family.js <slug>`); the family's first visit gets the ordinary first-run screen and creates its own admin.
+
+A subdomain that doesn't exist is deliberately indistinguishable from one that does: unknown hosts resolve to a ghost — an empty in-memory database that claims to be set up, rejects sign-ins exactly like a real family rejecting a wrong password (timing included: the dummy-scrypt path already existed), and refuses first-run setup. Probing names tells an outsider nothing.
+
+None of this concerns self-hosting: without the flag the hub runs exactly as before, one family per server.
+
 ## Offline and updates
 
 The frontend is a PWA: a service worker precaches the app shell and answers GET API reads NetworkFirst — fresh when online, the last snapshot when not. Nothing external is involved (the strict CSP allows no third-party scripts); workbox is bundled and self-hosted. Auth is uncached except the single `auth/me` read, without which an offline reload would strand the person on the sign-in screen; signing out — or any 401 — deletes the offline caches, so cached family data never outlives a session.

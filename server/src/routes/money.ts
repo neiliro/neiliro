@@ -2,8 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { db, id, now, today } from '../db/index.js';
-import { paths } from '../env.js';
+import { currentTenant, db, id, now, today } from '../db/index.js';
 import { shiftDays } from '../lib/dates.js';
 import { dueOccurrences } from './budgets.js';
 
@@ -670,7 +669,7 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
     db.prepare('DELETE FROM transactions WHERE id = ?').run(txId);
 
     for (const file of receipts) {
-      await unlink(resolve(paths.attachments, file.storage_path)).catch(() => {});
+      await unlink(resolve(currentTenant().attachmentsDir, file.storage_path)).catch(() => {});
     }
     return { ok: true };
   });
