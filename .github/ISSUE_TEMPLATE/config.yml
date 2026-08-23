@@ -6,9 +6,9 @@ blank_issues_enabled: true
 
 contact_links:
   - name: Before you start contributing code
-    url: https://github.com/burtsdenis/family-hub/blob/master/CONTRIBUTING.md
+    url: https://github.com/neiliro/neiliro/blob/master/CONTRIBUTING.md
     about: Running it locally, the house conventions, and the invariants worth knowing before touching the money or privacy code.
 
   - name: Security issues
-    url: https://github.com/burtsdenis/family-hub/blob/master/CONTRIBUTING.md#reporting-a-bug
+    url: https://github.com/neiliro/neiliro/blob/master/CONTRIBUTING.md#reporting-a-bug
     about: File them as ordinary public issues — deliberately. This is self-hosted software and people are running the current release; they deserve to know what it does and does not guarantee.

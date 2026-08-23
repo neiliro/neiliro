@@ -7,7 +7,7 @@
  * explicit permission: silently overwriting someone's database is the most
  * expensive surprise there is.
  *
- * Usage: npm run import -- path/to/family-hub-2026-08-03.tar.gz
+ * Usage: npm run import -- path/to/neiliro-2026-08-03.tar.gz
  *        npm run import -- archive.tar.gz --force
  */
 import Database from 'better-sqlite3';
@@ -30,7 +30,7 @@ const force = args.includes('--force');
 const archive = args.find((a) => !a.startsWith('--'));
 
 if (!archive) {
-  console.error('Provide an archive: npm run import -- path/to/family-hub-YYYY-MM-DD.tar.gz');
+  console.error('Provide an archive: npm run import -- path/to/neiliro-YYYY-MM-DD.tar.gz');
   process.exit(1);
 }
 if (!existsSync(archive)) {

@@ -106,7 +106,7 @@ repository:
 ```bash
 # from your machine, from the folder above the project:
 rsync -a --exclude node_modules --exclude .git --exclude certs --exclude .env \
-  family-hub/ hub@<IP>:/srv/family-hub/app/
+  neiliro/ hub@<IP>:/srv/family-hub/app/
 ```
 
 The data directory. The container does not run as root either — inside
@@ -266,7 +266,7 @@ containers and applies it.
 
 Once, in the [Google Cloud Console](https://console.cloud.google.com/):
 
-1. Create a project (any name, e.g. `family-hub`).
+1. Create a project (any name, e.g. `neiliro`).
 2. **OAuth consent screen** (in the new console: Google Auth Platform →
    **Audience**): type External, fill in the name and support email.
    No need to publish the app — leave it In testing and add your family

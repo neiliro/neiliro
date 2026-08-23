@@ -154,7 +154,7 @@ start correspondence.
 
 v1 renders the plain-text part of a message; HTML rendering, ICS invites
 into the calendar and invoice-to-transaction are tracked in the
-[family mail epic](https://github.com/burtsdenis/family-hub/issues/30).
+[family mail epic](https://github.com/neiliro/neiliro/issues/30).
 
 ## Money
 

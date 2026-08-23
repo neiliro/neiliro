@@ -28,10 +28,10 @@ land here.
 
 No new account needed. In your personal Gmail:
 
-1. Create a label, e.g. `FamilyHub`.
+1. Create a label, e.g. `Neiliro`.
 2. Create a filter: letters to `yourname+family@gmail.com` (or from
-   chosen senders) → apply label `FamilyHub`, skip the inbox.
-3. In the hub settings, set **Folder to read** to `FamilyHub`.
+   chosen senders) → apply label `Neiliro`, skip the inbox.
+3. In the hub settings, set **Folder to read** to `Neiliro`.
 
 The hub reads only that folder — it never sees the personal inbox. The
 `+family` alias behaves as the family address: hand it out, or forward

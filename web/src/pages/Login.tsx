@@ -168,7 +168,7 @@ export function Login() {
     return (
       <Frame
       title={t('Demo')}
-      hint={t('Family hub')}
+      hint="Neiliro"
       note={
         <p>
           {t('Run your own: one Docker container, the data stays at home.')}{' '}
@@ -196,7 +196,7 @@ export function Login() {
 
   return (
     mfaToken ? (
-    <Frame title={t('Enter the code')} hint={t('Family hub')}>
+    <Frame title={t('Enter the code')} hint="Neiliro">
       <form onSubmit={submitMfa} className="space-y-4">
         <p className="text-sm text-muted">
           {t('The six-digit code from your authenticator app.')}
@@ -232,7 +232,7 @@ export function Login() {
       </form>
     </Frame>
     ) : (
-    <Frame title={t('Sign in')} hint={t('Family hub')}>
+    <Frame title={t('Sign in')} hint="Neiliro">
       <form onSubmit={submit} className="space-y-4">
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">{t('Login')}</span>
@@ -332,7 +332,7 @@ function Setup() {
   }
 
   return (
-    <Frame title={t('First run')} hint={t('Family hub')}>
+    <Frame title={t('First run')} hint="Neiliro">
       <p className="mb-5 text-sm text-muted">
         {t('Create the first account — it becomes the administrator: it can invite family members and reset passwords.')}
       </p>
@@ -403,7 +403,7 @@ function Join() {
   if (valid === null) return null;
   if (!valid) {
     return (
-      <Frame title={t('Invitation')} hint={t('Family hub')}>
+      <Frame title={t('Invitation')} hint="Neiliro">
         <p className="text-sm text-muted">
           {t('This link is no longer valid: it has expired or was already used. Ask the person who runs the hub for a new one.')}
         </p>
@@ -412,8 +412,8 @@ function Join() {
   }
 
   return (
-    <Frame title={t('Invitation')} hint={t('Family hub')}>
-      <p className="mb-5 text-sm text-muted">{t('You have been invited to the family hub. Set up your account:')}</p>
+    <Frame title={t('Invitation')} hint="Neiliro">
+      <p className="mb-5 text-sm text-muted">{t('You have been invited to Neiliro. Set up your account:')}</p>
       <form onSubmit={(e) => void submit(e)} className="space-y-4">
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">{t('Name')}</span>
@@ -472,7 +472,7 @@ export function ChangePassword() {
 
   if (done) {
     return (
-      <Frame title={t('Password changed')} hint={t('Family hub')}>
+      <Frame title={t('Password changed')} hint="Neiliro">
         <p className="mb-5 text-sm text-muted">
           {t('Password updated. All devices were signed out — sign in again with the new password.')}
         </p>
@@ -484,7 +484,7 @@ export function ChangePassword() {
   }
 
   return (
-    <Frame title={t('Change password')} hint={t('Family hub')}>
+    <Frame title={t('Change password')} hint="Neiliro">
       <p className="mb-5 text-sm text-muted">
         {t('The issued password was shown once. Set your own before continuing.')}
       </p>

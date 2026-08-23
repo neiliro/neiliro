@@ -94,6 +94,6 @@ export function totpStep(secretBase32: string, code: string, now = Date.now()): 
 
 /** The otpauth:// URI that authenticator apps read from the QR code. */
 export function otpauthUri(email: string, secretBase32: string): string {
-  const issuer = encodeURIComponent('Family Hub');
+  const issuer = encodeURIComponent('Neiliro');
   return `otpauth://totp/${issuer}:${encodeURIComponent(email)}?secret=${secretBase32}&issuer=${issuer}&algorithm=SHA1&digits=${DIGITS}&period=${STEP_SECONDS}`;
 }

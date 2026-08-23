@@ -21,5 +21,5 @@ export const BUILD_SHA = __BUILD_SHA__;
  * the project, and a self-hoster reading these links wants the source
  * they installed from.
  */
-export const REPO_URL = 'https://github.com/burtsdenis/family-hub';
+export const REPO_URL = 'https://github.com/neiliro/neiliro';
 export const ISSUES_URL = `${REPO_URL}/issues`;

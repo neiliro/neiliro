@@ -37,11 +37,12 @@ export const lang: Lang = readLang();
 
 // Document attributes follow the chosen language. index.html statically
 // declares English (the default); here it is corrected to the actual one:
-// the tab title and lang for screen readers must match the UI language.
+// lang for screen readers must match the UI language; the tab title is
+// the brand and is not localized.
 // The document check is because the module is also imported in Node (tests).
 if (typeof document !== 'undefined') {
   document.documentElement.lang = lang;
-  document.title = lang === 'ru' ? 'Дом' : 'Family Hub';
+  document.title = 'Neiliro';
 }
 
 export function setLang(next: Lang): void {

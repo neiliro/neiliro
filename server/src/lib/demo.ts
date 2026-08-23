@@ -132,7 +132,7 @@ export async function seedDemo(): Promise<void> {
       `INSERT INTO notes (id, title, body_md, folder_id, owner_id, pinned) VALUES
        (?, 'Shopping list', '- Milk\n- Eggs\n- Coffee beans\n- Paint tape (see [[Repaint the hallway]])\n- Something nice for Friday', NULL, ?, 1),
        (?, 'Pizza dough', '**500 g** flour · 325 ml water · 10 g salt · 3 g yeast\n\nKnead, rest overnight in the fridge, bake as hot as the oven goes.', ?, ?, 0),
-       (?, 'House rules for guests', 'Wi-Fi: *familyhub / pizzafriday*\n\nCoffee machine: one scoop, button, patience.', NULL, ?, 0)`,
+       (?, 'House rules for guests', 'Wi-Fi: *neiliro / pizzafriday*\n\nCoffee machine: one scoop, button, patience.', NULL, ?, 0)`,
     ).run(id(), alex, id(), recipes, sam, id(), alex);
 
     // ── Calendar ──
