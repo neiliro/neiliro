@@ -257,6 +257,22 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   app.addHook('preHandler', authenticate);
 
+  /*
+    Hosted activity counters (lib/hosted-stats.ts). Registered after
+    authenticate on purpose: the user id is part of the count (distinct
+    active users per day), and requests authenticate rejects never get
+    here — unauthenticated probing is not engagement.
+  */
+  if (env.hostedMode) {
+    const { trackFamilyRequest } = await import('./lib/hosted-stats.js');
+    const { currentTenant } = await import('./db/index.js');
+    app.addHook('preHandler', (req, _reply, done) => {
+      const { familyId } = currentTenant();
+      if (familyId) trackFamilyRequest(familyId, req.method, req.url, req.user?.id);
+      done();
+    });
+  }
+
   await registerAuthRoutes(app);
   await registerGoogleRoutes(app);
   await registerSetupRoutes(app);

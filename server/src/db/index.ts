@@ -103,6 +103,9 @@ export interface Tenant {
   db: Database.Database;
   attachmentsDir: string;
   backupsDir: string;
+  /** Registry id of the hosted family; absent for the single-family
+   *  default, demo sandboxes and the ghost. See lib/tenants.ts */
+  familyId?: string;
   /** Only the hosted decoy behind unknown subdomains. See lib/tenants.ts */
   ghost?: boolean;
 }

@@ -4,6 +4,7 @@ import type Database from 'better-sqlite3';
 import { id, now, openDatabase, runWithDb, runWithTenant, type Tenant } from '../db/index.js';
 import { migrate } from '../db/migrate.js';
 import { env } from '../env.js';
+import { initHostedStats, shutdownHostedStats } from './hosted-stats.js';
 import { log } from './log.js';
 
 /*
@@ -67,6 +68,7 @@ export function initHosted(): void {
   }
   log.notice(`hosted mode: ${migrated} families on *.${env.hostedDomain}`);
 
+  initHostedStats();
   setInterval(closeIdle, IDLE_SWEEP_MS).unref();
 }
 
@@ -154,7 +156,12 @@ function tenantFor(familyId: string): Tenant {
   mkdirSync(attachmentsDir, { recursive: true });
   mkdirSync(backupsDir, { recursive: true });
 
-  const tenant: Tenant = { db: openDatabase(join(dir, 'hub.db')), attachmentsDir, backupsDir };
+  const tenant: Tenant = {
+    db: openDatabase(join(dir, 'hub.db')),
+    attachmentsDir,
+    backupsDir,
+    familyId,
+  };
   openTenants.set(familyId, { tenant, lastUsed: Date.now() });
   return tenant;
 }
@@ -235,6 +242,7 @@ export async function forEachFamily(fn: () => unknown): Promise<void> {
 
 /** Checkpoint and close everything on the way out. */
 export function shutdownHosted(): void {
+  shutdownHostedStats();
   for (const familyId of [...openTenants.keys()]) closeTenant(familyId);
   try {
     ghost?.db.close();
