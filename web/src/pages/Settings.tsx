@@ -518,6 +518,7 @@ export function Settings() {
             onChange={(e) => setValues({ ...values, 'home.name': e.target.value })}
             onKeyDown={onEnter(() => void save())}
             placeholder="Neiliro"
+            maxLength={60}
             className="w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
           />
           <span className="mt-1 block text-xs text-muted">
