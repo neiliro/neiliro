@@ -108,7 +108,7 @@ describe('host routing', () => {
       url: '/api/auth/state',
       headers: onHost('nosuch-x9y8.neiliro.test'),
     });
-    expect(state.json()).toEqual({ initialized: true, google: false, demo: false });
+    expect(state.json()).toEqual({ initialized: true, google: false, demo: false, hosted: true });
 
     // ...that rejects a sign-in exactly like a real family would
     const login = await app.inject({

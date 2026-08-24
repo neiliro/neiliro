@@ -100,17 +100,23 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     // In demo the answer is fixed: the main database is empty (life
     // happens in sandboxes), but the initial setup screen must not be
     // shown, and there is one way in — the "Try the demo" button.
-    if (env.demoMode) return { initialized: true, google: false, demo: true };
+    if (env.demoMode) return { initialized: true, google: false, demo: true, hosted: false };
     // A hosted subdomain that doesn't exist claims to be set up: showing
     // the first-run screen only on real families would let anyone map
     // which names exist by probing. See lib/tenants.ts, the ghost.
-    if (currentTenant().ghost) return { initialized: true, google: false, demo: false };
+    // `hosted` is safe to state even here — that the service is hosted
+    // is public knowledge, only which families exist is not.
+    if (currentTenant().ghost) {
+      return { initialized: true, google: false, demo: false, hosted: true };
+    }
     const n = (db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n;
     return {
       initialized: n > 0,
       // Whether showing the "Sign in with Google" button makes sense
       google: Boolean(env.googleClientId && env.googleClientSecret && env.publicUrl),
       demo: false,
+      // The frontend gates hosted-only settings (the family Danger zone) on it
+      hosted: env.hostedMode,
     };
   });
 
