@@ -104,6 +104,8 @@ export function clearSessionCookie(reply: FastifyReply): void {
 
 const PUBLIC_PATHS = new Set([
   '/api/health',
+  // Home name for the sign-in screen; hosted mode answers the brand
+  // only — see routes/index.ts
   '/api/home-name',
   '/api/auth/login',
   // The TOTP step of sign-in: the session does not exist yet, the
