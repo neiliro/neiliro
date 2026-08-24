@@ -18,6 +18,15 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // ── Home name (public — the login page needs it without a session) ────
+
+  app.get('/api/home-name', () => {
+    const row = db
+      .prepare("SELECT value FROM settings WHERE key = 'home.name'")
+      .get() as { value: string } | undefined;
+    return { name: row?.value?.trim() || 'Neiliro' };
+  });
+
   // ── Settings (dashboard widgets included) ──────────────────────────────
 
   app.get('/api/settings', () => {

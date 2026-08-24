@@ -104,6 +104,7 @@ export function clearSessionCookie(reply: FastifyReply): void {
 
 const PUBLIC_PATHS = new Set([
   '/api/health',
+  '/api/home-name',
   '/api/auth/login',
   // The TOTP step of sign-in: the session does not exist yet, the
   // short-lived ticket from /login is the authorization
