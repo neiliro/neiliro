@@ -13,6 +13,7 @@ import { COMMON_CURRENCIES, formatAmountInput, parseAmount } from '../lib/money'
 import { PeopleSection } from '../components/PeopleSection';
 import { MailSection } from '../components/MailSection';
 import { TotpSection } from '../components/TotpSection';
+import { FamilyDataSection } from '../components/FamilyDataSection';
 
 /**
  * Own name and avatar colour, self-service (#64). Colour is the whole
@@ -740,6 +741,7 @@ export function Settings() {
         <div className="mx-auto mt-5 max-w-md space-y-5 lg:max-w-4xl 3xl:max-w-[86rem] 4xl:max-w-[114rem]">
           <MailSection />
           <PeopleSection />
+          <FamilyDataSection />
         </div>
       )}
     </Page>

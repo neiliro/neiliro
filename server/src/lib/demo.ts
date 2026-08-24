@@ -29,6 +29,10 @@ export function demoBlocked(method: string, path: string): boolean {
   // scan QR codes for accounts that stop existing in two hours
   if (path.startsWith('/api/auth/totp')) return true;
   if (path.startsWith('/api/auth/google')) return true;
+  // The family archive and self-deletion are meaningless for a throwaway
+  // sandbox. Only the POST is caught here — GETs pass through this
+  // function, so the export route carries its own demo check.
+  if (path.startsWith('/api/family/')) return true;
   // All file uploads: note attachments and transaction receipts
   if (method === 'POST' && path.includes('/attachments')) return true;
   if (method === 'POST' && path.includes('/receipts')) return true;

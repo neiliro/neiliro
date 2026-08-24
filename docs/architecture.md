@@ -90,6 +90,8 @@ Families live in `families/<internal-id>/` under the data directory and are list
 
 A subdomain that doesn't exist is deliberately indistinguishable from one that does: unknown hosts resolve to a ghost — an empty in-memory database that claims to be set up, rejects sign-ins exactly like a real family rejecting a wrong password (timing included: the dummy-scrypt path already existed), and refuses first-run setup. Probing names tells an outsider nothing.
 
+The family's data is self-service (`routes/family.ts`, Settings → admin). **Export**: the complete archive — database via `VACUUM INTO` (WAL folded in), attachments, manifest — streamed as tar.gz in the exact layout `scripts/import.mjs` restores, so a hosted family can leave for self-hosting at any time; a round-trip test runs a settings export through the real import script. **Deletion** (hosted only): the admin proves the password, a TOTP code when enabled, and types the family's slug; the registry row flips to `deleted` (the slug is never re-issued — a stranger inheriting it would inherit bookmarks and mail), the database files and attachments are removed, and encrypted backups are left to expire on their own within 14 days. Self-hosted installs get the export but not the button: deleting the only family means erasing the instance, which belongs to the machine's owner at the filesystem.
+
 None of this concerns self-hosting: without the flag the hub runs exactly as before, one family per server.
 
 ## Offline and updates

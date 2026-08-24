@@ -728,6 +728,21 @@ export const ru: Record<string, string> = {
   'The shared address the Mail section reads. A dedicated mailbox works best; a personal Gmail works too — filter letters into a separate label and set it as the folder below.': 'Общий адрес, который читает раздел «Почта». Лучше всего отдельный ящик; личный Gmail тоже подходит — настройте фильтр в отдельный ярлык и укажите его как папку ниже.',
   'task': 'задача',
   'Username': 'Логин',
+
+  // ── Family archive and self-deletion (Settings → admin) ──
+  'Family archive': 'Семейный архив',
+  'The complete archive: the database plus every attachment, as one tar.gz. It restores into a self-hosted hub with the import script — your data is never locked in.': 'Полный архив: база данных и все вложения одним tar.gz. Восстанавливается в self-hosted-хабе скриптом импорта — ваши данные никогда не заперты.',
+  'Download the archive': 'Скачать архив',
+  'On a large family this takes a moment — the download starts once the archive is ready.': 'На большой семье это занимает время — скачивание начнётся, когда архив будет готов.',
+  'Danger zone': 'Опасная зона',
+  'This deletes the family for everyone: the database, every attachment, every account. There is no undo. Encrypted backups expire on their own within 14 days.': 'Это удалит семью для всех: базу данных, все вложения, все аккаунты. Отменить нельзя. Зашифрованные резервные копии истекут сами в течение 14 дней.',
+  'Delete the family…': 'Удалить семью…',
+  'Download the archive first — once the family is gone, so is the data.': 'Сначала скачайте архив — вместе с семьёй исчезнут и данные.',
+  'Code from the authenticator app': 'Код из приложения-аутентификатора',
+  'Type the family address name ({slug}) to confirm': 'Введите имя адреса семьи ({slug}) для подтверждения',
+  'Delete the family forever': 'Удалить семью навсегда',
+  'Family deletion is available on the hosted service only': 'Удаление семьи доступно только в облачном сервисе',
+  'The confirmation phrase does not match the family address': 'Контрольная фраза не совпадает с адресом семьи',
 };
 
 /** one / few / many, keyed by the English singular used in plural() calls. */

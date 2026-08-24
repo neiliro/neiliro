@@ -33,6 +33,7 @@ import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerMailRoutes } from './routes/mail.js';
 import { registerMoneyRoutes } from './routes/money.js';
 import { registerBudgetRoutes } from './routes/budgets.js';
+import { registerFamilyRoutes } from './routes/family.js';
 import { authenticate } from './lib/auth.js';
 import { log } from './lib/log.js';
 
@@ -287,6 +288,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerMailRoutes(app);
   await registerMoneyRoutes(app);
   await registerBudgetRoutes(app);
+  await registerFamilyRoutes(app);
 
   await registerRoutes(app);
 

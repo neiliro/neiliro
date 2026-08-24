@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { id, now, openDatabase, runWithDb, runWithTenant, type Tenant } from '../db/index.js';
@@ -59,6 +59,11 @@ export function initHosted(): void {
   // families' breakfast hostage.
   let migrated = 0;
   for (const family of allFamilies()) {
+    // A deleted family's files are gone; migrating it would quietly
+    // recreate an empty hub.db in its place. Suspended families keep
+    // migrating — they may come back mid-process, and must not return
+    // to a schema the code has moved past.
+    if (family.status === 'deleted') continue;
     try {
       runWithTenant(tenantFor(family.id), migrate);
       migrated += 1;
@@ -295,4 +300,48 @@ export function createFamily(slug: string): { familyId: string; url: string } {
   runWithTenant(tenantFor(familyId), migrate);
   log.notice(`family created: ${slug} (${familyId})`);
   return { familyId, url: `https://${slug}.${env.hostedDomain}/` };
+}
+
+// ── Self-service deletion (GDPR, routes/family.ts) ───────────────────────
+
+/** The family's slug — the phrase the admin must type to confirm deletion. */
+export function familySlug(familyId: string): string | null {
+  const row = registry!.prepare('SELECT slug FROM families WHERE id = ?').get(familyId) as
+    | { slug: string }
+    | undefined;
+  return row?.slug ?? null;
+}
+
+/**
+ * Remove a family's data for good: the database (all three WAL-mode
+ * files) and the attachments directory.
+ *
+ * The order is the point. First the family becomes unroutable — registry
+ * status plus the slug cache — and only then does the handle close and
+ * the files go: reversed, a request landing between the steps would call
+ * tenantFor, which recreates directories and an empty hub.db, and the
+ * "deleted" family would resurrect as a blank hub on its old address.
+ * Requests already in flight may hit a closed handle and fail with a
+ * 500 — acceptable for an action this final.
+ *
+ * The row stays in the registry as status='deleted' rather than being
+ * removed: the slug must never be re-registered by strangers (bookmarks
+ * and mail addressed to it would land in their hands), and the control
+ * plane reads the status to finish its own bookkeeping. Backups are
+ * deliberately left alone — they are encrypted and expire within 14
+ * days on their own, exactly as the privacy policy promises.
+ */
+export function deleteFamilyData(familyId: string): void {
+  registry!.prepare(`UPDATE families SET status = 'deleted' WHERE id = ?`).run(familyId);
+  for (const [slug, entry] of slugCache) {
+    if (entry.familyId === familyId) slugCache.delete(slug);
+  }
+  closeTenant(familyId);
+
+  const dir = join(familiesDir, familyId);
+  for (const suffix of ['', '-wal', '-shm']) {
+    rmSync(join(dir, `hub.db${suffix}`), { force: true });
+  }
+  rmSync(join(dir, 'attachments'), { recursive: true, force: true });
+  log.notice(`family deleted: ${familyId}`);
 }
