@@ -126,6 +126,12 @@ The **wishlist** keeps its surprise on the server: the owner is never sent what 
 
 A wishlist can also be shared with guests — grandparents without an account — by an unguessable link, revocable at any time. The link stays copyable from the profile for as long as it lives — it is meant to be re-sent, so unlike an invite token it is stored as is; what it unlocks is a first name and a wish list, not an account. The guest page is the hub's only anonymous surface and shows the bare minimum: the first name, the wishes, and a "reserved" flag with no names, so two guests don't buy the same gift and a stranger with the link learns nothing about the family. Guests reserve by typing their name; the family sees that name inside the hub, the owner still sees nothing. One honest limitation: the owner opening their own guest link will see the "reserved" flags — that is shaking the gift box, and no server can prevent it.
 
+### Your data
+
+Everything the household owns leaves in one file whenever it wants: Settings → **Export archive** streams a `tar.gz` with the database, every attachment and a manifest — the exact layout `scripts/import.mjs` restores, so a hosted family can move onto its own server (or a self-hosted one onto another machine) without asking anyone for help. It doubles as the GDPR portability answer.
+
+On the hosted service the same section holds **Delete everything**: the administrator confirms with the password, a two-factor code when one is set, and by typing the family's own address, after which the database and the attachments are gone and the encrypted nightly backups expire on their own within a fortnight. A self-hosted install gets the export but no such button — there, deleting the only family means erasing the instance, and that belongs to whoever owns the machine.
+
 ## Mail
 
 ![Mail: the shared household inbox, one click from letter to task](screenshots/mail.png)
@@ -282,3 +288,5 @@ The sidebar does not scroll with the content: on a long task list the sections s
 "All projects" shows a total open-task counter — the same one each project has individually.
 
 The interface speaks English by default; Russian is available in Settings. The first day of the week (Monday or Sunday) is configurable there too. Both are per-device settings: a phone and the shared kiosk can differ.
+
+The hub also answers to a name of your own: Settings → **Home name** replaces "Neiliro" in the sidebar, on the sign-in screen and in the browser tab. Unlike the language and the first weekday it belongs to the household, not to the device — everyone sees it. It is a label, never an address: two families may both call themselves "Home". On the hosted service the public sign-in screen keeps saying Neiliro — a chosen name is the family's own business, and a renamed family has to stay indistinguishable from a subdomain that does not exist.
