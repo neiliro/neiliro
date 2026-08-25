@@ -82,12 +82,16 @@ export const env = {
   // empty key leaves the route refusing everything — the safe default for
   // an install that never configured mail.
   mailgunSigningKey: process.env.MAILGUN_SIGNING_KEY ?? '',
-  // SMTP of that domain, used to send for a family that has no mailbox of
-  // its own. A family that configured its own account keeps using it.
-  mailSmtpHost: (process.env.MAIL_SMTP_HOST ?? '').trim(),
-  mailSmtpPort: intFrom('MAIL_SMTP_PORT', 465),
-  mailSmtpUser: process.env.MAIL_SMTP_USER ?? '',
-  mailSmtpPass: process.env.MAIL_SMTP_PASS ?? '',
+  // Sending for a family that has no mailbox of its own goes over
+  // Mailgun's HTTP API, not SMTP — deliberately. Cloud providers block
+  // outbound SMTP (DigitalOcean closes 25/465/587 by default), so a mail
+  // path that depends on those ports is a path that breaks on the next
+  // machine. Port 443 is never blocked. A family that configured its own
+  // account keeps sending through that account's SMTP.
+  mailgunApiKey: process.env.MAILGUN_API_KEY ?? '',
+  // Regional endpoint: the EU and US clouds are separate, and a domain
+  // belongs to exactly one of them.
+  mailgunApiBase: (process.env.MAILGUN_API_BASE ?? 'https://api.eu.mailgun.net').replace(/\/$/, ''),
   // debug | info | warn | error | silent. Default warn:
   // in normal operation only warnings and errors are interesting.
   logLevel: process.env.LOG_LEVEL ?? 'warn',
