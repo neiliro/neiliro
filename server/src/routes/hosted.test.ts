@@ -130,6 +130,39 @@ describe('host routing', () => {
     expect(setup.statusCode).toBe(403);
   });
 
+  it('keeps a renamed family behind the session: the public name is the brand', async () => {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: onHost('smiths-a1b2.neiliro.test'),
+      payload: { email: 'sam@smiths.test', password: 'correct horse battery' },
+    });
+    const session = login.cookies.find((c) => c.name === 'hub_session')!;
+    const asSam = { ...onHost('smiths-a1b2.neiliro.test'), cookie: `hub_session=${session.value}` };
+
+    const renamed = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings',
+      headers: asSam,
+      payload: { 'home.name': 'The Smiths' },
+    });
+    expect(renamed.statusCode).toBe(200);
+
+    // The name is theirs and it works — behind the session
+    const settings = await app.inject({ url: '/api/settings', headers: asSam });
+    expect(settings.json()['home.name']).toBe('The Smiths');
+
+    // ...but /api/home-name is public, and the sign-in screen of a hosted
+    // family must stay indistinguishable from a subdomain that does not
+    // exist. A chosen name handed to the internet would enumerate families
+    // by itself.
+    const named = await app.inject({ url: '/api/home-name', headers: onHost('smiths-a1b2.neiliro.test') });
+    expect(named.json()).toEqual({ name: 'Neiliro' });
+
+    const ghost = await app.inject({ url: '/api/home-name', headers: onHost('nosuch-x9y8.neiliro.test') });
+    expect(ghost.json()).toEqual({ name: 'Neiliro' });
+  });
+
   it('counts module requests into per-family day stats, never the ghost', async () => {
     const login = await app.inject({
       method: 'POST',
