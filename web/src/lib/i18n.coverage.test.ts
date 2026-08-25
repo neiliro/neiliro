@@ -66,6 +66,11 @@ function serverErrorStrings(): Map<string, string> {
   const found = new Map<string, string>();
   for (const dir of ['routes', 'lib']) {
     for (const path of sourceFiles(join(SERVER, dir))) {
+      // The inbound mail webhook answers Mailgun, not a browser: its
+      // strings are a delivery protocol (the status codes carry the
+      // meaning) and no person ever reads them, so they are not part of
+      // the dictionary's contract.
+      if (path.endsWith('mail-inbound.ts')) continue;
       const text = readFileSync(path, 'utf8');
       for (const m of text.matchAll(ERROR_LITERAL)) {
         const message = m[1];

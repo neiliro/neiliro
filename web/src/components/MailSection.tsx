@@ -9,6 +9,10 @@ const label = 'mb-1.5 block text-sm font-medium text-ink';
 
 interface AccountInfo {
   configured: boolean;
+  /** Hosted: the address the service issued this family, derived from its
+   *  subdomain. Mail arrives over the inbound webhook, so there is no
+   *  IMAP connection to set up at all. */
+  service_address?: string | null;
   address?: string;
   imap_host?: string;
   imap_port?: number;
@@ -94,9 +98,23 @@ export function MailSection() {
   return (
     <section className="rounded-card border border-line bg-surface p-5">
       <h2 className="eyebrow mb-2">{t('Family mailbox')}</h2>
-      <p className="mb-4 text-sm text-muted">
-        {t('The shared address the Mail section reads. A dedicated mailbox works best; a personal Gmail works too — filter letters into a separate label and set it as the folder below.')}
-      </p>
+
+      {info.service_address ? (
+        <div className="mb-4 rounded-card border border-line bg-surface-2 p-4">
+          <p className={label}>{t('Your family address')}</p>
+          <p className="font-mono text-sm text-ink">{info.service_address}</p>
+          <p className="mt-2 text-sm text-muted">
+            {t('Letters sent here show up in Mail on their own — there is nothing to connect. Hand it out to the school, the utility company and the booking sites.')}
+          </p>
+          <p className="mt-2 text-sm text-muted">
+            {t('Would rather use a mailbox of your own? Connect it below and it takes over from the address above.')}
+          </p>
+        </div>
+      ) : (
+        <p className="mb-4 text-sm text-muted">
+          {t('The shared address the Mail section reads. A dedicated mailbox works best; a personal Gmail works too — filter letters into a separate label and set it as the folder below.')}
+        </p>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block sm:col-span-2">

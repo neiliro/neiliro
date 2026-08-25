@@ -31,6 +31,7 @@ import { registerNoteRoutes } from './routes/notes.js';
 import { MAX_FILE_BYTES, registerAttachmentRoutes } from './routes/attachments.js';
 import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerMailRoutes } from './routes/mail.js';
+import { registerInboundMailRoutes } from './routes/mail-inbound.js';
 import { registerMoneyRoutes } from './routes/money.js';
 import { registerBudgetRoutes } from './routes/budgets.js';
 import { registerFamilyRoutes } from './routes/family.js';
@@ -286,6 +287,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerAttachmentRoutes(app);
   await registerCalendarRoutes(app);
   await registerMailRoutes(app);
+  await registerInboundMailRoutes(app);
   await registerMoneyRoutes(app);
   await registerBudgetRoutes(app);
   await registerFamilyRoutes(app);

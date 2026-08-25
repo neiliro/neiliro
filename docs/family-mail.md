@@ -6,6 +6,19 @@ the most sense.
 
 ![The Mail section: a letter open, with the reply box and the button that turns it into a task](screenshots/mail.png)
 
+## On a hosted hub: the address already exists
+
+If the hub runs on a service (a `*.neiliro.com` subdomain rather than your
+own machine), the family address is issued with the family — it is the
+subdomain plus the mail domain, e.g. `smiths-a1b2@mail.neiliro.com`, and
+**Settings → Family mailbox** shows it. Letters sent there appear in Mail
+on their own; there is no IMAP to connect and no password to store.
+Replies go out from that address.
+
+Everything below is for a self-hosted hub — or for a hosted family that
+would rather use a mailbox of its own, which takes over from the issued
+address once connected.
+
 ## Option A: a dedicated mailbox (cleanest)
 
 Create a mailbox that exists only for the household — either a fresh

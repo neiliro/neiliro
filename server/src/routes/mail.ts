@@ -2,7 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db, id, now } from '../db/index.js';
 import { requireAdmin } from '../lib/auth.js';
-import { getMailAccount, pollMail, sendReply } from '../lib/mail.js';
+import {
+  familyMailAddress,
+  getMailAccount,
+  mailSource,
+  pollMail,
+  sendReply,
+} from '../lib/mail.js';
 
 /** The seeded Inbox project (migration 004) — the natural home for mail-born tasks. */
 const INBOX_PROJECT_ID = '00000000-0000-4000-8000-000000000001';
@@ -23,12 +29,19 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
       )
       .all();
     const account = getMailAccount();
+    /*
+      "Configured" means the family has an address, not that it connected
+      a mailbox: a hosted family is handed one by the service and its mail
+      arrives over the webhook, with no account row to show. Sync state
+      belongs to IMAP only — there is nothing to poll in service mode.
+    */
     return {
       messages,
-      configured: account !== null,
+      configured: mailSource() !== null,
+      source: mailSource(),
       last_sync_at: account?.last_sync_at ?? null,
       last_error: account?.last_error ?? null,
-      address: account?.address ?? null,
+      address: familyMailAddress(),
     };
   });
 
@@ -116,9 +129,12 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/mail/account', (req, reply) => {
     if (!requireAdmin(req, reply)) return;
     const account = getMailAccount();
-    if (!account) return { configured: false };
+    // The service address is reported either way: a family that connects
+    // its own mailbox should still see the address it can hand out.
+    const serviceAddress = mailSource() === 'service' ? familyMailAddress() : null;
+    if (!account) return { configured: false, service_address: serviceAddress };
     const { password, ...rest } = account;
-    return { configured: true, ...rest, has_password: password.length > 0 };
+    return { configured: true, ...rest, has_password: password.length > 0, service_address: null };
   });
 
   app.put('/api/mail/account', (req, reply) => {
@@ -167,6 +183,10 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
   /** Manual poll — doubles as the connection test after saving settings. */
   app.post('/api/mail/sync', async (req, reply) => {
     if (!requireAdmin(req, reply)) return;
+    // Service mode has nothing to poll — the webhook pushes instead.
+    if (!getMailAccount()) {
+      return reply.code(400).send({ error: 'No mailbox to poll' });
+    }
     const result = await pollMail();
     if ('error' in result) return reply.code(502).send({ error: result.error });
     return result;

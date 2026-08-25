@@ -43,6 +43,9 @@ interface MailFull extends MailStub {
 interface MailList {
   messages: MailStub[];
   configured: boolean;
+  /** 'imap' when the family connected its own mailbox, 'service' when the
+   *  address is issued by the service and fed by the inbound webhook. */
+  source: 'imap' | 'service' | null;
   last_sync_at: string | null;
   last_error: string | null;
   address: string | null;

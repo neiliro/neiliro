@@ -1,9 +1,11 @@
 import PostalMime, { type Email } from 'postal-mime';
 import { ImapFlow } from 'imapflow';
 import nodemailer from 'nodemailer';
-import { db, id, now } from '../db/index.js';
+import { currentTenant, db, id, now } from '../db/index.js';
+import { env } from '../env.js';
 import { saveMailAttachment } from '../routes/attachments.js';
 import { log } from './log.js';
+import { familySlug } from './tenants.js';
 
 /*
   Family mail (#30/#31), the core.
@@ -31,6 +33,89 @@ export interface MailAccount {
 
 export function getMailAccount(): MailAccount | null {
   return (db.prepare('SELECT * FROM mail_account WHERE id = 1').get() as MailAccount) ?? null;
+}
+
+/*
+  Where a family's mail comes from and goes out through.
+
+  Two sources, one product. A self-hosted family brings its own mailbox
+  (mail_account, polled over IMAP). A hosted family is handed an address
+  on the service domain and fed by the inbound webhook instead. Both end
+  up as mail_messages rows, and both reply from the family address — the
+  rest of the module cannot tell them apart.
+*/
+
+/**
+ * The service-issued address, derived from the slug and never stored: a
+ * family that gets renamed gets a renamed address, with no row to update
+ * and no stale copy to disagree with the registry.
+ *
+ * Null whenever there is nothing to derive from — a self-hosted install,
+ * a demo sandbox, or the ghost (no familyId, so unknown subdomains are
+ * not handed an address either).
+ */
+function serviceAddress(): string | null {
+  if (!env.mailDomain) return null;
+  const { familyId } = currentTenant();
+  if (!familyId) return null;
+  const slug = familySlug(familyId);
+  return slug ? `${slug}@${env.mailDomain}` : null;
+}
+
+/** How this family's mail is fed: its own mailbox, or the service. */
+export type MailSource = 'imap' | 'service' | null;
+
+export function mailSource(): MailSource {
+  if (getMailAccount()) return 'imap';
+  return serviceAddress() ? 'service' : null;
+}
+
+/**
+ * The family's address, whichever half provides it. A configured mailbox
+ * wins: a family that went to the trouble of connecting its own box keeps
+ * sending from it even when the service could hand it an address.
+ */
+export function familyMailAddress(): string | null {
+  return getMailAccount()?.address ?? serviceAddress();
+}
+
+interface Outgoing {
+  address: string;
+  transport: nodemailer.Transporter;
+}
+
+/**
+ * The transport a reply goes out through. Null means this family cannot
+ * send at all — no mailbox of its own and no service SMTP configured —
+ * which the demo relies on as well.
+ */
+function outgoing(): Outgoing | null {
+  const account = getMailAccount();
+  if (account) {
+    return {
+      address: account.address,
+      transport: nodemailer.createTransport({
+        host: account.smtp_host,
+        port: account.smtp_port,
+        secure: account.smtp_port === 465,
+        auth: { user: account.username, pass: account.password },
+      }),
+    };
+  }
+
+  const address = serviceAddress();
+  if (!address || !env.mailSmtpHost) return null;
+  return {
+    address,
+    // The envelope sender is the service's SMTP user; the From header is
+    // the family's own address, which the domain is authorized to send as.
+    transport: nodemailer.createTransport({
+      host: env.mailSmtpHost,
+      port: env.mailSmtpPort,
+      secure: env.mailSmtpPort === 465,
+      auth: { user: env.mailSmtpUser, pass: env.mailSmtpPass },
+    }),
+  };
 }
 
 /** Sanity cap: a message source larger than this is not household mail. */
@@ -198,19 +283,12 @@ export async function sendReply(
   text: string,
   sender: { id: string; name: string },
 ): Promise<string> {
-  const account = getMailAccount();
-  if (!account) throw new Error('Mailbox is not configured');
-
-  const transporter = nodemailer.createTransport({
-    host: account.smtp_host,
-    port: account.smtp_port,
-    secure: account.smtp_port === 465,
-    auth: { user: account.username, pass: account.password },
-  });
+  const out = outgoing();
+  if (!out) throw new Error('Mailbox is not configured');
 
   const subject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
-  await transporter.sendMail({
-    from: { name: `${sender.name} · ${account.address}`, address: account.address },
+  await out.transport.sendMail({
+    from: { name: `${sender.name} · ${out.address}`, address: out.address },
     to: original.from_address,
     subject,
     text,
@@ -225,7 +303,7 @@ export async function sendReply(
      VALUES (?, 'out', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     rowId,
-    account.address,
+    out.address,
     sender.name,
     original.from_address,
     subject,

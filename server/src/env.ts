@@ -72,6 +72,22 @@ export const env = {
   // The apex all family subdomains hang off (e.g. neiliro.com):
   // a request to <slug>.<domain> is routed to that family's database.
   hostedDomain: (process.env.HOSTED_DOMAIN ?? '').trim().toLowerCase(),
+  // ── Family mail on the service's own domain (#30, milestone C) ──────────
+  // The domain family addresses hang off: <slug>@<domain>. The address is
+  // derived from the slug, never stored — a rename must not leave a stale
+  // copy behind. Empty disables both halves below.
+  mailDomain: (process.env.MAIL_DOMAIN ?? '').trim().toLowerCase(),
+  // Mailgun's HTTP webhook signing key (Settings -> API Security), which
+  // is NOT the sending API key. Inbound accepts nothing unsigned, so an
+  // empty key leaves the route refusing everything — the safe default for
+  // an install that never configured mail.
+  mailgunSigningKey: process.env.MAILGUN_SIGNING_KEY ?? '',
+  // SMTP of that domain, used to send for a family that has no mailbox of
+  // its own. A family that configured its own account keeps using it.
+  mailSmtpHost: (process.env.MAIL_SMTP_HOST ?? '').trim(),
+  mailSmtpPort: intFrom('MAIL_SMTP_PORT', 465),
+  mailSmtpUser: process.env.MAIL_SMTP_USER ?? '',
+  mailSmtpPass: process.env.MAIL_SMTP_PASS ?? '',
   // debug | info | warn | error | silent. Default warn:
   // in normal operation only warnings and errors are interesting.
   logLevel: process.env.LOG_LEVEL ?? 'warn',
@@ -83,6 +99,17 @@ if (env.hostedMode && env.demoMode) {
 }
 if (env.hostedMode && !/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(env.hostedDomain)) {
   throw new Error('HOSTED_MODE=true requires HOSTED_DOMAIN (the apex domain, e.g. example.com)');
+}
+
+// A mail domain with no signing key would accept inbound from anyone, and
+// a signing key with no domain has nothing to route: neither half works
+// alone, and a half-configured install must say so at startup rather than
+// drop letters at runtime.
+if (env.mailDomain && !env.mailgunSigningKey) {
+  throw new Error('MAIL_DOMAIN requires MAILGUN_SIGNING_KEY — inbound mail is never accepted unsigned');
+}
+if (env.mailgunSigningKey && !env.mailDomain) {
+  throw new Error('MAILGUN_SIGNING_KEY requires MAIL_DOMAIN (the domain family addresses live on)');
 }
 
 export const paths = {
