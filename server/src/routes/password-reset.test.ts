@@ -95,6 +95,26 @@ beforeAll(async () => {
     payload: { name: 'Sam', email: EMAIL, password: OLD_PASSWORD },
   });
   expect(created.statusCode).toBe(201);
+
+  /*
+    Signing up now also mails a confirmation, and a reset is only ever sent
+    to a confirmed address — an unproven one would turn a signup typo into
+    a stranger's way into the family. Walk that flow rather than writing the
+    column: it is the same path a person takes, and it keeps this file
+    honest about the precondition.
+  */
+  await new Promise((r) => setTimeout(r, 60));
+  const invite = sent[sent.length - 1]!;
+  expect(invite.subject).toBe('Confirm your Neiliro address');
+  const verifyToken = new URL(invite.text.match(/https:\/\/\S+/)![0]).searchParams.get('token');
+  const confirmed = await app.inject({
+    method: 'POST',
+    url: '/api/auth/email-verify',
+    headers: { host: HOST },
+    payload: { token: verifyToken },
+  });
+  expect(confirmed.statusCode).toBe(200);
+  sent.length = 0;
 });
 
 describe('password reset', () => {

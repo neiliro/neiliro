@@ -2,7 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db, now } from '../db/index.js';
 import { destroyAllSessions, requireAdmin } from '../lib/auth.js';
+import { log } from '../lib/log.js';
 import { generatePassword, hashPassword } from '../lib/password.js';
+import { sendVerificationEmail } from './email-verify.js';
 
 export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/users', (req, reply) => {
@@ -51,6 +53,51 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     return db
       .prepare('SELECT id, email, name, role, color FROM users WHERE id = ?')
       .get(userId);
+  });
+
+  /*
+    Change the login address — administrator only.
+
+    Deliberately not part of PATCH above: name and colour are personal
+    identity, an address is a credential, and on hosted it is the one thing
+    password recovery hangs off. Keeping it admin-only also means a stolen
+    session cannot quietly move the account to an attacker's mailbox and
+    then "recover" it.
+
+    It exists because the address is otherwise unchangeable, which made a
+    signup typo permanent: unconfirmable, and so unrecoverable.
+  */
+  app.post('/api/users/:id/email', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const { id: userId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const parsed = z
+      .object({ email: z.string().trim().toLowerCase().email('Invalid login address').max(120) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
+    }
+
+    const target = db.prepare('SELECT id, email FROM users WHERE id = ?').get(userId) as
+      | { id: string; email: string }
+      | undefined;
+    if (!target) return reply.code(404).send({ error: 'Member not found' });
+    if (target.email === parsed.data.email) return reply.code(400).send({ error: 'Nothing to change' });
+
+    const taken = db
+      .prepare('SELECT 1 FROM users WHERE email = ? AND id != ?')
+      .get(parsed.data.email, userId);
+    if (taken) return reply.code(409).send({ error: 'That login is already taken' });
+
+    // The new address starts unconfirmed, whatever the old one was: the
+    // proof belonged to the address, not to the account.
+    db.prepare('UPDATE users SET email = ?, email_verified_at = NULL WHERE id = ?').run(
+      parsed.data.email,
+      userId,
+    );
+    log.info('login address changed by an administrator');
+    void sendVerificationEmail(userId);
+
+    return db.prepare('SELECT id, email, name, role, color FROM users WHERE id = ?').get(userId);
   });
 
   app.post('/api/users/:id/reset-password', async (req, reply) => {

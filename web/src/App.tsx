@@ -12,6 +12,7 @@ import { Money } from './pages/Money';
 import { Mail } from './pages/Mail';
 import { Family } from './pages/Family';
 import { PublicWishlist } from './pages/PublicWishlist';
+import { VerifyEmail } from './pages/VerifyEmail';
 
 function Gate() {
   const { user, loading, mustChangePassword } = useAuth();
@@ -50,6 +51,9 @@ export function App() {
             {/* The guest wishlist lives OUTSIDE the auth gate: it is the
                 hub's only page for people without an account (#68) */}
             <Route path="/wish/:token" element={<PublicWishlist />} />
+            {/* Same reason: the confirmation link is opened from a mail
+                client, often in a browser with no session (#156) */}
+            <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="*" element={<Gate />} />
           </Routes>
         </DialogProvider>

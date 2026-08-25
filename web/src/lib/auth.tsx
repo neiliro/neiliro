@@ -11,6 +11,10 @@ export interface User {
   google_linked: number;
   password_login_disabled: number;
   totp_enabled: number;
+  /** Hosted with service mail: the address has not answered a confirmation
+   *  yet, so password recovery by email is unavailable for this account.
+   *  Absent (and irrelevant) on a self-hosted hub. */
+  email_verification_pending?: boolean;
 }
 
 interface AuthState {

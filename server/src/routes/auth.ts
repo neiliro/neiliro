@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from '../lib/password.js';
 import { env } from '../env.js';
 import { googleSignInAvailable } from './google.js';
 import { serviceMailAvailable } from '../lib/mail.js';
+import { emailVerificationAvailable } from './email-verify.js';
 import {
   SESSION_COOKIE,
   clearSessionCookie,
@@ -430,7 +431,18 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   }
 
   // The token was already checked in authenticate; the user sits on the request.
-  app.get('/api/auth/me', (req) => req.user);
+  /*
+    The frontend's prompt to confirm an address hangs off one computed
+    flag rather than off `email_verified` alone: an unconfirmed address is
+    normal and unremarkable on a self-hosted hub, where the login is an
+    identifier and nothing asks anyone to prove a mailbox. Only a hub that
+    can actually send — and that gates recovery on it — has anything to
+    ask for.
+  */
+  app.get('/api/auth/me', (req) => ({
+    ...req.user!,
+    email_verification_pending: emailVerificationAvailable() && !req.user!.email_verified,
+  }));
 
   /**
    * The Devices list: every live session of the current user, the one

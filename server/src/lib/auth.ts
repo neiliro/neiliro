@@ -20,6 +20,9 @@ export interface AuthUser {
   password_login_disabled: number;
   /** Whether TOTP is confirmed — the fact only; the secret never leaves. */
   totp_enabled: number;
+  /** Whether the login address answered a confirmation link. Hosted uses
+   *  it to gate password recovery; the frontend uses it for the prompt. */
+  email_verified: number;
 }
 
 declare module 'fastify' {
@@ -75,7 +78,8 @@ export function userForToken(token: string): AuthUser | null {
     .prepare(
       `SELECT u.id, u.email, u.name, u.role, u.color, u.must_change_password,
               (u.google_sub IS NOT NULL) AS google_linked, u.password_login_disabled,
-              (u.totp_confirmed_at IS NOT NULL) AS totp_enabled
+              (u.totp_confirmed_at IS NOT NULL) AS totp_enabled,
+              (u.email_verified_at IS NOT NULL) AS email_verified
          FROM sessions s
          JOIN users u ON u.id = s.user_id
         WHERE s.token_hash = ?
@@ -134,6 +138,9 @@ const PUBLIC_PATHS = new Set([
   // request step deliberately answers the same way for every address.
   '/api/auth/password-reset',
   '/api/auth/password-reset/confirm',
+  // Confirming an address: the link is opened wherever the mail was read,
+  // often in a browser with no session. The token is the authorization.
+  '/api/auth/email-verify',
 ]);
 
 export async function authenticate(req: FastifyRequest, reply: FastifyReply): Promise<void> {

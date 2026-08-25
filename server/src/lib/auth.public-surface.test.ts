@@ -23,6 +23,7 @@ const AUTH_TS = join(dirname(fileURLToPath(import.meta.url)), 'auth.ts');
 
 const PUBLIC_SNAPSHOT = [
   '/api/auth/demo',
+  '/api/auth/email-verify',
   '/api/auth/google/callback',
   '/api/auth/google/finish',
   '/api/auth/google/start',

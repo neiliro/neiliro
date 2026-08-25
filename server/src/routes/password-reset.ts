@@ -104,13 +104,19 @@ export async function registerPasswordResetRoutes(app: FastifyInstance): Promise
     try {
       const user = db
         .prepare(
-          `SELECT id, name, password_login_disabled FROM users WHERE email = ?`,
+          `SELECT id, name, password_login_disabled, email_verified_at
+             FROM users WHERE email = ?`,
         )
-        .get(email) as { id: string; name: string; password_login_disabled: number } | undefined;
+        .get(email) as
+        | { id: string; name: string; password_login_disabled: number; email_verified_at: string | null }
+        | undefined;
 
-      // No such login, or one that deliberately has no password to reset.
-      // Silence is the answer in both cases.
-      if (!user || user.password_login_disabled) return;
+      // Three reasons to stay silent, and silence is the same for all of
+      // them: no such login; one that deliberately has no password to
+      // reset; and — the load-bearing one — an address nobody ever proved
+      // they own. Mailing a reset to an unconfirmed address would turn a
+      // signup typo into a stranger's way into a family.
+      if (!user || user.password_login_disabled || !user.email_verified_at) return;
 
       const { familyId } = currentTenant();
       const slug = familyId ? familySlug(familyId) : null;

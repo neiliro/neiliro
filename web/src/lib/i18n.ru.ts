@@ -671,6 +671,19 @@ export const ru: Record<string, string> = {
     'Выберите новый пароль. На других устройствах придётся войти заново.',
   'Save and sign in': 'Сохранить и войти',
   'This link has expired — request a new one': 'Ссылка истекла — запросите новую',
+  'This link is not valid': 'Ссылка недействительна',
+  'That login is already taken': 'Этот логин уже занят',
+  'Address confirmation': 'Подтверждение адреса',
+  'Confirming…': 'Подтверждаю…',
+  'Address confirmed. If you ever forget your password, you can now reset it by email.':
+    'Адрес подтверждён. Если забудете пароль, теперь его можно сбросить по почте.',
+  'Sign in and use the reminder at the top of the page to send a fresh link.':
+    'Войдите и отправьте новую ссылку — напоминание наверху страницы.',
+  'Open Neiliro': 'Открыть Neiliro',
+  'Confirm {email} so you can reset your password by email if you forget it.':
+    'Подтвердите {email} — тогда забытый пароль можно будет сбросить по почте.',
+  'Sent. Open the link in that mailbox to confirm the address.':
+    'Отправлено. Откройте ссылку в этом ящике, чтобы подтвердить адрес.',
 
   // ── Family mail (v1) ──────────────────────────────────────────────────
   '(empty message)': '(пустое письмо)',
