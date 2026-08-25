@@ -48,6 +48,24 @@ describe('seedDemo', () => {
     const income = rules.find((r) => r.kind === 'income');
     expect(income && income.start_on > today(), 'the next pay day is not ahead').toBe(true);
 
+    /*
+      The month view is the widest thing a visitor can open, and it reads
+      as an empty grid unless the seeds reach past the two weeks around
+      today. Recurring anchors count: they expand forward from wherever
+      they start, so an anchor three weeks back fills the earlier rows.
+    */
+    const events = db
+      .prepare('SELECT starts_at, recurrence_rule FROM events')
+      .all() as { starts_at: string; recurrence_rule: string | null }[];
+    const earlier = events.filter((e) => e.starts_at.slice(0, 10) < shiftDays(today(), -7));
+    const later = events.filter((e) => e.starts_at.slice(0, 10) > shiftDays(today(), 14));
+    expect(earlier.length, 'nothing in the weeks before today').toBeGreaterThan(0);
+    expect(later.length, 'nothing in the weeks after today').toBeGreaterThan(0);
+    expect(
+      events.filter((e) => e.recurrence_rule?.includes('WEEKLY')).length,
+      'no weekly rhythm to fill the month',
+    ).toBeGreaterThan(1);
+
     // Idempotence: a second run on a non-empty database is a no-op
     await runWithDb(db, () => seedDemo());
     expect(n('SELECT count(*) AS n FROM profiles')).toBe(2);
