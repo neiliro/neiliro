@@ -164,6 +164,46 @@ export async function seedDemo(): Promise<void> {
       `INSERT INTO event_participants (event_id, user_id) VALUES (?, ?), (?, ?), (?, ?), (?, ?), (?, ?)`,
     ).run(gym, alex, gym, sam, dentist, sam, movie, alex, movie, sam);
 
+    // Every event above sits within two weeks of today, which is fine for
+    // the week and the agenda but leaves the month view as a grid of empty
+    // cells — the demo's calendar looked like a family that does nothing.
+    // A household's month is mostly rhythms and errands, so: two weekly
+    // rhythms anchored in the PAST (recurrences only expand forward from
+    // their anchor, so a rhythm starting tomorrow leaves every earlier
+    // week blank), errands behind us, and something to look forward to.
+    // The anchors use different offsets mod 7 so the two rhythms land in
+    // different columns whatever weekday the template is built on.
+    const swim = id();
+    const market = id();
+    const lake = id();
+    const dinner = id();
+    const boiler = id();
+    const vet = id();
+    db.prepare(
+      `INSERT INTO events (id, calendar_id, title, description, location, starts_at, ends_at, all_day, recurrence_rule, remind_days_before, created_by) VALUES
+       (?, ?, 'Swimming lesson', NULL, 'City pool', ?, ?, 0, 'FREQ=WEEKLY;INTERVAL=1', NULL, ?),
+       (?, ?, 'Farmers market', 'Bread, the good tomatoes, flowers if they have tulips', NULL, ?, ?, 0, 'FREQ=WEEKLY;INTERVAL=1', NULL, ?),
+       (?, ?, 'Car service', 'The rattle from the back, and an oil change', 'Vulco', ?, ?, 0, NULL, NULL, ?),
+       (?, ?, 'Dinner at Sam''s parents', NULL, NULL, ?, ?, 0, NULL, NULL, ?),
+       (?, ?, 'Boiler service', 'The engineer from the email — someone has to be home', NULL, ?, ?, 0, NULL, 1, ?),
+       (?, ?, 'Vet — Bruno''s shots', NULL, 'Dr. Pawel', ?, ?, 0, NULL, 1, ?),
+       (?, ?, 'Lake weekend', 'Two nights, take the small tent', NULL, ?, ?, 1, NULL, 3, ?)`,
+    ).run(
+      swim, shared, `${day(-19)}T16:30`, `${day(-19)}T17:15`, sam,
+      market, shared, `${day(-16)}T10:00`, `${day(-16)}T11:00`, alex,
+      id(), shared, `${day(-13)}T09:00`, `${day(-13)}T10:30`, alex,
+      dinner, shared, `${day(-8)}T18:30`, `${day(-8)}T21:00`, sam,
+      boiler, shared, `${day(7)}T10:00`, `${day(7)}T12:00`, alex,
+      vet, shared, `${day(24)}T15:30`, `${day(24)}T16:00`, sam,
+      lake, shared, day(18), day(19), alex,
+    );
+    db.prepare(
+      `INSERT INTO event_participants (event_id, user_id) VALUES (?, ?), (?, ?), (?, ?), (?, ?), (?, ?), (?, ?), (?, ?), (?, ?)`,
+    ).run(
+      swim, sam, market, alex, market, sam, dinner, alex, dinner, sam,
+      lake, alex, lake, sam, vet, sam,
+    );
+
     // ── Family mail ──
     // A believable paperwork inbox; one message is already a task, so
     // the mail → task link is visible without clicking anything

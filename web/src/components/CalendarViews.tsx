@@ -1,5 +1,5 @@
 import { t } from '../lib/i18n';
-import type { Occurrence } from '../lib/calendar';
+import { birthdayLabel, type Occurrence } from '../lib/calendar';
 import type { Task } from '../lib/api';
 import {
   WEEKDAYS_SHORT,
@@ -88,6 +88,7 @@ function EventChip({
   compact?: boolean;
 }) {
   const time = timeOf(occurrence.starts_at);
+  const birthday = birthdayLabel(occurrence);
   return (
     <button
       type="button"
@@ -95,12 +96,14 @@ function EventChip({
         e.stopPropagation();
         onOpen(occurrence);
       }}
+      title={birthday ?? undefined}
       style={{ borderLeftColor: occurrence.calendar_color }}
       className={`flex w-full items-center gap-1.5 rounded border-l-2 bg-surface-2 text-left transition-colors hover:bg-surface-3 ${
         compact ? 'px-1.5 py-0.5 text-[0.6875rem]' : 'px-2 py-1 text-xs'
       }`}
     >
       {time && <span className="shrink-0 font-mono text-muted">{time}</span>}
+      {birthday && <span aria-hidden>🎂</span>}
       <span className="min-w-0 flex-1 truncate text-ink">{occurrence.title}</span>
       {occurrence.age !== null && (
         <span className="shrink-0 font-mono text-muted">{occurrence.age}</span>

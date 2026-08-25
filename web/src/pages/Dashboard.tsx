@@ -13,7 +13,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { api, ApiError, type Dashboard as DashboardData, type Task } from '../lib/api';
-import { calendarName, type Occurrence } from '../lib/calendar';
+import { birthdayLabel, calendarName, type Occurrence } from '../lib/calendar';
 import { loadLocal, saveLocal } from '../lib/storage';
 import { reportFailure } from '../lib/failures';
 import {
@@ -159,6 +159,7 @@ function TaskRow({
 
 function EventRow({ occurrence, detailed }: { occurrence: Occurrence; detailed?: boolean }) {
   const time = timeOf(occurrence.starts_at);
+  const birthday = birthdayLabel(occurrence);
   return (
     <li className="border-b border-line last:border-0">
       <Link
@@ -173,7 +174,8 @@ function EventRow({ occurrence, detailed }: { occurrence: Occurrence; detailed?:
             style={{ backgroundColor: occurrence.calendar_color }}
           />
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm text-ink">
+        <span className="min-w-0 flex-1 truncate text-sm text-ink" title={birthday ?? undefined}>
+          {birthday && <span aria-hidden>🎂 </span>}
           {occurrence.title}
           {occurrence.age !== null && <span className="ml-2 text-muted">{occurrence.age}</span>}
         </span>
@@ -597,7 +599,13 @@ function SoonPanel({ items }: { items: Occurrence[] }) {
                 style={{ backgroundColor: o.calendar_color }}
                 aria-hidden
               />
-              <span className="min-w-0 flex-1 truncate text-sm text-ink">{o.title}</span>
+              <span
+                className="min-w-0 flex-1 truncate text-sm text-ink"
+                title={birthdayLabel(o) ?? undefined}
+              >
+                {birthdayLabel(o) && <span aria-hidden>🎂 </span>}
+                {o.title}
+              </span>
               <span className="font-mono text-xs text-urgent">{formatDate(o.date)}</span>
             </Link>
           </li>
