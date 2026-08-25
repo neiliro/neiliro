@@ -251,6 +251,8 @@ export const ru: Record<string, string> = {
   'Goal currency': 'Валюта цели',
   'Goal name': 'Название цели',
   'Goal settings': 'Настройки цели',
+  'Home name': 'Название дома',
+  'A local label for your hub — shows in the sidebar, the sign-in screen and the browser tab. Leave blank for the default.': 'Своё название дома — видно в боковом меню, на экране входа и во вкладке браузера. Пусто — останется Neiliro.',
   'in {unit}': 'через {unit}',
   'Left': 'Останется',
   'Overdue counts from this date': 'Просрочка считается от этой даты',

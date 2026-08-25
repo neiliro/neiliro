@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db, now, today as localToday } from '../db/index.js';
+import { env } from '../env.js';
 import { listOccurrences, remindersFor } from './calendar.js';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
@@ -16,6 +17,21 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     } catch {
       return reply.code(503).send({ ok: false });
     }
+  });
+
+  // ── Home name (public — the login page needs it without a session) ────
+
+  app.get('/api/home-name', () => {
+    // Hosted: the public answer is always the brand. A family-chosen name
+    // is private data, and a renamed family must stay indistinguishable
+    // from the ghost (lib/tenants.ts). Inside the app the name arrives
+    // through /api/settings, behind the session.
+    if (env.hostedMode) return { name: 'Neiliro' };
+
+    const row = db
+      .prepare("SELECT value FROM settings WHERE key = 'home.name'")
+      .get() as { value: string } | undefined;
+    return { name: row?.value?.trim() || 'Neiliro' };
   });
 
   // ── Settings (dashboard widgets included) ──────────────────────────────

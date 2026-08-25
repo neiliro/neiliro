@@ -511,6 +511,22 @@ export function Settings() {
           mx-auto centers the capped block like every other page. */}
       <div className="mx-auto max-w-md columns-1 gap-5 lg:max-w-4xl lg:columns-2 3xl:max-w-[86rem] 3xl:columns-3 4xl:max-w-[114rem] 4xl:columns-4">
       <div className="mb-5 break-inside-avoid space-y-5 rounded-card border border-line bg-surface p-5">
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium text-ink">{t('Home name')}</span>
+          <input
+            type="text"
+            value={values['home.name'] ?? ''}
+            onChange={(e) => setValues({ ...values, 'home.name': e.target.value })}
+            onKeyDown={onEnter(() => void save())}
+            placeholder="Neiliro"
+            maxLength={60}
+            className="w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+          />
+          <span className="mt-1 block text-xs text-muted">
+            {t('A local label for your hub — shows in the sidebar, the sign-in screen and the browser tab. Leave blank for the default.')}
+          </span>
+        </label>
+
         {FIELDS.map((f) => (
           <label key={f.key} className="block">
             <span className="mb-1.5 block text-sm font-medium text-ink">{f.label}</span>

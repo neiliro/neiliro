@@ -1,5 +1,6 @@
 import { lang, setLang, t } from '../lib/i18n';
 import { ISSUES_URL, REPO_URL } from '../lib/build';
+import { useHomeName } from '../lib/home-name';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -20,15 +21,20 @@ function Frame({
   note?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const displayName = useHomeName();
+
+  useEffect(() => {
+    if (displayName) document.title = displayName;
+  }, [displayName]);
+
   return (
     <div className="flex min-h-dvh items-center justify-center bg-surface-2 px-5">
       <div className="w-full max-w-sm">
         <div className="mb-7 text-center">
           {/* The brand is a proper noun, not a UI string: the same word in
-              both languages, so it never goes through t(). Every caller
-              used to pass it a second time as a subtitle under a
-              localized "Home" — one brand, one line. (#136) */}
-          <p className="font-display text-2xl font-bold tracking-tight text-ink">Neiliro</p>
+              both languages, so it never goes through t(). A family-chosen
+              name wins verbatim over the default. (#136) */}
+          <p className="font-display text-2xl font-bold tracking-tight text-ink">{displayName ?? 'Neiliro'}</p>
         </div>
         <div className="rounded-card border border-line bg-surface p-6">
           <h1 className="eyebrow mb-5">{title}</h1>

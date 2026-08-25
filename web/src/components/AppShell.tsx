@@ -1,7 +1,9 @@
 import { t } from '../lib/i18n';
 import { BUILD_SHA, ISSUES_URL, REPO_URL, VERSION } from '../lib/build';
+import { homeName } from '../lib/home-name';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useEffect, useState, type ReactNode } from 'react';
+import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { applyUpdate, setupPwa } from '../lib/pwa';
 import { clearFailure, useFailure } from '../lib/failures';
@@ -267,7 +269,21 @@ export function AppShell() {
   // and there is no sidebar there at all.
   const [searchOpen, setSearchOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [settings, setSettings] = useState<Record<string, string>>({});
   const sidebarNav = [...NAV, ...SECONDARY];
+
+  useEffect(() => {
+    void api
+      .get<Record<string, string>>('/settings')
+      .then(setSettings)
+      .catch(() => {});
+  }, []);
+
+  // The brand defaults to "Neiliro"; a family-chosen name wins verbatim.
+  const displayName = homeName(settings);
+  useEffect(() => {
+    document.title = displayName;
+  }, [displayName]);
 
   return (
     <div className="min-h-dvh md:flex">
@@ -278,7 +294,7 @@ export function AppShell() {
         {/* The theme toggle lives in the header: next to Sign out a missed
             click cost a whole session — a price out of scale for the button */}
         <div className="mb-8 flex items-center justify-between px-2">
-          <span className="font-display text-lg font-bold tracking-tight text-ink">Neiliro</span>
+          <span className="font-display text-lg font-bold tracking-tight text-ink">{displayName}</span>
           <ThemeToggle />
         </div>
 
