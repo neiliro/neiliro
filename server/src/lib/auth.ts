@@ -129,6 +129,11 @@ const PUBLIC_PATHS = new Set([
   // Its authorization is the webhook signature, checked on the route
   // itself (routes/mail-inbound.ts), which refuses anything unsigned.
   '/api/mail/inbound/mime',
+  // Password reset (hosted only): both steps happen for someone who
+  // cannot sign in. The authorization is the emailed token, and the
+  // request step deliberately answers the same way for every address.
+  '/api/auth/password-reset',
+  '/api/auth/password-reset/confirm',
 ]);
 
 export async function authenticate(req: FastifyRequest, reply: FastifyReply): Promise<void> {

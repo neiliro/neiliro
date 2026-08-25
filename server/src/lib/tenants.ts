@@ -284,6 +284,9 @@ const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
 const RESERVED_SLUGS = new Set([
   'www', 'app', 'api', 'demo', 'mail', 'in', 'mx', 'smtp', 'imap', 'pop',
   'admin', 'billing', 'pay', 'account', 'accounts', 'login', 'auth',
+  // Service senders: the hub writes from no-reply@<mail domain>, and a
+  // family holding that name would receive other families' service mail
+  'no-reply', 'noreply', 'postmaster', 'hello',
   'help', 'support', 'docs', 'blog', 'status', 'static', 'cdn', 'assets',
   'dev', 'staging', 'test', 'ns1', 'ns2', 'ftp', 'vpn', 'webmail',
 ]);

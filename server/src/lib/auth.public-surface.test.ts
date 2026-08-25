@@ -30,6 +30,8 @@ const PUBLIC_SNAPSHOT = [
   '/api/auth/join',
   '/api/auth/login',
   '/api/auth/mfa',
+  '/api/auth/password-reset',
+  '/api/auth/password-reset/confirm',
   '/api/auth/setup',
   '/api/auth/state',
   '/api/health',

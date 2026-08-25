@@ -190,11 +190,24 @@ describe('host routing', () => {
   });
 
   it('shows an unknown subdomain as an already-set-up hub (anti-enumeration)', async () => {
-    const state = await app.inject({
+    const ghost = await app.inject({
       url: '/api/auth/state',
       headers: onHost('nosuch-x9y8.neiliro.test'),
     });
-    expect(state.json()).toEqual({ initialized: true, google: false, demo: false, hosted: true });
+    /*
+      Compared against a real family rather than against a literal, so the
+      property under test is "indistinguishable" rather than "these four
+      fields". Every flag added to this response — the Google button, the
+      password-reset link — has to read the same on both, or the sign-in
+      screen starts telling strangers which subdomains are real. A literal
+      would have let such a flag through as long as someone updated it.
+    */
+    const real = await app.inject({
+      url: '/api/auth/state',
+      headers: onHost('smiths-a1b2.neiliro.test'),
+    });
+    expect(ghost.json()).toEqual(real.json());
+    expect(ghost.json()).toMatchObject({ initialized: true, hosted: true });
 
     // ...that rejects a sign-in exactly like a real family would
     const login = await app.inject({

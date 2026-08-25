@@ -23,6 +23,8 @@ In Docker: `docker compose exec app node scripts/admin-reset.mjs`
 
 It issues a new password, requires changing it on first sign-in and closes all previous sessions. Before this existed, the only way out of a lost password was deleting the database — losing everything.
 
+**On a hosted hub there is a reset link on the sign-in screen instead.** The distinction is not arbitrary: whoever runs the machine has a stronger door than any email flow — a shell, and a script that cannot be reached from the internet — while a family on the service has no shell at all, so a forgotten password would otherwise be somebody else's support ticket. The emailed link works once, for an hour, and is stored hashed. Two things it deliberately does not do: it never says whether an address has an account here (the answer is the same either way, on a service that also refuses to confirm which families exist), and it changes the password only — the second factor stays on, so a mailbox is not a way around it, and a member who turned password sign-in off does not get it turned back on behind their back.
+
 ## Signing in
 
 Two ways in: password and Google. An account is **never** created via Google: the hub is a family tool, the household is known, a stranger's Google account is refused at the door. Google is linked by an explicit action in Settings, from a live session, and is identified by the account's permanent ID rather than the email address — the email can change, the link survives.
