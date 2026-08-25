@@ -82,7 +82,7 @@ The hub comes up on `http://localhost:8787` and is reachable from other devices 
 Tagged releases publish a prebuilt multi-arch image (amd64 + arm64, so Raspberry Pi works) to GitHub Container Registry — point `image:` in the compose file at it to skip building:
 
 ```bash
-docker pull ghcr.io/neiliro/neiliro:latest   # or a pinned release: :1.2.0
+docker pull ghcr.io/neiliro/neiliro:latest   # or a pinned release: :1.6.0
 ```
 
 For development:

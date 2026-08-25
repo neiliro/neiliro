@@ -144,18 +144,26 @@ utilities, bookings, insurance. Everyone sees the same inbox; opening a
 letter marks it read for the whole family — a household desk has one
 "handled" state, not a per-person one.
 
-The hub polls an external mailbox over IMAP (any provider; a dedicated
-mailbox is best, a personal Gmail works via a filter into a separate
-label — the hub reads only the configured folder and never touches
-personal mail). Setup: [family-mail.md](family-mail.md).
+Where the letters come from depends on where the hub runs. **Self-hosted**,
+it polls an external mailbox over IMAP (any provider; a dedicated mailbox
+is best, a personal Gmail works via a filter into a separate label — the
+hub reads only the configured folder and never touches personal mail).
+**On a hosted hub** the address comes with the family: `<family>@<mail
+domain>`, shown in Settings, fed by an inbound webhook, with nothing to
+connect and no password to store. Both paths end in the same ingest
+function, so everything below works identically. Setup:
+[family-mail.md](family-mail.md).
 
 A letter becomes a task in one click; the task lands in the Inbox project
 and links back to the message. Attachments ride the regular attachments
 pipeline and storage budget.
 
-Replies are sent through the same mailbox's SMTP and always **from the
-family address** — the member's name travels in the display name and is
-recorded in the hub. Replies to your reply land back in the family
+Replies always go out **from the family address** — the member's name
+travels in the display name and is recorded in the hub. A connected
+mailbox sends through its own SMTP; a service-issued address sends over
+the provider's HTTP API, which is not a detail of taste: cloud hosts
+routinely block outbound SMTP ports, and a reply path that depends on
+them breaks on the next provider. Replies to your reply land back in the family
 mailbox, so the whole thread stays in one place. There is no
 compose-from-scratch: a paperwork desk answers letters, it does not
 start correspondence.
