@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { currentTenant, db, now } from '../db/index.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { env } from '../env.js';
+import { googleSignInAvailable } from './google.js';
 import {
   SESSION_COOKIE,
   clearSessionCookie,
@@ -107,13 +108,16 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     // `hosted` is safe to state even here — that the service is hosted
     // is public knowledge, only which families exist is not.
     if (currentTenant().ghost) {
-      return { initialized: true, google: false, demo: false, hosted: true };
+      // The Google flag is a property of the process, not of a family, and
+      // it must read the same here: a button that appears only on real
+      // subdomains would enumerate families by itself.
+      return { initialized: true, google: googleSignInAvailable(), demo: false, hosted: true };
     }
     const n = (db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n;
     return {
       initialized: n > 0,
       // Whether showing the "Sign in with Google" button makes sense
-      google: Boolean(env.googleClientId && env.googleClientSecret && env.publicUrl),
+      google: googleSignInAvailable(),
       demo: false,
       // The frontend gates hosted-only settings (the family Danger zone) on it
       hosted: env.hostedMode,

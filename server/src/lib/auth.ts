@@ -118,6 +118,9 @@ const PUBLIC_PATHS = new Set([
   // Linking (/google/link) is deliberately absent — it requires a session.
   '/api/auth/google/start',
   '/api/auth/google/callback',
+  // The hosted hand-back creates the session it would otherwise need
+  // (routes/google.ts); for linking it resolves the session by hand.
+  '/api/auth/google/finish',
   // Onboarding: initial setup and invite login — before any session
   '/api/auth/setup',
   '/api/auth/invite',
