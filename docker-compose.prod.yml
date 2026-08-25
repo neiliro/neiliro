@@ -51,8 +51,10 @@ services:
     container_name: family-hub-caddy
     restart: unless-stopped
     logging: *logging
-    depends_on:
-      - app
+    # No depends_on: Caddy resolves an upstream when a request arrives, not
+    # at startup, so it comes up fine on its own — the demo overlay has
+    # always relied on that. Without the dependency a machine can also run
+    # the demo alone, with the hub service defined but never started.
     ports:
       - "80:80"
       - "443:443"

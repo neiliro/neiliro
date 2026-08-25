@@ -79,23 +79,35 @@ jobs:
         # (DEMO_DOMAIN set): the demo shares the image, so it has to be
         # recreated on deploy too — otherwise it would keep running the
         # previous image forever.
+        #
+        # The hub itself can be opted out the same way (HUB_ENABLED=false):
+        # a machine that keeps the public demo after its hub has moved
+        # elsewhere must not have the hub restarted under it on every push.
         run: |
           ssh "$DEPLOY" '
             cd /srv/family-hub/app
             files="-f docker-compose.prod.yml"
+            services="caddy"
+            grep -q "^HUB_ENABLED=false" .env 2>/dev/null || services="$services app"
             if grep -q "^DEMO_DOMAIN=" .env 2>/dev/null; then
               files="$files -f docker-compose.demo.yml"
+              services="$services app-demo"
             fi
-            docker compose $files up -d
+            docker compose $files up -d $services
           '
 
       - name: Health check
         # Relies on the container's own HEALTHCHECK (GET /api/health),
-        # so no public hostname needs to live in this file.
+        # so no public hostname needs to live in this file. On a machine
+        # that only carries the demo, the demo is what has to come up.
         run: |
+          container=family-hub
+          if ssh "$DEPLOY" 'grep -q "^HUB_ENABLED=false" /srv/family-hub/app/.env'; then
+            container=family-hub-demo
+          fi
           for i in $(seq 1 18); do
             status=$(ssh "$DEPLOY" \
-              'docker inspect --format "{{.State.Health.Status}}" family-hub' 2>/dev/null || true)
+              "docker inspect --format '{{.State.Health.Status}}' $container" 2>/dev/null || true)
             if [ "$status" = "healthy" ]; then
               echo "ok"; exit 0
             fi

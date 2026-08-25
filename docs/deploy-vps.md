@@ -332,6 +332,25 @@ just as much a one-domain job.
 No nightly reset cron is needed: sandbox cleanup and daily template
 rebuilds happen inside the app itself.
 
+### Keeping only the demo
+
+A hub can move on — to another machine, or to a hosted service — while
+the demo stays where it is. Set `HUB_ENABLED=false` in `.env`, point
+`HUB_DOMAIN` at a placeholder that resolves nowhere (`hub.localhost`
+takes an internal certificate and never bothers Let's Encrypt), and stop
+the hub container once:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.demo.yml rm -f -s app
+docker compose -f docker-compose.prod.yml -f docker-compose.demo.yml up -d caddy app-demo
+```
+
+Auto-deploy reads the same flag: it starts the demo and Caddy, leaves
+the hub service defined but never started, and waits on the demo's
+health instead. The data directory is untouched by all of this — deleting
+it is a separate, deliberate `rm`, and worth postponing until the hub has
+lived somewhere else for a week.
+
 ### Usage statistics
 
 The demo keeps anonymous usage statistics in `demo-stats.db` next to its
