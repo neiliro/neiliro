@@ -55,6 +55,17 @@ export interface Occurrence {
   participants: Participant[];
 }
 
+/**
+ * A birthday occurrence is a person's name plus an age, and the age renders as
+ * a bare number beside the title: 'Alex  38' is a riddle in a month cell. The
+ * cake solves it at a glance; this label says the same for hover and for
+ * screen readers, out of keys the dictionary already has.
+ */
+export function birthdayLabel(o: Pick<Occurrence, 'title' | 'age'>): string | null {
+  if (o.age === null) return null;
+  return `${t('Birthday')}: ${o.title}, ${t('{n} years old', { n: o.age })}`;
+}
+
 export type CalendarView = 'week' | 'month' | 'agenda';
 
 export const VIEW_LABEL: Record<CalendarView, string> = {
