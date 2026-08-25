@@ -79,43 +79,109 @@ export function familyMailAddress(): string | null {
   return getMailAccount()?.address ?? serviceAddress();
 }
 
+interface OutgoingMessage {
+  /** Shown in front of the family address: "Sam · smiths@mail.example.com" */
+  fromName: string;
+  to: string;
+  subject: string;
+  text: string;
+  /** Message-ID of the letter being answered, angle brackets included */
+  inReplyTo?: string;
+}
+
 interface Outgoing {
   address: string;
-  transport: nodemailer.Transporter;
+  send(message: OutgoingMessage): Promise<void>;
 }
 
 /**
- * The transport a reply goes out through. Null means this family cannot
- * send at all — no mailbox of its own and no service SMTP configured —
- * which the demo relies on as well.
+ * A display name fit for a MIME header. Non-ASCII has to be encoded
+ * (RFC 2047), and ours routinely is: the reply name is "<member> · <address>",
+ * whose separator alone is outside ASCII before anyone is called Денис.
+ */
+function mimeDisplayName(name: string): string {
+  if (/^[\x20-\x7e]*$/.test(name)) return `"${name.replace(/["\\]/g, '\\$&')}"`;
+  return `=?UTF-8?B?${Buffer.from(name, 'utf8').toString('base64')}?=`;
+}
+
+/** The family's own mailbox, over its own SMTP. */
+function accountSender(account: MailAccount): Outgoing {
+  const transport = nodemailer.createTransport({
+    host: account.smtp_host,
+    port: account.smtp_port,
+    secure: account.smtp_port === 465,
+    auth: { user: account.username, pass: account.password },
+  });
+  return {
+    address: account.address,
+    async send(message) {
+      await transport.sendMail({
+        from: { name: message.fromName, address: account.address },
+        to: message.to,
+        subject: message.subject,
+        text: message.text,
+        inReplyTo: message.inReplyTo,
+        references: message.inReplyTo,
+      });
+    },
+  };
+}
+
+/**
+ * The service's own domain, over Mailgun's HTTP API.
+ *
+ * HTTP and not SMTP on purpose: cloud providers block outbound SMTP —
+ * DigitalOcean closes 25/465/587 by default, which is exactly what this
+ * machine does — so a reply path over SMTP is one that breaks on the next
+ * provider. Port 443 is never blocked.
+ *
+ * The From header is the family's address; the API key only says who we
+ * are to Mailgun. Mailgun authorizes the domain, so every family sends as
+ * itself through one credential.
+ */
+function serviceSender(address: string): Outgoing {
+  return {
+    address,
+    async send(message) {
+      const form = new FormData();
+      form.set('from', `${mimeDisplayName(message.fromName)} <${address}>`);
+      form.set('to', message.to);
+      form.set('subject', message.subject);
+      form.set('text', message.text);
+      if (message.inReplyTo) {
+        // Threading headers ride as custom headers on this API
+        form.set('h:In-Reply-To', message.inReplyTo);
+        form.set('h:References', message.inReplyTo);
+      }
+
+      const auth = Buffer.from(`api:${env.mailgunApiKey}`).toString('base64');
+      const res = await fetch(`${env.mailgunApiBase}/v3/${env.mailDomain}/messages`, {
+        method: 'POST',
+        headers: { Authorization: `Basic ${auth}` },
+        body: form,
+      });
+      if (!res.ok) {
+        // The body names the actual reason — an unverified domain, a
+        // compliance hold — and the person pressing "send reply" is the
+        // one who needs to see it.
+        const detail = await res.text().catch(() => '');
+        throw new Error(`Mailgun refused the message (${res.status}) ${detail.slice(0, 200)}`.trim());
+      }
+    },
+  };
+}
+
+/**
+ * How this family sends. Null means it cannot: no mailbox of its own and
+ * no service credential — which is also what the demo relies on.
  */
 function outgoing(): Outgoing | null {
   const account = getMailAccount();
-  if (account) {
-    return {
-      address: account.address,
-      transport: nodemailer.createTransport({
-        host: account.smtp_host,
-        port: account.smtp_port,
-        secure: account.smtp_port === 465,
-        auth: { user: account.username, pass: account.password },
-      }),
-    };
-  }
+  if (account) return accountSender(account);
 
   const address = serviceAddress();
-  if (!address || !env.mailSmtpHost) return null;
-  return {
-    address,
-    // The envelope sender is the service's SMTP user; the From header is
-    // the family's own address, which the domain is authorized to send as.
-    transport: nodemailer.createTransport({
-      host: env.mailSmtpHost,
-      port: env.mailSmtpPort,
-      secure: env.mailSmtpPort === 465,
-      auth: { user: env.mailSmtpUser, pass: env.mailSmtpPass },
-    }),
-  };
+  if (!address || !env.mailgunApiKey) return null;
+  return serviceSender(address);
 }
 
 /** Sanity cap: a message source larger than this is not household mail. */
@@ -287,13 +353,12 @@ export async function sendReply(
   if (!out) throw new Error('Mailbox is not configured');
 
   const subject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
-  await out.transport.sendMail({
-    from: { name: `${sender.name} · ${out.address}`, address: out.address },
+  await out.send({
+    fromName: `${sender.name} · ${out.address}`,
     to: original.from_address,
     subject,
     text,
     inReplyTo: original.message_id ?? undefined,
-    references: original.message_id ?? undefined,
   });
 
   const rowId = id();
