@@ -125,6 +125,10 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/setup',
   '/api/auth/invite',
   '/api/auth/join',
+  // Inbound family mail: Mailgun is not a browser and has no session.
+  // Its authorization is the webhook signature, checked on the route
+  // itself (routes/mail-inbound.ts), which refuses anything unsigned.
+  '/api/mail/inbound/mime',
 ]);
 
 export async function authenticate(req: FastifyRequest, reply: FastifyReply): Promise<void> {

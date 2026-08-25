@@ -230,6 +230,20 @@ export function resolveTenant(host: string | undefined): Tenant {
 }
 
 /**
+ * The tenant behind a family slug, or null when no active family owns it.
+ *
+ * Deliberately unlike resolveTenant(): no ghost fallback. The ghost exists
+ * so a browser cannot enumerate family names, but a caller that is not a
+ * browser — the inbound mail webhook — must tell "no such family" apart
+ * from "an empty hub", or it would silently ingest letters into a database
+ * nobody ever reads.
+ */
+export function tenantForSlug(slug: string): Tenant | null {
+  const familyId = familyIdBySlug(slug);
+  return familyId === null ? null : tenantFor(familyId);
+}
+
+/**
  * Run a background job once per active family, sequentially — pollers
  * and sweeps written for one family work unchanged inside. One family's
  * failure is logged and does not stop the round.
