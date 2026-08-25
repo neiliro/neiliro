@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
 
 /*
@@ -14,6 +17,7 @@ process.env.HOSTED_DOMAIN = 'neiliro.test';
 
 const tenants = await import('../lib/tenants.js');
 const { buildApp } = await import('../app.js');
+const { env } = await import('../env.js');
 
 afterAll(() => {
   delete process.env.HOSTED_MODE;
@@ -51,8 +55,90 @@ describe('createFamily', () => {
     expect(() => tenants.createFamily('petrovs!')).toThrow(/Bad slug/);
     expect(() => tenants.createFamily('mail')).toThrow(/reserved/);
 
+    /*
+      The service's own entrances must stay unclaimable — a family holding
+      one would take over a door, not merely confuse a URL. `auth` is the
+      single Google callback host (routes/google.ts); `in` is the inbound
+      mail webhook (routes/mail-inbound.ts).
+
+      Note which rule actually stops each one. `auth` is refused by
+      RESERVED_SLUGS; `in` and `mx` never reach that list, because the slug
+      pattern demands three characters. So they are guarded twice, and the
+      assertion is "refused", not "refused for this reason" — a refactor
+      that relaxed the length rule would still have the reserved list, and
+      this test would still hold.
+    */
+    expect(() => tenants.createFamily('auth')).toThrow(/reserved/);
+    expect(() => tenants.createFamily('in')).toThrow();
+    expect(() => tenants.createFamily('mx')).toThrow();
+
     tenants.createFamily('taken-q1w2');
     expect(() => tenants.createFamily('taken-q1w2')).toThrow(/already taken/);
+  });
+});
+
+describe('suspension and deletion', () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    tenants.initHosted();
+    app = await buildApp();
+  });
+
+  /*
+    Suspension is an operator action taken straight in the registry (the
+    control plane's set-status script), so the test writes the status the
+    same way the operator does.
+
+    Both cases below use a family the app has never served: familyIdBySlug
+    caches a slug for 30 s, so a status flipped under a warm slug keeps
+    answering in the old state until the TTL passes. That is accepted
+    behaviour — suspension is an operator action, not a security boundary —
+    and it is why these tests start cold rather than sleeping.
+  */
+  function setStatus(slug: string, status: string): void {
+    const registry = new Database(join(env.dataDir, 'registry.db'));
+    registry.prepare('UPDATE families SET status = ? WHERE slug = ?').run(status, slug);
+    registry.close();
+  }
+
+  it('hides a suspended family behind the ghost, and keeps its data', () => {
+    const family = tenants.createFamily('paused-p1q2');
+    setStatus('paused-p1q2', 'suspended');
+
+    const dbFile = join(env.dataDir, 'families', family.familyId, 'hub.db');
+    expect(existsSync(dbFile)).toBe(true); // suspended is not deleted
+
+    return app
+      .inject({ url: '/api/auth/state', headers: onHost('paused-p1q2.neiliro.test') })
+      .then(async (state) => {
+        // Indistinguishable from an unknown subdomain: a suspended family
+        // must not be enumerable either
+        expect(state.statusCode).toBe(200);
+
+        const setup = await app.inject({
+          method: 'POST',
+          url: '/api/auth/setup',
+          headers: onHost('paused-p1q2.neiliro.test'),
+          payload: { name: 'Squatter', email: 'squatter@example.test', password: 'correct horse battery' },
+        });
+        // The ghost's decoy database may never grow an admin — whoever
+        // "set it up" would own every unknown subdomain at once
+        expect(setup.statusCode).toBe(403);
+
+        // And the family's own file is still untouched by that attempt
+        expect(existsSync(dbFile)).toBe(true);
+      });
+  });
+
+  it('never re-issues the slug of a deleted family', () => {
+    const family = tenants.createFamily('gone-g1h2');
+    tenants.deleteFamilyData(family.familyId);
+
+    expect(existsSync(join(env.dataDir, 'families', family.familyId, 'hub.db'))).toBe(false);
+    // A stranger inheriting the slug would inherit bookmarks and mail
+    // addressed to the family that left
+    expect(() => tenants.createFamily('gone-g1h2')).toThrow(/already taken/);
   });
 });
 

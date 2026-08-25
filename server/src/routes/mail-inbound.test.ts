@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHmac } from 'node:crypto';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
 
 /*
@@ -21,6 +24,7 @@ process.env.MAILGUN_SIGNING_KEY = 'test-signing-key';
 
 const tenants = await import('../lib/tenants.js');
 const { buildApp } = await import('../app.js');
+const { env } = await import('../env.js');
 
 const SIGNING_KEY = 'test-signing-key';
 const INBOUND = '/api/mail/inbound/mime';
@@ -210,6 +214,85 @@ describe('inbound family mail', () => {
     );
     // 406 and not 5xx: anything else buys eight hours of Mailgun retries
     expect(res.statusCode).toBe(406);
+  });
+
+  it('refuses letters for a suspended family, and does not touch its data', async () => {
+    /*
+      Suspension is an operator action written straight into the registry.
+      The slug is deliberately one the app has never served: familyIdBySlug
+      caches for 30 s, so a status flipped under a warm slug keeps answering
+      in the old state — accepted, and the reason this starts cold.
+    */
+    const paused = tenants.createFamily('paused-m9n8');
+    const registry = new Database(join(env.dataDir, 'registry.db'));
+    registry.prepare("UPDATE families SET status = 'suspended' WHERE slug = ?").run('paused-m9n8');
+    registry.close();
+
+    const res = await post(
+      delivery({
+        recipient: 'paused-m9n8@mail.neiliro.test',
+        'body-mime': letter('paused-1@school.example', 'While away'),
+      }),
+    );
+    // 406, so the sender gets a bounce instead of eight hours of retries
+    expect(res.statusCode).toBe(406);
+
+    // Nothing was written into the suspended family's database
+    const file = new Database(join(env.dataDir, 'families', paused.familyId, 'hub.db'), {
+      readonly: true,
+    });
+    const { n } = file.prepare('SELECT count(*) AS n FROM mail_messages').get() as { n: number };
+    file.close();
+    expect(n).toBe(0);
+  });
+
+  it('files an attachment inside the addressed family, and nowhere else', async () => {
+    // Attachments follow the tenant, not the process: they land in the
+    // family's own directory (Tenant.attachmentsDir), so a letter for one
+    // family must leave the other's storage empty.
+    const pdf = Buffer.from('%PDF-1.4 report').toString('base64');
+    const withAttachment = [
+      'Message-ID: <report-1@school.example>',
+      'From: office@school.example',
+      `To: ${SMITHS}@mail.neiliro.test`,
+      'Subject: Term report',
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/mixed; boundary="B"',
+      '',
+      '--B',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      'Report attached.',
+      '--B',
+      'Content-Type: application/pdf',
+      'Content-Disposition: attachment; filename="term.pdf"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      pdf,
+      '--B--',
+      '',
+    ].join('\r\n');
+
+    const res = await post(
+      delivery({ recipient: `${SMITHS}@mail.neiliro.test`, 'body-mime': withAttachment }),
+    );
+    expect(res.statusCode).toBe(200);
+
+    const idOf = (slug: string) => {
+      const registry = new Database(join(env.dataDir, 'registry.db'), { readonly: true });
+      const row = registry.prepare('SELECT id FROM families WHERE slug = ?').get(slug) as { id: string };
+      registry.close();
+      return row.id;
+    };
+    const files = (slug: string) => {
+      const dir = join(env.dataDir, 'families', idOf(slug), 'attachments');
+      return readdirSync(dir, { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile())
+        .map((e) => e.name);
+    };
+
+    expect(files(SMITHS).length).toBeGreaterThan(0);
+    expect(files(JONES)).toEqual([]);
   });
 
   it('refuses letters addressed to another domain', async () => {
