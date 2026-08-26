@@ -242,7 +242,7 @@ function QuickActions() {
   };
 
   return (
-    <div className="grid grid-cols-3 gap-3 md:hidden">
+    <div className="grid grid-cols-4 gap-3 md:hidden">
       <button
         type="button"
         onClick={() => window.dispatchEvent(new Event('hub:quick-add'))}
@@ -268,6 +268,15 @@ function QuickActions() {
           <path d="M9 12h6M12 9v6" />
         </svg>
         {t('Note')}
+      </button>
+      {/* Shared lists (#11): the whole point is adding without navigating,
+          so this lands in the input rather than on the page. */}
+      <button type="button" onClick={() => navigate('/lists?add=1')} className={action}>
+        <svg viewBox="0 0 24 24" className="size-6 text-accent" {...iconProps}>
+          <path d="M4 7h2M4 12h2M4 17h2M9 7h11M9 12h7" />
+          <path d="M17 15v6M14 18h6" />
+        </svg>
+        {t('List')}
       </button>
     </div>
   );

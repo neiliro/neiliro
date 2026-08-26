@@ -655,6 +655,18 @@ export const ru: Record<string, string> = {
   'Your own colors for projects, accounts, categories and calendars — on top of the stock ones. Grows from here and from the "+" button right in the color picker.': 'Свои цвета для проектов, счетов, категорий и календарей — поверх стандартных. Пополняется и отсюда, и кнопкой «+» прямо в выборе цвета.',
   'Zero — the goal is only a countdown': 'Ноль — только отсчёт, без накоплений',
 
+  // ── Общие списки (#11) ────────────────────────────────────────────────
+  'Lists': 'Списки',
+  'Shopping': 'Покупки',
+  'Shared with the whole family': 'Общее для всей семьи',
+  'New list': 'Новый список',
+  'Name of the new list': 'Название нового списка',
+  'Add an item and press Enter': 'Добавьте пункт и нажмите Enter',
+  'Nothing here yet. Add the first item above.': 'Пока пусто. Добавьте первый пункт выше.',
+  'Clear checked ({n})': 'Убрать отмеченные ({n})',
+  'List not found': 'Список не найден',
+  'Item not found': 'Пункт не найден',
+
   // ── Сброс пароля по email (hosted) ────────────────────────────────────
   'Forgot your password?': 'Забыли пароль?',
   'Password reset': 'Сброс пароля',

@@ -94,6 +94,15 @@ const SECONDARY: NavItem[] = [
     ),
   },
   {
+    to: '/lists',
+    label: t('Lists'),
+    icon: (
+      <svg viewBox="0 0 24 24" {...stroke}>
+        <path d="M4 7h2M4 12h2M4 17h2M9 7h11M9 12h11M9 17h7" />
+      </svg>
+    ),
+  },
+  {
     to: '/mail',
     label: t('Mail'),
     icon: (

@@ -10,6 +10,7 @@ import { Calendar } from './pages/Calendar';
 import { Settings } from './pages/Settings';
 import { Money } from './pages/Money';
 import { Mail } from './pages/Mail';
+import { Lists } from './pages/Lists';
 import { Family } from './pages/Family';
 import { PublicWishlist } from './pages/PublicWishlist';
 import { VerifyEmail } from './pages/VerifyEmail';
@@ -31,6 +32,7 @@ function Gate() {
         <Route path="calendar" element={<Calendar />} />
         <Route path="notes" element={<Notes />} />
         <Route path="money" element={<Money />} />
+        <Route path="lists" element={<Lists />} />
         <Route path="mail" element={<Mail />} />
         <Route path="family" element={<Family />} />
         <Route path="family/:userId" element={<Family />} />

@@ -8,7 +8,7 @@
 
 A self-hosted family hub: tasks, notes, calendar and money in one place. Built for a household, not a corporation: one Docker container, one SQLite file, no external services required. Runs on a home machine over the local network or on a cheap VPS with a real domain.
 
-The core is complete and battle-tested by daily family use: accounts and sign-in (password and Google, with optional two-factor codes), projects and tasks with a kanban board, notes with attachments and wiki-links, a calendar with recurring events, a shared family mailbox that turns letters into tasks, full-text search, a home screen you arrange yourself out of widgets, and a money section — accounts with balances, expenses, income, transfers, bank reconciliation, categories, budgets, recurring transactions, receipts. It installs to the home screen as an app and keeps working read-only when the Wi-Fi does not.
+The core is complete and battle-tested by daily family use: accounts and sign-in (password and Google, with optional two-factor codes), projects and tasks with a kanban board, notes with attachments and wiki-links, a calendar with recurring events, shared lists for the shopping run, a shared family mailbox that turns letters into tasks, full-text search, a home screen you arrange yourself out of widgets, and a money section — accounts with balances, expenses, income, transfers, bank reconciliation, categories, budgets, recurring transactions, receipts. It installs to the home screen as an app and keeps working read-only when the Wi-Fi does not.
 
 ## A quick look
 

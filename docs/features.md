@@ -138,6 +138,16 @@ Everything the household owns leaves in one file whenever it wants: Settings →
 
 On the hosted service the same section holds **Delete everything**: the administrator confirms with the password, a two-factor code when one is set, and by typing the family's own address, after which the database and the attachments are gone and the encrypted nightly backups expire on their own within a fortnight. A self-hosted install gets the export but no such button — there, deleting the only family means erasing the instance, and that belongs to whoever owns the machine.
 
+## Lists
+
+The shopping list, and whatever else the household keeps as a list. Shared with everyone by default — a list nobody else can see would defeat the point, so this is the one user-owned thing in the hub with no per-person visibility.
+
+The whole design is about speed on a phone, because that is where a shopping list is actually used: type an item and press Enter, and the field keeps focus for the next one; tap a row to check it. Checked items are not deleted — they sink to the bottom, struck through, so what was just bought is still visible on the walk home. "Clear checked" removes the pile in one action when the trip is over.
+
+Items are deliberately plain text with no quantity, assignee or due date: a list item is a word, and every field added to it is a field to fill in while standing in a shop. Duplicates are allowed — two "milk" means two bottles, and a dedupe check would be a surprise at the worst moment.
+
+One list ships with a fresh hub, so the feature works before anyone configures anything; more can be added, and the seeded name is translated by id, so renaming it keeps your name. Adding is also one of the four one-tap actions on the phone home screen.
+
 ## Mail
 
 ![Mail: the shared household inbox, one click from letter to task](screenshots/mail.png)
