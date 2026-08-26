@@ -162,6 +162,12 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply): Pr
     ends in a slash.
   */
   if (path.startsWith('/api/calendar/feed/')) return;
+  /*
+    A single shared event, addressed by its own token. Same family as the
+    two above: unguessable, read-only, and scoped to one row — it reveals
+    one event and deliberately not the calendar around it.
+  */
+  if (path.startsWith('/api/event/')) return;
 
   const token = req.cookies[SESSION_COOKIE];
   const user = token ? userForToken(token) : null;

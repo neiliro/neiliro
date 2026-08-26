@@ -33,6 +33,10 @@ export function EventDialog({
   onClose,
 }: Props) {
   const editing = occurrence !== null;
+  // The public link for this event, once it exists. Fetched lazily — most
+  // events are never shared, and the dialog opens on every click.
+  const [sharePath, setSharePath] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
   const dialogs = useDialogs();
 
   const [draft, setDraft] = useState(() => ({
@@ -90,6 +94,19 @@ export function EventDialog({
       birth_year: draft.birth_year ? Number(draft.birth_year) : null,
       participants: draft.participants,
     };
+  }
+
+  async function share() {
+    if (!occurrence) return;
+    const res = await api.post<{ path: string }>(`/events/${occurrence.event_id}/share`, {});
+    setSharePath(res.path);
+    setShareCopied(false);
+  }
+
+  async function unshare() {
+    if (!occurrence) return;
+    await api.delete(`/events/${occurrence.event_id}/share`);
+    setSharePath(null);
   }
 
   async function save() {
@@ -190,6 +207,48 @@ export function EventDialog({
       }
     >
         <div className="space-y-4">
+          {editing && (
+            <div className="rounded-lg border border-line bg-surface-2 p-3">
+              {sharePath ? (
+                <>
+                  <p className="break-all font-mono text-xs text-ink">
+                    {window.location.origin}
+                    {sharePath}
+                  </p>
+                  <p className="mt-1.5 text-xs text-muted">
+                    {t('Anyone with this link sees this event only — not the calendar it is in.')}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(`${window.location.origin}${sharePath}`);
+                        setShareCopied(true);
+                      }}
+                      className="text-sm text-accent underline underline-offset-2"
+                    >
+                      {shareCopied ? t('Copied') : t('Copy')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void unshare()}
+                      className="text-sm text-muted underline underline-offset-2 hover:text-urgent"
+                    >
+                      {t('Revoke the link')}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void share()}
+                  className="text-sm text-accent underline underline-offset-2"
+                >
+                  {t('Share this event by link')}
+                </button>
+              )}
+            </div>
+          )}
           <label className="block">
             <span className={label}>{t('Title')}</span>
             <input

@@ -138,6 +138,12 @@ Everything the household owns leaves in one file whenever it wants: Settings →
 
 On the hosted service the same section holds **Delete everything**: the administrator confirms with the password, a two-factor code when one is set, and by typing the family's own address, after which the database and the attachments are gone and the encrypted nightly backups expire on their own within a fortnight. A self-hosted install gets the export but no such button — there, deleting the only family means erasing the instance, and that belongs to whoever owns the machine.
 
+### Sharing one event
+
+Any event can get a public link — "the party is on Saturday at three, here is where" — for people who have no account here and never will. The guest page shows the event and a button that adds it to their own calendar as a file.
+
+It reveals **one event and nothing around it**: not the calendar it belongs to (that name can itself be private), not who is attending, not what else is on that day. Sharing an invitation should not open a window into the household. The link is revocable, and asking for it twice returns the same one, so it can be re-sent to the second parent a week later without breaking the first copy.
+
 ### In your own calendar app
 
 The family calendar can be subscribed to from Apple Calendar, Google Calendar or Outlook: **Settings → Subscribe in your calendar** issues a read-only link, and the calendar shows up next to the work one on a phone.
