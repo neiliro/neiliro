@@ -8,7 +8,11 @@ import { t } from './i18n';
 export const SHOPPING_LIST_ID = '00000000-0000-4000-8000-000000000301';
 
 export function listTitle(id: string, title: string): string {
-  return id === SHOPPING_LIST_ID ? t('Shopping') : title;
+  // Guarded on the seeded value, the way calendarName already was and this
+  // did not copy: without it a rename saves on the server and is then
+  // overwritten on screen by the translation, which reads as "renaming
+  // does nothing".
+  return id === SHOPPING_LIST_ID && title === 'Shopping' ? t('Shopping') : title;
 }
 
 export interface ListItem {
@@ -16,6 +20,14 @@ export interface ListItem {
   list_id: string;
   title: string;
   checked_at: string | null;
+  position: number;
+  /** Null is normal, not "unfiled": typing an item never requires a place */
+  section_id?: string | null;
+}
+
+export interface ListSection {
+  id: string;
+  title: string;
   position: number;
 }
 
@@ -31,4 +43,5 @@ export interface SharedList {
 
 export interface ListWithItems extends SharedList {
   items: ListItem[];
+  sections: ListSection[];
 }

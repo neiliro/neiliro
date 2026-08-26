@@ -46,7 +46,10 @@ export const INBOX_ID = '00000000-0000-4000-8000-000000000001';
  * id — translate in place (English seed since migration 013).
  */
 export function projectTitle(id: string | null | undefined, title: string): string {
-  return id === INBOX_ID ? t('Inbox') : title;
+  // Same guard as calendarName: translate the seeded name, leave a renamed
+  // one alone. Inbox cannot be archived or deleted, but it can be renamed,
+  // so without this a rename looked like it had failed.
+  return id === INBOX_ID && (title === 'Inbox' || title === 'Входящие') ? t('Inbox') : title;
 }
 
 export interface TaskNode extends Task {

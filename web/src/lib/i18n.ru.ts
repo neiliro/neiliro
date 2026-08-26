@@ -655,6 +655,16 @@ export const ru: Record<string, string> = {
   'Your own colors for projects, accounts, categories and calendars — on top of the stock ones. Grows from here and from the "+" button right in the color picker.': 'Свои цвета для проектов, счетов, категорий и календарей — поверх стандартных. Пополняется и отсюда, и кнопкой «+» прямо в выборе цвета.',
   'Zero — the goal is only a countdown': 'Ноль — только отсчёт, без накоплений',
 
+  // ── Разделы внутри списка ─────────────────────────────────────────────
+  'New section': 'Новый раздел',
+  'Name of the section': 'Название раздела',
+  'Delete the section': 'Удалить раздел',
+  '“{title}” will be removed. The items in it stay on the list.':
+    '«{title}» будет удалён. Пункты из него останутся в списке.',
+  'Add to “{section}”': 'Добавить в «{section}»',
+  'Section not found': 'Раздел не найден',
+  'Section not found in this list': 'В этом списке такого раздела нет',
+
   // ── Управление списком и ссылка на список ─────────────────────────────
   'Rename': 'Переименовать',
   'Rename the list': 'Переименовать список',

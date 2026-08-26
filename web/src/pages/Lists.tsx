@@ -4,7 +4,13 @@ import { api } from '../lib/api';
 import { Empty, Page } from '../components/Page';
 import { onEnter } from '../lib/keys';
 import { inlineDanger, useDialogs } from '../components/Dialog';
-import { listTitle, type ListItem, type ListWithItems, type SharedList } from '../lib/lists';
+import {
+  listTitle,
+  type ListItem,
+  type ListSection,
+  type ListWithItems,
+  type SharedList,
+} from '../lib/lists';
 
 /*
   Shared lists (#11) — the shopping list and its friends.
@@ -15,6 +21,88 @@ import { listTitle, type ListItem, type ListWithItems, type SharedList } from '.
   show the truth" rather than a spinner on every checkbox. The input keeps
   focus after adding, because the real gesture is three items in a row.
 */
+/** One row, so an open item and a checked one cannot drift apart. */
+function ListRow({ item, onToggle }: { item: ListItem; onToggle: () => void }) {
+  return (
+    <li className="border-b border-line last:border-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-surface-2"
+      >
+        <span
+          className={`flex size-5 shrink-0 items-center justify-center rounded border ${
+            item.checked_at ? 'border-accent bg-accent text-white' : 'border-line'
+          }`}
+        >
+          {item.checked_at && (
+            <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="m5 13 4 4 10-10" />
+            </svg>
+          )}
+        </span>
+        <span className={item.checked_at ? 'text-muted line-through' : 'text-ink'}>{item.title}</span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * One section: its heading, its items, and its own input.
+ *
+ * The input is per section rather than a "which section?" picker on the
+ * main one, because a picker would put a choice in front of every single
+ * add — the thing #11 was explicitly about not doing. Tapping the field
+ * under a heading is the choice, and only when you want it.
+ */
+function SectionBlock({
+  section,
+  items,
+  onToggle,
+  onAdd,
+  onDelete,
+}: {
+  section: ListSection;
+  items: ListItem[];
+  onToggle: (item: ListItem) => void;
+  onAdd: (value: string) => void;
+  onDelete: () => void;
+}) {
+  const [draft, setDraft] = useState('');
+
+  function submit() {
+    const value = draft.trim();
+    if (!value) return;
+    setDraft('');
+    onAdd(value);
+  }
+
+  return (
+    <section className="mt-5">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <h2 className="eyebrow">{section.title}</h2>
+        <button type="button" onClick={onDelete} className={`${inlineDanger} text-xs`}>
+          {t('Delete')}
+        </button>
+      </div>
+      {items.length > 0 && (
+        <ul className="overflow-hidden rounded-card border border-line bg-surface">
+          {items.map((item) => (
+            <ListRow key={item.id} item={item} onToggle={() => onToggle(item)} />
+          ))}
+        </ul>
+      )}
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={onEnter(submit)}
+        placeholder={t('Add to “{section}”', { section: section.title })}
+        className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+      />
+    </section>
+  );
+}
+
 export function Lists() {
   const [lists, setLists] = useState<SharedList[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -64,21 +152,31 @@ export function Lists() {
     }
   }, [list]);
 
-  async function addItem() {
-    const title = draft.trim();
+  async function addItem(sectionId: string | null = null, value?: string) {
+    const title = (value ?? draft).trim();
     if (!title || !activeId) return;
-    setDraft('');
+    if (value === undefined) setDraft('');
     setError(null);
     // The row shows immediately; the request follows
     setPending((p) => [...p, title]);
     try {
-      await api.post(`/lists/${activeId}/items`, { title });
-      await Promise.all([loadList(activeId), loadLists()]);
+      const created = await api.post<ListItem>(`/lists/${activeId}/items`, {
+        title,
+        section_id: sectionId,
+      });
+      /*
+        Both updates in one tick, so React renders once: the real row in,
+        the placeholder out. Reloading the whole list here instead meant a
+        frame where the item existed twice — placeholder and row — which is
+        the other half of what looked like items jumping about.
+      */
+      setList((l) => (l ? { ...l, items: [...l.items, created] } : l));
+      setPending((p) => p.filter((x) => x !== title));
+      await loadLists();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('Something went wrong'));
-      void loadList(activeId);
-    } finally {
       setPending((p) => p.filter((x) => x !== title));
+      void loadList(activeId);
     }
   }
 
@@ -158,6 +256,34 @@ export function Lists() {
     await loadLists();
   }
 
+  async function newSection() {
+    if (!list) return;
+    const title = await dialogs.prompt({
+      title: t('New section'),
+      label: t('Name of the section'),
+      confirmLabel: t('Create'),
+    });
+    if (!title?.trim()) return;
+    await api.post(`/lists/${list.id}/sections`, { title: title.trim() });
+    await loadList(list.id);
+  }
+
+  async function removeSection(section: ListSection) {
+    const ok = await dialogs.confirm({
+      title: t('Delete the section'),
+      // Worth stating: this is not what "delete" usually implies, and the
+      // reassurance is the reason it is safe to click
+      message: t('“{title}” will be removed. The items in it stay on the list.', {
+        title: section.title,
+      }),
+      confirmLabel: t('Delete'),
+      danger: true,
+    });
+    if (!ok || !list) return;
+    await api.delete(`/list-sections/${section.id}`);
+    await loadList(list.id);
+  }
+
   async function share() {
     if (!list) return;
     const res = await api.post<{ path: string }>(`/lists/${list.id}/share`, {});
@@ -175,6 +301,15 @@ export function Lists() {
   // switch between, so the heading is the only place its name can show.
   const open = list?.items.filter((i) => !i.checked_at) ?? [];
   const checked = list?.items.filter((i) => i.checked_at) ?? [];
+  /*
+    Sectionless items come first, then each section. That order is on
+    purpose: typing into the main input must stay the fastest path, so what
+    it produces has to appear where the eye already is — not below three
+    headings. The checked pile stays one pile at the bottom regardless of
+    section: on the way home "what did we get" is one question, not four.
+  */
+  const loose = open.filter((i) => !i.section_id);
+  const sections = list?.sections ?? [];
 
   return (
     <Page
@@ -282,56 +417,69 @@ export function Lists() {
         />
         {error && <p className="mt-2 text-sm text-urgent">{error}</p>}
 
-        {open.length === 0 && checked.length === 0 && pending.length === 0 ? (
+        {open.length === 0 && checked.length === 0 && pending.length === 0 && sections.length === 0 ? (
           <div className="mt-4">
             <Empty>{t('Nothing here yet. Add the first item above.')}</Empty>
           </div>
         ) : (
-          <ul className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
-            {pending.map((title, i) => (
-              <li key={`pending-${i}`} className="border-b border-line last:border-0">
-                <span className="flex items-center gap-3 px-4 py-3 text-muted">
-                  <span className="size-5 shrink-0 rounded border border-line" />
-                  {title}
-                </span>
-              </li>
+          <>
+            {(loose.length > 0 || pending.length > 0) && (
+              <ul className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+                {loose.map((item) => (
+                  <ListRow key={item.id} item={item} onToggle={() => void toggle(item)} />
+                ))}
+                {/* Where the server is about to put it: rendered above the
+                    rows, it appeared at the top and then jumped to the end */}
+                {pending.map((title, i) => (
+                  <li key={`pending-${i}`} className="border-b border-line last:border-0">
+                    <span className="flex items-center gap-3 px-4 py-3 text-muted">
+                      <span className="size-5 shrink-0 rounded border border-line" />
+                      {title}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {sections.map((section) => (
+              <SectionBlock
+                key={section.id}
+                section={section}
+                items={open.filter((i) => i.section_id === section.id)}
+                onToggle={(item) => void toggle(item)}
+                onAdd={(value) => void addItem(section.id, value)}
+                onDelete={() => void removeSection(section)}
+              />
             ))}
-            {[...open, ...checked].map((item) => (
-              <li key={item.id} className="border-b border-line last:border-0">
-                <button
-                  type="button"
-                  onClick={() => void toggle(item)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-surface-2"
-                >
-                  <span
-                    className={`flex size-5 shrink-0 items-center justify-center rounded border ${
-                      item.checked_at ? 'border-accent bg-accent text-white' : 'border-line'
-                    }`}
-                  >
-                    {item.checked_at && (
-                      <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="3">
-                        <path d="m5 13 4 4 10-10" />
-                      </svg>
-                    )}
-                  </span>
-                  <span className={item.checked_at ? 'text-muted line-through' : 'text-ink'}>
-                    {item.title}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+
+            {checked.length > 0 && (
+              <ul className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+                {checked.map((item) => (
+                  <ListRow key={item.id} item={item} onToggle={() => void toggle(item)} />
+                ))}
+              </ul>
+            )}
+          </>
         )}
 
-        {checked.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-4">
           <button
             type="button"
-            onClick={() => void clearChecked()}
-            className="mt-3 text-sm text-muted underline hover:text-ink"
+            onClick={() => void newSection()}
+            className="text-sm text-muted underline hover:text-ink"
           >
-            {t('Clear checked ({n})', { n: String(checked.length) })}
+            {t('New section')}
           </button>
-        )}
+          {checked.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void clearChecked()}
+              className="text-sm text-muted underline hover:text-ink"
+            >
+              {t('Clear checked ({n})', { n: String(checked.length) })}
+            </button>
+          )}
+        </div>
       </div>
     </Page>
   );

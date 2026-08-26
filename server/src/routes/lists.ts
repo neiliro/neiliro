@@ -69,7 +69,10 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
                    checked_at DESC`,
       )
       .all(listId);
-    return { ...list, items };
+    const sections = db
+      .prepare('SELECT id, title, position FROM list_sections WHERE list_id = ? ORDER BY position, title')
+      .all(listId);
+    return { ...list, items, sections };
   });
 
   app.patch('/api/lists/:id', (req, reply) => {
@@ -95,20 +98,38 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
   /** One tap: add an item. Position goes to the end — a list reads in the order it was written. */
   app.post('/api/lists/:id/items', (req, reply) => {
     const { id: listId } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const parsed = titleInput.safeParse(req.body);
+    const parsed = titleInput
+      .extend({ section_id: z.string().uuid().nullable().optional() })
+      .safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
     }
     const exists = db.prepare('SELECT 1 FROM lists WHERE id = ?').get(listId);
     if (!exists) return reply.code(404).send({ error: 'List not found' });
 
+    // A section from another list would quietly move the item out of view
+    if (parsed.data.section_id) {
+      const section = db
+        .prepare('SELECT 1 FROM list_sections WHERE id = ? AND list_id = ?')
+        .get(parsed.data.section_id, listId);
+      if (!section) return reply.code(400).send({ error: 'Section not found in this list' });
+    }
+
     // Duplicates are allowed on purpose: "milk" twice means two bottles,
     // and a dedupe check would be a surprise mid-shop.
     const itemId = id();
     db.prepare(
-      `INSERT INTO list_items (id, list_id, title, position, created_by, created_at)
-       VALUES (?, ?, ?, (SELECT coalesce(max(position), 0) + 1 FROM list_items WHERE list_id = ?), ?, ?)`,
-    ).run(itemId, listId, parsed.data.title, listId, req.user!.id, now());
+      `INSERT INTO list_items (id, list_id, title, section_id, position, created_by, created_at)
+       VALUES (?, ?, ?, ?, (SELECT coalesce(max(position), 0) + 1 FROM list_items WHERE list_id = ?), ?, ?)`,
+    ).run(
+      itemId,
+      listId,
+      parsed.data.title,
+      parsed.data.section_id ?? null,
+      listId,
+      req.user!.id,
+      now(),
+    );
     return reply.code(201).send(db.prepare('SELECT * FROM list_items WHERE id = ?').get(itemId));
   });
 
@@ -144,6 +165,76 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
       .prepare('DELETE FROM list_items WHERE list_id = ? AND checked_at IS NOT NULL')
       .run(listId);
     return { cleared: result.changes };
+  });
+
+  // ── Sections ──────────────────────────────────────────────────────────
+
+  app.post('/api/lists/:id/sections', (req, reply) => {
+    const { id: listId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const parsed = titleInput.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
+    }
+    const exists = db.prepare('SELECT 1 FROM lists WHERE id = ?').get(listId);
+    if (!exists) return reply.code(404).send({ error: 'List not found' });
+
+    const sectionId = id();
+    db.prepare(
+      `INSERT INTO list_sections (id, list_id, title, position, created_at)
+       VALUES (?, ?, ?, (SELECT coalesce(max(position), 0) + 1 FROM list_sections WHERE list_id = ?), ?)`,
+    ).run(sectionId, listId, parsed.data.title, listId, now());
+    return reply
+      .code(201)
+      .send(db.prepare('SELECT id, title, position FROM list_sections WHERE id = ?').get(sectionId));
+  });
+
+  app.patch('/api/list-sections/:id', (req, reply) => {
+    const { id: sectionId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const parsed = titleInput.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
+    }
+    const result = db
+      .prepare('UPDATE list_sections SET title = ? WHERE id = ?')
+      .run(parsed.data.title, sectionId);
+    if (result.changes === 0) return reply.code(404).send({ error: 'Section not found' });
+    return db.prepare('SELECT id, title, position FROM list_sections WHERE id = ?').get(sectionId);
+  });
+
+  /*
+    Deleting a section keeps its items — ON DELETE SET NULL sends them back
+    to the top of the list. The items are the point; the grouping is a
+    convenience, and losing "milk" because a heading was tidied away would
+    be the wrong trade (same reasoning as money's subcategories).
+  */
+  app.delete('/api/list-sections/:id', (req, reply) => {
+    const { id: sectionId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const result = db.prepare('DELETE FROM list_sections WHERE id = ?').run(sectionId);
+    if (result.changes === 0) return reply.code(404).send({ error: 'Section not found' });
+    return { ok: true };
+  });
+
+  /** Move an item into a section, or out of one with null. */
+  app.patch('/api/list-items/:id/section', (req, reply) => {
+    const { id: itemId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const parsed = z.object({ section_id: z.string().uuid().nullable() }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Check the fields' });
+
+    const item = db.prepare('SELECT list_id FROM list_items WHERE id = ?').get(itemId) as
+      | { list_id: string }
+      | undefined;
+    if (!item) return reply.code(404).send({ error: 'Item not found' });
+
+    if (parsed.data.section_id) {
+      // Both belong to the same list, or the item would vanish from view
+      const section = db
+        .prepare('SELECT 1 FROM list_sections WHERE id = ? AND list_id = ?')
+        .get(parsed.data.section_id, item.list_id);
+      if (!section) return reply.code(400).send({ error: 'Section not found in this list' });
+    }
+
+    db.prepare('UPDATE list_items SET section_id = ? WHERE id = ?').run(parsed.data.section_id, itemId);
+    return db.prepare('SELECT * FROM list_items WHERE id = ?').get(itemId);
   });
 
   // ── The public link ───────────────────────────────────────────────────
@@ -194,13 +285,18 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
 
     const items = db
       .prepare(
-        `SELECT id, title, checked_at FROM list_items
+        `SELECT id, title, checked_at, section_id FROM list_items
           WHERE list_id = ?
           ORDER BY checked_at IS NOT NULL, CASE WHEN checked_at IS NULL THEN position END,
                    checked_at DESC`,
       )
       .all(list.id);
-    return { id: list.id, title: list.title, items };
+    // Sections travel with the guest view: reading by aisle is the reason
+    // they exist, and the person in the shop is usually the guest
+    const sections = db
+      .prepare('SELECT id, title FROM list_sections WHERE list_id = ? ORDER BY position, title')
+      .all(list.id);
+    return { id: list.id, title: list.title, items, sections };
   });
 
   /*

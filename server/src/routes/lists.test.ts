@@ -223,6 +223,97 @@ describe('shared lists', () => {
     expect(guest.json<{ title: string }>().title).toBe('New name');
   });
 
+  it('groups items into sections, and leaves sectionless items alone', async () => {
+    const made = await h.as(alice.cookie, 'POST', '/api/lists', { title: 'Supermarket' });
+    const listId = made.json<{ id: string }>().id;
+    const veg = (await h.as(alice.cookie, 'POST', `/api/lists/${listId}/sections`, { title: 'Vegetables' }))
+      .json<{ id: string }>().id;
+
+    // An item with a section, and one without — the second is normal, not
+    // "unfiled": #11 says typing must never require choosing a place
+    await h.as(alice.cookie, 'POST', `/api/lists/${listId}/items`, { title: 'tomatoes', section_id: veg });
+    await h.as(alice.cookie, 'POST', `/api/lists/${listId}/items`, { title: 'batteries' });
+
+    const list = (await h.as(alice.cookie, 'GET', `/api/lists/${listId}`)).json<{
+      sections: { id: string; title: string }[];
+      items: { title: string; section_id: string | null }[];
+    }>();
+    expect(list.sections.map((s) => s.title)).toEqual(['Vegetables']);
+    expect(list.items.find((i) => i.title === 'tomatoes')!.section_id).toBe(veg);
+    expect(list.items.find((i) => i.title === 'batteries')!.section_id).toBeNull();
+  });
+
+  it('moves an item into a section and back out', async () => {
+    const made = await h.as(alice.cookie, 'POST', '/api/lists', { title: 'Move test' });
+    const listId = made.json<{ id: string }>().id;
+    const dairy = (await h.as(alice.cookie, 'POST', `/api/lists/${listId}/sections`, { title: 'Dairy' }))
+      .json<{ id: string }>().id;
+    const itemId = await add(alice.cookie, 'cheese', listId);
+
+    const moved = await h.as(alice.cookie, 'PATCH', `/api/list-items/${itemId}/section`, {
+      section_id: dairy,
+    });
+    expect(moved.json<{ section_id: string | null }>().section_id).toBe(dairy);
+
+    const out = await h.as(alice.cookie, 'PATCH', `/api/list-items/${itemId}/section`, { section_id: null });
+    expect(out.json<{ section_id: string | null }>().section_id).toBeNull();
+  });
+
+  it('refuses a section belonging to another list', async () => {
+    const a = (await h.as(alice.cookie, 'POST', '/api/lists', { title: 'List A' })).json<{ id: string }>().id;
+    const b = (await h.as(alice.cookie, 'POST', '/api/lists', { title: 'List B' })).json<{ id: string }>().id;
+    const sectionInB = (await h.as(alice.cookie, 'POST', `/api/lists/${b}/sections`, { title: 'Elsewhere' }))
+      .json<{ id: string }>().id;
+
+    // Either way round this would make the item disappear from the list
+    // it belongs to, which reads as data loss
+    const onCreate = await h.as(alice.cookie, 'POST', `/api/lists/${a}/items`, {
+      title: 'stray',
+      section_id: sectionInB,
+    });
+    expect(onCreate.statusCode).toBe(400);
+
+    const itemInA = await add(alice.cookie, 'settled', a);
+    const onMove = await h.as(alice.cookie, 'PATCH', `/api/list-items/${itemInA}/section`, {
+      section_id: sectionInB,
+    });
+    expect(onMove.statusCode).toBe(400);
+  });
+
+  it('keeps the items when a section is deleted', async () => {
+    const listId = (await h.as(alice.cookie, 'POST', '/api/lists', { title: 'Tidy up' })).json<{ id: string }>().id;
+    const section = (await h.as(alice.cookie, 'POST', `/api/lists/${listId}/sections`, { title: 'Bakery' }))
+      .json<{ id: string }>().id;
+    await h.as(alice.cookie, 'POST', `/api/lists/${listId}/items`, { title: 'sourdough', section_id: section });
+
+    expect((await h.as(alice.cookie, 'DELETE', `/api/list-sections/${section}`)).statusCode).toBe(200);
+
+    const list = (await h.as(alice.cookie, 'GET', `/api/lists/${listId}`)).json<{
+      sections: unknown[];
+      items: { title: string; section_id: string | null }[];
+    }>();
+    // The heading is gone; the bread is not
+    expect(list.sections).toEqual([]);
+    expect(list.items.map((i) => i.title)).toEqual(['sourdough']);
+    expect(list.items[0]!.section_id).toBeNull();
+  });
+
+  it('shows sections to a guest, who is usually the one in the shop', async () => {
+    const listId = (await h.as(alice.cookie, 'POST', '/api/lists', { title: 'Guest sections' })).json<{ id: string }>().id;
+    const aisle = (await h.as(alice.cookie, 'POST', `/api/lists/${listId}/sections`, { title: 'Frozen' }))
+      .json<{ id: string }>().id;
+    await h.as(alice.cookie, 'POST', `/api/lists/${listId}/items`, { title: 'peas', section_id: aisle });
+    const token = (await h.as(alice.cookie, 'POST', `/api/lists/${listId}/share`, {}))
+      .json<{ path: string }>().path.replace('/list/', '');
+
+    const guest = (await h.app.inject({ url: `/api/list/${token}` })).json<{
+      sections: { title: string }[];
+      items: { title: string; section_id: string | null }[];
+    }>();
+    expect(guest.sections.map((s) => s.title)).toEqual(['Frozen']);
+    expect(guest.items[0]!.section_id).toBe(aisle);
+  });
+
   it('refuses an empty name and an unknown list', async () => {
     expect((await h.as(alice.cookie, 'POST', '/api/lists', { title: '   ' })).statusCode).toBe(400);
     const ghostList = '00000000-0000-4000-8000-0000000009f9';
