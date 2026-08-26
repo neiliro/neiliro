@@ -25,6 +25,8 @@ export interface FeedEvent {
   all_day: number;
   /** RRULE subset as stored: "FREQ=WEEKLY;INTERVAL=2" */
   recurrence_rule: string | null;
+  /** When the row last changed, for LAST-MODIFIED. UTC, as the column stores it. */
+  updated_at?: string | null;
 }
 
 /** Text escaping per RFC 5545 §3.3.11. */
@@ -42,6 +44,18 @@ function stamp(value: string): string {
   // Seconds are appended with a function replacement on purpose: "T$100"
   // in a string replacement reads as group 10, not group 1 plus "00".
   return compact.replace(/T(\d{4})$/, (_, hhmm: string) => `T${hhmm}00`);
+}
+
+/*
+  updated_at reaches us in one of two shapes: SQLite's own
+  "2026-08-26 08:00:00" from the column default, or an ISO string when the
+  row was written by application code. Both are UTC; neither is worth a
+  migration to unify, so this normalises instead of assuming.
+*/
+function utcStamp(value: string): string | null {
+  const parsed = new Date(/[TZ]/.test(value) ? value : `${value.replace(' ', 'T')}Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return `${parsed.toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`;
 }
 
 /** All-day DTEND is exclusive, so the last day needs one added. */
@@ -115,6 +129,16 @@ export function buildCalendarFeed(
       re-sending hundreds of copies of the same weekly event.
     */
     if (event.recurrence_rule) lines.push(`RRULE:${event.recurrence_rule}`);
+    /*
+      How a client knows the event changed rather than just re-arrived.
+      SEQUENCE is deliberately not sent: it has to increase on every edit,
+      and the hub keeps no revision counter — a fabricated one that ever
+      went backwards would make clients ignore real updates. For a
+      PUBLISH-method subscription LAST-MODIFIED is what clients actually
+      compare.
+    */
+    const modified = event.updated_at ? utcStamp(event.updated_at) : null;
+    if (modified) lines.push(`LAST-MODIFIED:${modified}`);
     lines.push('END:VEVENT');
   }
 

@@ -546,7 +546,7 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
     const events = db
       .prepare(
         `SELECT e.id, e.title, e.description, e.location, e.starts_at, e.ends_at,
-                e.all_day, e.recurrence_rule
+                e.all_day, e.recurrence_rule, e.updated_at
            FROM events e
            JOIN calendars c ON c.id = e.calendar_id
           WHERE ${CALENDAR_VISIBLE}

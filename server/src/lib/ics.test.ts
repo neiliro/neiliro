@@ -101,6 +101,33 @@ describe('buildCalendarFeed', () => {
     expect(out.every((l) => Buffer.byteLength(l, 'utf8') <= 75)).toBe(true);
   });
 
+  it('reports LAST-MODIFIED so a client can tell an edit from a re-arrival', () => {
+    // Both storage shapes appear in practice: SQLite's column default and
+    // an ISO string from application code. Both are UTC.
+    const sqliteShape = lines(buildCalendarFeed('Family', [event({ updated_at: '2026-08-25 14:30:00' })], AT));
+    expect(sqliteShape).toContain('LAST-MODIFIED:20260825T143000Z');
+
+    const isoShape = lines(buildCalendarFeed('Family', [event({ updated_at: '2026-08-25T14:30:00.000Z' })], AT));
+    expect(isoShape).toContain('LAST-MODIFIED:20260825T143000Z');
+  });
+
+  it('omits LAST-MODIFIED rather than inventing one', () => {
+    const out = lines(buildCalendarFeed('Family', [event({ updated_at: null })], AT));
+    expect(out.some((l) => l.startsWith('LAST-MODIFIED'))).toBe(false);
+    // And a value that cannot be parsed is dropped, not passed through:
+    // a malformed date makes some clients discard the whole event
+    const bad = lines(buildCalendarFeed('Family', [event({ updated_at: 'not a date' })], AT));
+    expect(bad.some((l) => l.startsWith('LAST-MODIFIED'))).toBe(false);
+    expect(bad).toContain('SUMMARY:School run');
+  });
+
+  it('never sends SEQUENCE, which it has no counter to back', () => {
+    const out = lines(buildCalendarFeed('Family', [event({ updated_at: '2026-08-25 14:30:00' })], AT));
+    // A fabricated sequence that ever went backwards would make clients
+    // ignore genuine updates
+    expect(out.some((l) => l.startsWith('SEQUENCE'))).toBe(false);
+  });
+
   it('gives every event a stable uid, so a re-poll updates instead of duplicating', () => {
     const first = buildCalendarFeed('Family', [event()], AT);
     const later = buildCalendarFeed('Family', [event()], new Date('2026-09-01T08:00:00Z'));
