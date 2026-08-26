@@ -655,6 +655,22 @@ export const ru: Record<string, string> = {
   'Your own colors for projects, accounts, categories and calendars — on top of the stock ones. Grows from here and from the "+" button right in the color picker.': 'Свои цвета для проектов, счетов, категорий и календарей — поверх стандартных. Пополняется и отсюда, и кнопкой «+» прямо в выборе цвета.',
   'Zero — the goal is only a countdown': 'Ноль — только отсчёт, без накоплений',
 
+  // ── Управление списком и ссылка на список ─────────────────────────────
+  'Rename': 'Переименовать',
+  'Rename the list': 'Переименовать список',
+  'Name of the list': 'Название списка',
+  'Delete the list': 'Удалить список',
+  '“{title}” and everything on it will be deleted.': '«{title}» и всё, что в нём, будет удалено.',
+  '“{title}” and everything on it will be deleted, and its public link will stop working.':
+    '«{title}» и всё, что в нём, будет удалено, а публичная ссылка перестанет работать.',
+  'Share this list by link': 'Поделиться списком по ссылке',
+  'Anyone with this link can see this list and tick items off — nothing else.':
+    'Любой, у кого есть ссылка, увидит этот список и сможет отмечать пункты — и ничего больше.',
+  'Shared list': 'Общий список',
+  'Tick things off as you go — the family sees it too.':
+    'Отмечайте по ходу — семья это тоже видит.',
+  'This list is empty.': 'Список пуст.',
+
   // ── Ссылка на одно событие (гостевая страница) ────────────────────────
   'Share this event by link': 'Поделиться событием по ссылке',
   'Anyone with this link sees this event only — not the calendar it is in.':

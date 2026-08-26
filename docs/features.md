@@ -160,7 +160,9 @@ The whole design is about speed on a phone, because that is where a shopping lis
 
 Items are deliberately plain text with no quantity, assignee or due date: a list item is a word, and every field added to it is a field to fill in while standing in a shop. Duplicates are allowed — two "milk" means two bottles, and a dedupe check would be a surprise at the worst moment.
 
-One list ships with a fresh hub, so the feature works before anyone configures anything; more can be added, and the seeded name is translated by id, so renaming it keeps your name. Adding is also one of the four one-tap actions on the phone home screen.
+One list ships with a fresh hub, so the feature works before anyone configures anything; more can be added, renamed and deleted. Adding is also one of the four one-tap actions on the phone home screen.
+
+**A list can be handed to someone without an account** — typically whoever is going to the shop. Unlike the other share links in the hub, this one accepts a write: the guest can tick items off, because a shopping list nobody can tick off is a screenshot. That is the only thing they can do — no adding, no renaming, no deleting, and nothing beyond that single list is visible. Ticks land on the same list the family sees, since it is the same list and not a copy. The link is revocable, deleting the list revokes it too, and asking twice returns the same link so it can be re-sent.
 
 ## Mail
 

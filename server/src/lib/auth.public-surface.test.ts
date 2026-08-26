@@ -68,6 +68,7 @@ describe('public API surface', () => {
     expect(prefixes.filter((p) => p !== '/api').sort()).toEqual([
       '/api/calendar/feed/',
       '/api/event/',
+      '/api/list/',
       '/api/wishlist/',
     ]);
   });
