@@ -5,6 +5,8 @@ import { currentTenant, db, now } from '../db/index.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { env } from '../env.js';
 import { googleSignInAvailable } from './google.js';
+import { serviceMailAvailable } from '../lib/mail.js';
+import { emailVerificationAvailable } from './email-verify.js';
 import {
   SESSION_COOKIE,
   clearSessionCookie,
@@ -97,11 +99,21 @@ const changeInput = z.object({
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   /** Whether any users exist at all — so the frontend knows what to show. */
+  /*
+    Password reset by email exists on the hosted service only. A
+    self-hosted family owns the machine, so its recovery door is ssh plus
+    scripts/admin-reset.mjs — stronger than an email flow and available
+    without a mail provider. See routes/password-reset.ts.
+  */
+  const passwordResetAvailable = () => env.hostedMode && serviceMailAvailable();
+
   app.get('/api/auth/state', () => {
     // In demo the answer is fixed: the main database is empty (life
     // happens in sandboxes), but the initial setup screen must not be
     // shown, and there is one way in — the "Try the demo" button.
-    if (env.demoMode) return { initialized: true, google: false, demo: true, hosted: false };
+    if (env.demoMode) {
+      return { initialized: true, google: false, demo: true, hosted: false, password_reset: false };
+    }
     // A hosted subdomain that doesn't exist claims to be set up: showing
     // the first-run screen only on real families would let anyone map
     // which names exist by probing. See lib/tenants.ts, the ghost.
@@ -111,7 +123,17 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       // The Google flag is a property of the process, not of a family, and
       // it must read the same here: a button that appears only on real
       // subdomains would enumerate families by itself.
-      return { initialized: true, google: googleSignInAvailable(), demo: false, hosted: true };
+      return {
+        initialized: true,
+        google: googleSignInAvailable(),
+        demo: false,
+        hosted: true,
+        // Same reasoning as the Google flag: availability belongs to the
+        // process, so the link must read identically on a ghost. A
+        // "forgot password?" that appeared only on real subdomains would
+        // enumerate families all by itself.
+        password_reset: passwordResetAvailable(),
+      };
     }
     const n = (db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n;
     return {
@@ -121,6 +143,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       demo: false,
       // The frontend gates hosted-only settings (the family Danger zone) on it
       hosted: env.hostedMode,
+      // Whether the login screen should offer "forgot password?"
+      password_reset: passwordResetAvailable(),
     };
   });
 
@@ -407,7 +431,18 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   }
 
   // The token was already checked in authenticate; the user sits on the request.
-  app.get('/api/auth/me', (req) => req.user);
+  /*
+    The frontend's prompt to confirm an address hangs off one computed
+    flag rather than off `email_verified` alone: an unconfirmed address is
+    normal and unremarkable on a self-hosted hub, where the login is an
+    identifier and nothing asks anyone to prove a mailbox. Only a hub that
+    can actually send — and that gates recovery on it — has anything to
+    ask for.
+  */
+  app.get('/api/auth/me', (req) => ({
+    ...req.user!,
+    email_verification_pending: emailVerificationAvailable() && !req.user!.email_verified,
+  }));
 
   /**
    * The Devices list: every live session of the current user, the one

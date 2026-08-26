@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { currentTenant, db, id, now } from '../db/index.js';
 import { createSession, setSessionCookie } from '../lib/auth.js';
 import { hashPassword } from '../lib/password.js';
+import { sendVerificationEmail } from './email-verify.js';
 import { log } from '../lib/log.js';
 
 /*
@@ -108,6 +109,10 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     }
 
     log.info(`initial setup: admin ${parsed.data.email} created from ${req.ip}`);
+    // Hosted only, and a no-op elsewhere: an address that nobody confirmed
+    // cannot be used to recover the account, so the ask goes out at the one
+    // moment the person is definitely paying attention.
+    void sendVerificationEmail(userId);
     setSessionCookie(reply, createSession(userId, req.headers['user-agent'], req.ip));
     return reply.code(201).send({ ok: true });
   });
@@ -232,6 +237,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     }
 
     log.info(`invite join: ${parsed.data.email} (${invite.role}) from ${req.ip}`);
+    void sendVerificationEmail(userId);
     setSessionCookie(reply, createSession(userId, req.headers['user-agent'], req.ip));
     return reply.code(201).send({ ok: true });
   });

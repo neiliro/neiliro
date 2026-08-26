@@ -184,6 +184,43 @@ function outgoing(): Outgoing | null {
   return serviceSender(address);
 }
 
+/*
+  Service mail — the hub writing to a person, not a family writing to the
+  world. Password resets are the only case today.
+
+  Sent from a fixed no-reply address on the service domain rather than from
+  the family's own address, for two reasons: a reset notice landing in the
+  shared family inbox would show every member that someone is recovering an
+  account, and a reply to it has nowhere useful to go. `no-reply` is a
+  reserved slug, so no family can ever hold that address.
+*/
+
+/** Whether the process can send service mail at all. */
+export function serviceMailAvailable(): boolean {
+  return Boolean(env.mailDomain && env.mailgunApiKey);
+}
+
+export async function sendServiceEmail(to: string, subject: string, text: string): Promise<void> {
+  if (!serviceMailAvailable()) throw new Error('Service mail is not configured');
+
+  const form = new FormData();
+  form.set('from', `${mimeDisplayName('Neiliro')} <no-reply@${env.mailDomain}>`);
+  form.set('to', to);
+  form.set('subject', subject);
+  form.set('text', text);
+
+  const auth = Buffer.from(`api:${env.mailgunApiKey}`).toString('base64');
+  const res = await fetch(`${env.mailgunApiBase}/v3/${env.mailDomain}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${auth}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Mailgun refused the message (${res.status}) ${detail.slice(0, 200)}`.trim());
+  }
+}
+
 /** Sanity cap: a message source larger than this is not household mail. */
 const MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
 

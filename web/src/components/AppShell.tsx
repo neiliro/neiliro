@@ -372,6 +372,7 @@ export function AppShell() {
 
       {/* Content */}
       <main className="flex-1 pb-20 md:pb-0">
+        <ConfirmAddressNotice />
         <Outlet key={refreshKey} />
       </main>
 
@@ -464,6 +465,59 @@ export function AppShell() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+/*
+  One quiet line asking the person to confirm their login address.
+
+  It is not a modal and not a blocker: everything works without it. What
+  does not work is password recovery — an address nobody proved is not
+  something a reset may be mailed to — so the ask has to be visible
+  somewhere, and the top of the page is the honest place. Hosted only: the
+  server sends the flag only where the confirmation means anything.
+*/
+function ConfirmAddressNotice() {
+  const { user } = useAuth();
+  const [state, setState] = useState<'idle' | 'sent'>('idle');
+  const [dismissed, setDismissed] = useState(false);
+
+  if (!user?.email_verification_pending || dismissed) return null;
+
+  return (
+    <div className="mx-4 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-line bg-surface-2 px-4 py-2.5 text-sm md:mx-6">
+      {state === 'sent' ? (
+        <span className="text-muted">
+          {t('Sent. Open the link in that mailbox to confirm the address.')}
+        </span>
+      ) : (
+        <>
+          <span className="text-ink">
+            {t('Confirm {email} so you can reset your password by email if you forget it.', {
+              email: user.email,
+            })}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              void api.post('/profile/email-verify', {}).then(() => setState('sent'));
+            }}
+            className="font-medium text-accent underline"
+          >
+            {t('Send the link')}
+          </button>
+        </>
+      )}
+      <button
+        type="button"
+        onClick={() => setDismissed(true)}
+        className="ml-auto text-muted hover:text-ink"
+        aria-label={t('Hide')}
+      >
+        ×
+      </button>
     </div>
   );
 }

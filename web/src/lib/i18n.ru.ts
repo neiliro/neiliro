@@ -655,6 +655,36 @@ export const ru: Record<string, string> = {
   'Your own colors for projects, accounts, categories and calendars — on top of the stock ones. Grows from here and from the "+" button right in the color picker.': 'Свои цвета для проектов, счетов, категорий и календарей — поверх стандартных. Пополняется и отсюда, и кнопкой «+» прямо в выборе цвета.',
   'Zero — the goal is only a countdown': 'Ноль — только отсчёт, без накоплений',
 
+  // ── Сброс пароля по email (hosted) ────────────────────────────────────
+  'Forgot your password?': 'Забыли пароль?',
+  'Password reset': 'Сброс пароля',
+  'Enter the address you sign in with and we will send a link to set a new password.':
+    'Введите адрес, с которым вы входите — пришлём ссылку для смены пароля.',
+  'Send the link': 'Отправить ссылку',
+  'Sending': 'Отправляю',
+  'If that address has an account here, a link is on its way. It works once, for one hour.':
+    'Если у этого адреса есть аккаунт, ссылка уже в пути. Она работает один раз и один час.',
+  'Back to sign in': 'Вернуться к входу',
+  'This link is not valid. Request a new one from the sign-in screen.':
+    'Ссылка недействительна. Запросите новую на экране входа.',
+  'Choose a new password. Signing in elsewhere will be required again.':
+    'Выберите новый пароль. На других устройствах придётся войти заново.',
+  'Save and sign in': 'Сохранить и войти',
+  'This link has expired — request a new one': 'Ссылка истекла — запросите новую',
+  'This link is not valid': 'Ссылка недействительна',
+  'That login is already taken': 'Этот логин уже занят',
+  'Address confirmation': 'Подтверждение адреса',
+  'Confirming…': 'Подтверждаю…',
+  'Address confirmed. If you ever forget your password, you can now reset it by email.':
+    'Адрес подтверждён. Если забудете пароль, теперь его можно сбросить по почте.',
+  'Sign in and use the reminder at the top of the page to send a fresh link.':
+    'Войдите и отправьте новую ссылку — напоминание наверху страницы.',
+  'Open Neiliro': 'Открыть Neiliro',
+  'Confirm {email} so you can reset your password by email if you forget it.':
+    'Подтвердите {email} — тогда забытый пароль можно будет сбросить по почте.',
+  'Sent. Open the link in that mailbox to confirm the address.':
+    'Отправлено. Откройте ссылку в этом ящике, чтобы подтвердить адрес.',
+
   // ── Family mail (v1) ──────────────────────────────────────────────────
   '(empty message)': '(пустое письмо)',
   '(no subject)': '(без темы)',

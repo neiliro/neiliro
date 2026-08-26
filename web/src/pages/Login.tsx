@@ -97,15 +97,17 @@ export function Login() {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState('');
   const [googleAvailable, setGoogleAvailable] = useState(false);
+  const [resetAvailable, setResetAvailable] = useState(false);
   const [demo, setDemo] = useState(false);
   // null — still finding out; false — empty DB, show the first-run setup
   const [initialized, setInitialized] = useState<boolean | null>(null);
 
   useEffect(() => {
     void api
-      .get<{ initialized: boolean; google: boolean; demo?: boolean }>('/auth/state')
+      .get<{ initialized: boolean; google: boolean; demo?: boolean; password_reset?: boolean }>('/auth/state')
       .then((s) => {
         setGoogleAvailable(s.google);
+        setResetAvailable(Boolean(s.password_reset));
         setInitialized(s.initialized);
         setDemo(Boolean(s.demo));
       })
@@ -154,6 +156,14 @@ export function Login() {
   // Arrived via an invite link — registration form instead of login
   if (window.location.pathname === '/join') {
     return <Join />;
+  }
+  // Reset flows: asking for a link, and arriving with one. Both are
+  // hosted-only server-side; a self-hosted hub never advertises them.
+  if (window.location.pathname === '/forgot') {
+    return <ForgotPassword />;
+  }
+  if (window.location.pathname === '/reset') {
+    return <ResetPassword />;
   }
 
   async function enterDemo() {
@@ -271,6 +281,12 @@ export function Login() {
           {busy ? t('Checking') : t('Sign in')}
         </button>
 
+        {resetAvailable && (
+          <a href="/forgot" className="block text-center text-sm text-muted underline hover:text-ink">
+            {t('Forgot your password?')}
+          </a>
+        )}
+
         {googleAvailable && (
           <>
             <div className="flex items-center gap-3 pt-1">
@@ -365,6 +381,130 @@ function Setup() {
         {error && <p className="text-sm text-urgent">{error}</p>}
         <button type="submit" disabled={busy} className={buttonClass}>
           {busy ? t('Creating') : t('Create and sign in')}
+        </button>
+      </form>
+    </Frame>
+  );
+}
+
+/**
+ * Ask for a reset link: /forgot
+ *
+ * The answer is deliberately the same whether or not the address has an
+ * account — the server refuses to be an account oracle, and the wording
+ * here must not undo that by saying "sent" only on a hit.
+ */
+function ForgotPassword() {
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e?: FormEvent) {
+    e?.preventDefault();
+    setBusy(true);
+    try {
+      await api.post('/auth/password-reset', { email: email.trim() });
+    } catch {
+      // Even a failure says nothing: the neutral screen follows either way
+    }
+    setSent(true);
+    setBusy(false);
+  }
+
+  if (sent) {
+    return (
+      <Frame title={t('Password reset')}>
+        <p className="text-sm text-muted">
+          {t('If that address has an account here, a link is on its way. It works once, for one hour.')}
+        </p>
+        <a href="/" className="mt-5 block text-center text-sm text-muted underline hover:text-ink">
+          {t('Back to sign in')}
+        </a>
+      </Frame>
+    );
+  }
+
+  return (
+    <Frame title={t('Password reset')}>
+      <p className="mb-5 text-sm text-muted">
+        {t('Enter the address you sign in with and we will send a link to set a new password.')}
+      </p>
+      <form onSubmit={(e) => void submit(e)} className="space-y-4">
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium text-ink">{t('Login (email)')}</span>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inputClass}
+            autoComplete="username"
+            autoFocus
+          />
+        </label>
+        <button type="submit" disabled={busy || !email.trim()} className={buttonClass}>
+          {busy ? t('Sending') : t('Send the link')}
+        </button>
+        <a href="/" className="block text-center text-sm text-muted underline hover:text-ink">
+          {t('Back to sign in')}
+        </a>
+      </form>
+    </Frame>
+  );
+}
+
+/** Set a new password from an emailed link: /reset?token=... */
+function ResetPassword() {
+  const token = new URLSearchParams(window.location.search).get('token') ?? '';
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e?: FormEvent) {
+    e?.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post('/auth/password-reset/confirm', { token, password });
+      // Every session was closed by the reset, this one included — the
+      // sign-in screen is the honest place to land
+      window.location.href = '/';
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('Something went wrong'));
+      setBusy(false);
+    }
+  }
+
+  if (!token) {
+    return (
+      <Frame title={t('Password reset')}>
+        <p className="text-sm text-muted">
+          {t('This link is not valid. Request a new one from the sign-in screen.')}
+        </p>
+        <a href="/" className="mt-5 block text-center text-sm text-muted underline hover:text-ink">
+          {t('Back to sign in')}
+        </a>
+      </Frame>
+    );
+  }
+
+  return (
+    <Frame title={t('Password reset')}>
+      <p className="mb-5 text-sm text-muted">{t('Choose a new password. Signing in elsewhere will be required again.')}</p>
+      <form onSubmit={(e) => void submit(e)} className="space-y-4">
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium text-ink">{t('New password')}</span>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={inputClass}
+            autoComplete="new-password"
+            autoFocus
+          />
+          <span className="mt-1.5 block text-xs text-muted">{t('At least 10 characters')}</span>
+        </label>
+        {error && <p className="text-sm text-urgent">{error}</p>}
+        <button type="submit" disabled={busy || password.length < 10} className={buttonClass}>
+          {busy ? t('Saving') : t('Save and sign in')}
         </button>
       </form>
     </Frame>

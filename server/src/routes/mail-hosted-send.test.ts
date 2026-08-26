@@ -103,6 +103,11 @@ beforeAll(async () => {
     }).toString(),
   });
   expect(delivered.statusCode).toBe(200);
+
+  // Signing up mails an address confirmation; this file is about replies,
+  // so drop it rather than counting around it.
+  await new Promise((r) => setTimeout(r, 60));
+  sent.length = 0;
 });
 
 describe('hosted reply', () => {
