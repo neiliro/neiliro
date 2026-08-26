@@ -10,7 +10,7 @@ import { useLatest } from '../lib/latest';
 import { Empty, Page } from '../components/Page';
 import { Editor, type UploadedFile } from '../components/Editor';
 import { EntityDialog } from '../components/EntityDialog';
-import { useDialogs } from '../components/Dialog';
+import { inlineDanger, useDialogs } from '../components/Dialog';
 
 interface Folder {
   id: string;
@@ -607,7 +607,7 @@ export function Notes() {
               <button
                 type="button"
                 onClick={() => void removeNote()}
-                className="ml-auto text-sm text-muted underline underline-offset-2 hover:text-urgent"
+                className={`${inlineDanger} ml-auto text-sm`}
               >
                 {t('Delete')}
               </button>
@@ -715,7 +715,7 @@ export function Notes() {
                     <button
                       type="button"
                       onClick={() => void removeAttachment(a)}
-                      className="text-xs text-muted underline underline-offset-2 hover:text-urgent"
+                      className={`${inlineDanger} text-xs`}
                     >
                       {t('Delete')}
                     </button>

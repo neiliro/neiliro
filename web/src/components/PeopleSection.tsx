@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Empty } from './Page';
 import { EntityDialog } from './EntityDialog';
-import { useDialogs } from './Dialog';
+import { inlineDanger, useDialogs } from './Dialog';
 import { reportFailure } from '../lib/failures';
 
 interface ManagedUser {
@@ -139,7 +139,7 @@ function InvitesBlock() {
                     .then(load)
                     .catch((err: Error) => reportFailure(err.message || t('Could not save')))
                 }
-                className="text-xs text-muted underline decoration-line hover:text-urgent"
+                className={`${inlineDanger} text-xs`}
               >
                 {t('Revoke')}
               </button>

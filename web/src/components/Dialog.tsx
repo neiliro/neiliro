@@ -106,6 +106,25 @@ export const dialogGhost = 'px-2 py-2 text-sm text-muted hover:text-ink';
 export const dialogDanger =
   'rounded-lg border border-urgent px-4 py-2 text-sm font-medium text-urgent hover:bg-urgent/10';
 
+/*
+  A destructive action that sits inline, among other controls, rather than
+  in a dialog's footer (#79).
+
+  Which of the two to reach for is a question of position, not of severity:
+  `dialogDanger` is the bordered button that ends a dialog, where it is the
+  primary thing on the row. `inlineDanger` is for a delete that lives next
+  to unrelated controls — beside the toggles in the note header, in a row
+  of devices, under a list — where a bordered button would shout over its
+  neighbours. Both mean "this cannot be undone"; they differ in how much
+  room they are allowed to take.
+
+  Deliberately carries no font size. Call sites are `text-sm` in some rows
+  and `text-xs` in compact ones, and baking a size in here would silently
+  resize half of them — layout stays at the call site, the same way
+  `ml-auto` and `shrink-0` already do.
+*/
+export const inlineDanger = 'text-muted underline underline-offset-2 hover:text-urgent';
+
 // ── Context ───────────────────────────────────────────────────────────────
 
 interface PromptOptions {

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { useDialogs } from '../components/Dialog';
+import { inlineDanger, useDialogs } from '../components/Dialog';
 import { Empty, Page } from '../components/Page';
 import { reportFailure } from '../lib/failures';
 import { onEnter } from '../lib/keys';
@@ -546,7 +546,7 @@ function MemberDetail({ userId, onChanged }: { userId: string; onChanged: () => 
                   onClick={() =>
                     void run(() => api.delete(`/profiles/${userId}/wishlist-share`))
                   }
-                  className="text-xs text-muted underline underline-offset-2 hover:text-urgent"
+                  className={`${inlineDanger} text-xs`}
                 >
                   {t('Revoke')}
                 </button>

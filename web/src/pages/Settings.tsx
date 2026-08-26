@@ -4,7 +4,7 @@ import { formatStamp, setWeekStart, weekStart } from '../lib/format';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { useDialogs } from '../components/Dialog';
+import { inlineDanger, useDialogs } from '../components/Dialog';
 import { plural } from '../lib/format';
 import { Page } from '../components/Page';
 import { onEnter } from '../lib/keys';
@@ -418,7 +418,7 @@ function SignInSection() {
                       await loadSessions();
                     })
                   }
-                  className="shrink-0 text-xs text-muted underline underline-offset-2 hover:text-urgent"
+                  className={`${inlineDanger} shrink-0 text-xs`}
                 >
                   {t('Revoke')}
                 </button>

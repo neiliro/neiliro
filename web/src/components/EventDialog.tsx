@@ -6,7 +6,7 @@ import { RECURRENCE_OPTIONS } from '../lib/tasks';
 import { onEnter } from '../lib/keys';
 import { clearBlankOnBlur } from '../lib/forms';
 import { timeOf } from '../lib/format';
-import { dialogGhost, Modal, useDialogs } from './Dialog';
+import { dialogGhost, inlineDanger, Modal, useDialogs } from './Dialog';
 
 const field =
   'w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent';
@@ -183,7 +183,7 @@ export function EventDialog({
             <button
               type="button"
               onClick={() => void removeAll()}
-              className="text-sm text-muted underline underline-offset-2 hover:text-urgent"
+              className={`${inlineDanger} text-sm`}
             >
               {occurrence.is_recurring ? t('Delete series') : t('Delete')}
             </button>
@@ -232,7 +232,7 @@ export function EventDialog({
                     <button
                       type="button"
                       onClick={() => void unshare()}
-                      className="text-sm text-muted underline underline-offset-2 hover:text-urgent"
+                      className={`${inlineDanger} text-sm`}
                     >
                       {t('Revoke the link')}
                     </button>

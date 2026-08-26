@@ -11,7 +11,7 @@ import {
 } from '../lib/tasks';
 import { dialogKeys, onEnter } from '../lib/keys';
 import { clearBlankOnBlur } from '../lib/forms';
-import { useDialogs, useScrollLock } from './Dialog';
+import { inlineDanger, useDialogs, useScrollLock } from './Dialog';
 
 const field =
   'w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent';
@@ -256,7 +256,7 @@ export function TaskDetail({ task, members, onSaved, onClose }: Props) {
           <button
             type="button"
             onClick={() => void remove()}
-            className="text-sm text-muted underline underline-offset-2 hover:text-urgent"
+            className={`${inlineDanger} text-sm`}
           >
             {t('Delete')}
           </button>
