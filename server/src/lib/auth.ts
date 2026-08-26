@@ -168,6 +168,12 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply): Pr
     one event and deliberately not the calendar around it.
   */
   if (path.startsWith('/api/event/')) return;
+  /*
+    A shared list. The only public surface that accepts a write — ticking
+    an item — because a shopping list nobody can tick off is a screenshot.
+    The token scopes both the read and that write to one list.
+  */
+  if (path.startsWith('/api/list/')) return;
 
   const token = req.cookies[SESSION_COOKIE];
   const user = token ? userForToken(token) : null;

@@ -25,6 +25,8 @@ export interface SharedList {
   position: number;
   open_items: number;
   checked_items: number;
+  /** Present when a public link exists; the family may see its own link */
+  share_token?: string | null;
 }
 
 export interface ListWithItems extends SharedList {

@@ -14,6 +14,7 @@ import { Lists } from './pages/Lists';
 import { Family } from './pages/Family';
 import { PublicWishlist } from './pages/PublicWishlist';
 import { PublicEvent } from './pages/PublicEvent';
+import { PublicList } from './pages/PublicList';
 import { VerifyEmail } from './pages/VerifyEmail';
 
 function Gate() {
@@ -55,6 +56,7 @@ export function App() {
                 hub's only page for people without an account (#68) */}
             <Route path="/wish/:token" element={<PublicWishlist />} />
             <Route path="/event/:token" element={<PublicEvent />} />
+            <Route path="/list/:token" element={<PublicList />} />
             {/* Same reason: the confirmation link is opened from a mail
                 client, often in a browser with no session (#156) */}
             <Route path="/verify-email" element={<VerifyEmail />} />

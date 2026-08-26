@@ -1,6 +1,8 @@
+import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db, id, now } from '../db/index.js';
+import { env } from '../env.js';
 
 /*
   Shared lists (#11) — the shopping list and its friends.
@@ -142,5 +144,88 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
       .prepare('DELETE FROM list_items WHERE list_id = ? AND checked_at IS NOT NULL')
       .run(listId);
     return { cleared: result.changes };
+  });
+
+  // ── The public link ───────────────────────────────────────────────────
+
+  const shareRate = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
+
+  app.post('/api/lists/:id/share', (req, reply) => {
+    const { id: listId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    // A public sandbox must not mint public URLs into the real world
+    if (env.demoMode) return reply.code(403).send({ error: 'Disabled in the demo' });
+
+    const list = db.prepare('SELECT id, share_token FROM lists WHERE id = ?').get(listId) as
+      | { id: string; share_token: string | null }
+      | undefined;
+    if (!list) return reply.code(404).send({ error: 'List not found' });
+
+    // Asking twice hands back the same link, so it can be re-sent
+    if (list.share_token) return { path: `/list/${list.share_token}` };
+
+    const token = randomBytes(24).toString('base64url');
+    db.prepare('UPDATE lists SET share_token = ? WHERE id = ?').run(token, listId);
+    return reply.code(201).send({ path: `/list/${token}` });
+  });
+
+  app.delete('/api/lists/:id/share', (req, reply) => {
+    const { id: listId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const result = db.prepare('UPDATE lists SET share_token = NULL WHERE id = ?').run(listId);
+    if (result.changes === 0) return reply.code(404).send({ error: 'List not found' });
+    return { ok: true };
+  });
+
+  const TOKEN = z.object({ token: z.string().min(10).max(200) });
+
+  const listByToken = (token: string) =>
+    db.prepare('SELECT id, title FROM lists WHERE share_token = ?').get(token) as
+      | { id: string; title: string }
+      | undefined;
+
+  /*
+    The guest view: this list and nothing else. No other lists, no family
+    names, nothing about who added what — a list handed to a neighbour
+    must not come with the household attached.
+  */
+  app.get('/api/list/:token', shareRate, (req, reply) => {
+    const { token } = TOKEN.parse(req.params);
+    const list = listByToken(token);
+    if (!list) return reply.code(404).send({ error: 'This link is no longer valid' });
+
+    const items = db
+      .prepare(
+        `SELECT id, title, checked_at FROM list_items
+          WHERE list_id = ?
+          ORDER BY checked_at IS NOT NULL, CASE WHEN checked_at IS NULL THEN position END,
+                   checked_at DESC`,
+      )
+      .all(list.id);
+    return { id: list.id, title: list.title, items };
+  });
+
+  /*
+    The one thing a guest may change. Sending someone a shopping list is
+    pointless if they cannot tick things off, so this is deliberately a
+    write — and deliberately the only one: no adding, no renaming, no
+    deleting, and the item must belong to the shared list.
+  */
+  app.post('/api/list/:token/items/:itemId/toggle', shareRate, (req, reply) => {
+    const { token } = TOKEN.parse(req.params);
+    const { itemId } = z.object({ itemId: z.string().uuid() }).parse(req.params);
+    const list = listByToken(token);
+    if (!list) return reply.code(404).send({ error: 'This link is no longer valid' });
+
+    const item = db
+      .prepare('SELECT id, checked_at FROM list_items WHERE id = ? AND list_id = ?')
+      .get(itemId, list.id) as { id: string; checked_at: string | null } | undefined;
+    // An item from another list is simply not found here — the token scopes
+    // the write as tightly as it scopes the read
+    if (!item) return reply.code(404).send({ error: 'Item not found' });
+
+    db.prepare('UPDATE list_items SET checked_at = ? WHERE id = ?').run(
+      item.checked_at ? null : now(),
+      itemId,
+    );
+    return db.prepare('SELECT id, title, checked_at FROM list_items WHERE id = ?').get(itemId);
   });
 }

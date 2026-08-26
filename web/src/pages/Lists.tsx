@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { Empty, Page } from '../components/Page';
 import { onEnter } from '../lib/keys';
+import { useDialogs } from '../components/Dialog';
 import { listTitle, type ListItem, type ListWithItems, type SharedList } from '../lib/lists';
 
 /*
@@ -29,6 +30,9 @@ export function Lists() {
   */
   const [pending, setPending] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogs = useDialogs();
+  const [sharePath, setSharePath] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const loadLists = useCallback(async () => {
     const all = await api.get<SharedList[]>('/lists');
@@ -37,7 +41,12 @@ export function Lists() {
   }, []);
 
   const loadList = useCallback(async (id: string) => {
-    setList(await api.get<ListWithItems>(`/lists/${id}`));
+    const loaded = await api.get<ListWithItems>(`/lists/${id}`);
+    setList(loaded);
+    // An existing link has to show up on open, not only right after it is
+    // created — otherwise the family cannot find the link they already sent
+    setSharePath(loaded.share_token ? `/list/${loaded.share_token}` : null);
+    setCopied(false);
   }, []);
 
   useEffect(() => {
@@ -103,11 +112,63 @@ export function Lists() {
   }
 
   async function newList() {
-    const title = window.prompt(t('Name of the new list')) ?? '';
-    if (!title.trim()) return;
+    const title = await dialogs.prompt({
+      title: t('New list'),
+      label: t('Name of the new list'),
+      confirmLabel: t('Create'),
+    });
+    if (!title?.trim()) return;
     const made = await api.post<SharedList>('/lists', { title: title.trim() });
     await loadLists();
     setActiveId(made.id);
+  }
+
+  async function rename() {
+    if (!list) return;
+    const title = await dialogs.prompt({
+      title: t('Rename the list'),
+      label: t('Name of the list'),
+      value: listTitle(list.id, list.title),
+      confirmLabel: t('Save'),
+    });
+    if (!title?.trim()) return;
+    await api.patch(`/lists/${list.id}`, { title: title.trim() });
+    await Promise.all([loadLists(), loadList(list.id)]);
+  }
+
+  async function removeList() {
+    if (!list) return;
+    const ok = await dialogs.confirm({
+      title: t('Delete the list'),
+      // Two consequences worth stating before the click, not after
+      message: sharePath
+        ? t('“{title}” and everything on it will be deleted, and its public link will stop working.', {
+            title: listTitle(list.id, list.title),
+          })
+        : t('“{title}” and everything on it will be deleted.', {
+            title: listTitle(list.id, list.title),
+          }),
+      confirmLabel: t('Delete'),
+      danger: true,
+    });
+    if (!ok) return;
+    await api.delete(`/lists/${list.id}`);
+    setActiveId(null);
+    setList(null);
+    await loadLists();
+  }
+
+  async function share() {
+    if (!list) return;
+    const res = await api.post<{ path: string }>(`/lists/${list.id}/share`, {});
+    setSharePath(res.path);
+    setCopied(false);
+  }
+
+  async function unshare() {
+    if (!list) return;
+    await api.delete(`/lists/${list.id}/share`);
+    setSharePath(null);
   }
 
   // The open list names the page: with a single list there are no chips to
@@ -146,6 +207,67 @@ export function Lists() {
               {l.open_items > 0 && <span className="ml-1.5 font-mono text-xs">{l.open_items}</span>}
             </button>
           ))}
+        </div>
+      )}
+
+      {list && (
+        <div className="mb-4 max-w-xl">
+          <div className="flex flex-wrap gap-4">
+            {!sharePath && (
+              <button
+                type="button"
+                onClick={() => void share()}
+                className="text-sm text-accent underline underline-offset-2"
+              >
+                {t('Share this list by link')}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void rename()}
+              className="text-sm text-muted underline underline-offset-2 hover:text-ink"
+            >
+              {t('Rename')}
+            </button>
+            <button
+              type="button"
+              onClick={() => void removeList()}
+              className="text-sm text-muted underline underline-offset-2 hover:text-urgent"
+            >
+              {t('Delete the list')}
+            </button>
+          </div>
+
+          {sharePath && (
+            <div className="mt-3 rounded-lg border border-line bg-surface-2 p-3">
+              <p className="break-all font-mono text-xs text-ink">
+                {window.location.origin}
+                {sharePath}
+              </p>
+              <p className="mt-1.5 text-xs text-muted">
+                {t('Anyone with this link can see this list and tick items off — nothing else.')}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(`${window.location.origin}${sharePath}`);
+                    setCopied(true);
+                  }}
+                  className="text-sm text-accent underline underline-offset-2"
+                >
+                  {copied ? t('Copied') : t('Copy')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void unshare()}
+                  className="text-sm text-muted underline underline-offset-2 hover:text-urgent"
+                >
+                  {t('Revoke the link')}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

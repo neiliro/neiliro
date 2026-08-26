@@ -119,6 +119,110 @@ describe('shared lists', () => {
     expect((await h.as(alice.cookie, 'POST', `/api/list-items/${itemId}/toggle`)).statusCode).toBe(404);
   });
 
+  it('shares a list by link, and a guest sees only that list', async () => {
+    const made = await h.as(alice.cookie, 'POST', '/api/lists', { title: 'Hardware run' });
+    const listId = made.json<{ id: string }>().id;
+    await add(alice.cookie, 'screws', listId);
+
+    const shared = await h.as(alice.cookie, 'POST', `/api/lists/${listId}/share`, {});
+    expect(shared.statusCode).toBe(201);
+    const token = shared.json<{ path: string }>().path.replace('/list/', '');
+
+    // No session at all: this is a neighbour with a link
+    const guest = await h.app.inject({ url: `/api/list/${token}` });
+    expect(guest.statusCode).toBe(200);
+    const body = guest.json<{ title: string; items: { title: string }[] }>();
+    expect(body.title).toBe('Hardware run');
+    expect(body.items.map((i) => i.title)).toEqual(['screws']);
+    // The household does not travel with the link
+    expect(guest.body).not.toContain('Alice');
+    expect(guest.body).not.toContain('Shopping');
+  });
+
+  it('lets a guest tick an item off, and nothing else', async () => {
+    const made = await h.as(alice.cookie, 'POST', '/api/lists', { title: 'Market' });
+    const listId = made.json<{ id: string }>().id;
+    const itemId = await add(alice.cookie, 'apples', listId);
+    const token = (await h.as(alice.cookie, 'POST', `/api/lists/${listId}/share`, {}))
+      .json<{ path: string }>()
+      .path.replace('/list/', '');
+
+    const ticked = await h.app.inject({
+      method: 'POST',
+      url: `/api/list/${token}/items/${itemId}/toggle`,
+    });
+    expect(ticked.statusCode).toBe(200);
+    expect(ticked.json<{ checked_at: string | null }>().checked_at).toBeTruthy();
+    // Visible to the family too — one list, one state
+    expect((await items(alice.cookie, listId))[0]!.checked_at).toBeTruthy();
+
+    // But a guest cannot add, rename or delete
+    for (const [method, url, payload] of [
+      ['POST', `/api/lists/${listId}/items`, { title: 'sneaked in' }],
+      ['PATCH', `/api/lists/${listId}`, { title: 'renamed' }],
+      ['DELETE', `/api/lists/${listId}`, undefined],
+    ] as const) {
+      const res = await h.app.inject({ method, url, payload });
+      expect(res.statusCode, `${method} ${url}`).toBe(401);
+    }
+  });
+
+  it('scopes a guest write to the shared list only', async () => {
+    const mine = await h.as(alice.cookie, 'POST', '/api/lists', { title: 'Shared one' });
+    const sharedId = mine.json<{ id: string }>().id;
+    const token = (await h.as(alice.cookie, 'POST', `/api/lists/${sharedId}/share`, {}))
+      .json<{ path: string }>()
+      .path.replace('/list/', '');
+
+    // An item from a different list, reached through this token
+    const other = await h.as(alice.cookie, 'POST', '/api/lists', { title: 'Private one' });
+    const otherItem = await add(alice.cookie, 'not yours', other.json<{ id: string }>().id);
+
+    const res = await h.app.inject({
+      method: 'POST',
+      url: `/api/list/${token}/items/${otherItem}/toggle`,
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('kills the link when the list is deleted, and on revoke', async () => {
+    const made = await h.as(alice.cookie, 'POST', '/api/lists', { title: 'Temporary' });
+    const listId = made.json<{ id: string }>().id;
+    const token = (await h.as(alice.cookie, 'POST', `/api/lists/${listId}/share`, {}))
+      .json<{ path: string }>()
+      .path.replace('/list/', '');
+    expect((await h.app.inject({ url: `/api/list/${token}` })).statusCode).toBe(200);
+
+    // Revoke alone
+    await h.as(alice.cookie, 'DELETE', `/api/lists/${listId}/share`);
+    expect((await h.app.inject({ url: `/api/list/${token}` })).statusCode).toBe(404);
+
+    // And a deleted list takes any link with it
+    const again = (await h.as(alice.cookie, 'POST', `/api/lists/${listId}/share`, {}))
+      .json<{ path: string }>()
+      .path.replace('/list/', '');
+    await h.as(alice.cookie, 'DELETE', `/api/lists/${listId}`);
+    expect((await h.app.inject({ url: `/api/list/${again}` })).statusCode).toBe(404);
+  });
+
+  it('renames a list, keeping its items and its link', async () => {
+    const made = await h.as(alice.cookie, 'POST', '/api/lists', { title: 'Old name' });
+    const listId = made.json<{ id: string }>().id;
+    await add(alice.cookie, 'thing', listId);
+    const token = (await h.as(alice.cookie, 'POST', `/api/lists/${listId}/share`, {}))
+      .json<{ path: string }>()
+      .path.replace('/list/', '');
+
+    const renamed = await h.as(alice.cookie, 'PATCH', `/api/lists/${listId}`, { title: 'New name' });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json<{ title: string }>().title).toBe('New name');
+
+    // A rename is not a new list: items stay, and the link keeps working
+    expect((await items(alice.cookie, listId)).map((i) => i.title)).toEqual(['thing']);
+    const guest = await h.app.inject({ url: `/api/list/${token}` });
+    expect(guest.json<{ title: string }>().title).toBe('New name');
+  });
+
   it('refuses an empty name and an unknown list', async () => {
     expect((await h.as(alice.cookie, 'POST', '/api/lists', { title: '   ' })).statusCode).toBe(400);
     const ghostList = '00000000-0000-4000-8000-0000000009f9';
