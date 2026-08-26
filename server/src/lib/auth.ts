@@ -153,6 +153,15 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply): Pr
   // a login-strength rate limit. Everything under this prefix is designed
   // for strangers; nothing else is.
   if (path.startsWith('/api/wishlist/')) return;
+  /*
+    The calendar subscription feed. Same shape as the wishlist: an
+    unguessable token in the path, addressing one person's view, read-only
+    by construction. A calendar app has no session to present — and the
+    sibling endpoints that create and revoke the token (/api/calendar/feed
+    with no trailing segment) stay behind auth, which is why this prefix
+    ends in a slash.
+  */
+  if (path.startsWith('/api/calendar/feed/')) return;
 
   const token = req.cookies[SESSION_COOKIE];
   const user = token ? userForToken(token) : null;

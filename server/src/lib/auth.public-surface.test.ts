@@ -54,12 +54,21 @@ describe('public API surface', () => {
     expect(paths).toEqual([...PUBLIC_SNAPSHOT].sort());
   });
 
-  it('exempts exactly one path prefix, the public wishlist', () => {
-    // A prefix exemption is broader than a path and deserves louder review:
-    // '/api/wishlist/' opens a whole subtree by design (token-addressed).
+  it('exempts only the token-addressed subtrees', () => {
+    /*
+      A prefix exemption is broader than a path and deserves louder review.
+      Both entries here are the same shape: an unguessable token in the
+      path, read-only, addressing one person's data — the public wishlist
+      and the calendar subscription feed. Anything else appearing in this
+      list is a subtree opened to the internet, which is the point of
+      failing here.
+    */
     const fn = source.slice(source.indexOf('export async function authenticate'));
     const prefixes = [...fn.matchAll(/startsWith\('(\/api[^']*)'\)/g)].map((m) => m[1]!);
-    expect(prefixes.filter((p) => p !== '/api')).toEqual(['/api/wishlist/']);
+    expect(prefixes.filter((p) => p !== '/api').sort()).toEqual([
+      '/api/calendar/feed/',
+      '/api/wishlist/',
+    ]);
   });
 
   it('still refuses an anonymous request to a route outside the list', async () => {

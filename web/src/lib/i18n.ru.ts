@@ -655,6 +655,18 @@ export const ru: Record<string, string> = {
   'Your own colors for projects, accounts, categories and calendars — on top of the stock ones. Grows from here and from the "+" button right in the color picker.': 'Свои цвета для проектов, счетов, категорий и календарей — поверх стандартных. Пополняется и отсюда, и кнопкой «+» прямо в выборе цвета.',
   'Zero — the goal is only a countdown': 'Ноль — только отсчёт, без накоплений',
 
+  // ── Подписка на календарь (ICS-фид) ───────────────────────────────────
+  'Not found': 'Не найдено',
+  'Subscribe in your calendar': 'Подписаться в календаре',
+  'Add the family calendar to the calendar app on your phone or laptop. The link is read-only and shows only what you can see in the hub.':
+    'Добавьте семейный календарь в приложение календаря на телефоне или ноутбуке. Ссылка только для чтения и показывает лишь то, что вы видите в хабе.',
+  'Create the link': 'Создать ссылку',
+  'Revoke the link': 'Отозвать ссылку',
+  'Every device subscribed to this link stops receiving updates. Revoke it?':
+    'Все устройства, подписанные на эту ссылку, перестанут получать обновления. Отозвать?',
+  'Paste this address into Apple Calendar, Google Calendar or Outlook as a subscription.':
+    'Вставьте этот адрес в Apple Calendar, Google Календарь или Outlook как подписку.',
+
   // ── Общие списки (#11) ────────────────────────────────────────────────
   'Lists': 'Списки',
   'Shopping': 'Покупки',

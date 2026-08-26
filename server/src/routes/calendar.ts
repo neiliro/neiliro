@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { randomBytes } from 'node:crypto';
 import { db, id, now } from '../db/index.js';
+import { buildCalendarFeed, type FeedEvent } from '../lib/ics.js';
 import { expandOccurrences, isValidRecurrence } from '../lib/recurrence.js';
 import { daysBetween, shiftDays } from '../lib/dates.js';
 
@@ -482,5 +484,85 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
       'INSERT OR IGNORE INTO event_exceptions (event_id, excluded_date) VALUES (?, ?)',
     ).run(eventId, date);
     return { ok: true };
+  });
+
+  /*
+    Subscribe-by-URL feed (#29 in part). Apple, Google and Outlook all
+    subscribe to an ICS URL, so this puts the family calendar next to the
+    work one on a phone without the hub having to become a CalDAV server.
+
+    The token addresses one person's view: calendars can be private, so
+    the feed shows exactly what its owner may see and nothing else. It is
+    read-only by construction — there is no write path here at all.
+  */
+
+  app.get('/api/calendar/feed', (req) => {
+    const row = db
+      .prepare('SELECT calendar_feed_token AS token FROM users WHERE id = ?')
+      .get(req.user!.id) as { token: string | null };
+    // Returned in the clear, deliberately: the point of this link is to be
+    // re-shown when a second device needs it (same reasoning as the
+    // wishlist token, migration 021).
+    return { token: row.token };
+  });
+
+  app.post('/api/calendar/feed', (req) => {
+    const existing = db
+      .prepare('SELECT calendar_feed_token AS token FROM users WHERE id = ?')
+      .get(req.user!.id) as { token: string | null };
+    if (existing.token) return { token: existing.token };
+
+    const token = randomBytes(24).toString('base64url');
+    db.prepare('UPDATE users SET calendar_feed_token = ? WHERE id = ?').run(token, req.user!.id);
+    return { token };
+  });
+
+  app.delete('/api/calendar/feed', (req) => {
+    // Revoking is the whole safety story for a link that lives in someone
+    // else's calendar app: every subscribed device stops getting data.
+    db.prepare('UPDATE users SET calendar_feed_token = NULL WHERE id = ?').run(req.user!.id);
+    return { ok: true };
+  });
+
+  app.get('/api/calendar/feed/:token', (req, reply) => {
+    // Clients like a .ics suffix; the token is the part before it
+    const raw = (req.params as { token: string }).token;
+    const token = raw.replace(/\.ics$/, '');
+
+    const user = db
+      .prepare('SELECT id FROM users WHERE calendar_feed_token = ? AND disabled_at IS NULL')
+      .get(token) as { id: string } | undefined;
+    // 404 rather than 401: an unguessable URL that does not exist should
+    // look like any other missing page, and there is nothing to log in to
+    if (!user) return reply.code(404).send({ error: 'Not found' });
+
+    /*
+      One-off events from a year back plus everything ahead; repeating
+      events always, since their rule travels as RRULE and the client
+      expands it. A year of history is what makes the calendar look
+      populated when it is first added, without shipping the archive.
+    */
+    const cutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const events = db
+      .prepare(
+        `SELECT e.id, e.title, e.description, e.location, e.starts_at, e.ends_at,
+                e.all_day, e.recurrence_rule, e.updated_at
+           FROM events e
+           JOIN calendars c ON c.id = e.calendar_id
+          WHERE ${CALENDAR_VISIBLE}
+            AND (e.recurrence_rule IS NOT NULL OR e.ends_at >= ?)
+          ORDER BY e.starts_at`,
+      )
+      .all(user.id, cutoff) as FeedEvent[];
+
+    const home = db
+      .prepare("SELECT value FROM settings WHERE key = 'home.name'")
+      .get() as { value: string } | undefined;
+
+    return reply
+      .type('text/calendar; charset=utf-8')
+      // Clients re-poll on their own schedule; nothing here is worth caching
+      .header('cache-control', 'no-store')
+      .send(buildCalendarFeed(home?.value?.trim() || 'Neiliro', events, new Date()));
   });
 }
