@@ -138,6 +138,14 @@ Everything the household owns leaves in one file whenever it wants: Settings →
 
 On the hosted service the same section holds **Delete everything**: the administrator confirms with the password, a two-factor code when one is set, and by typing the family's own address, after which the database and the attachments are gone and the encrypted nightly backups expire on their own within a fortnight. A self-hosted install gets the export but no such button — there, deleting the only family means erasing the instance, and that belongs to whoever owns the machine.
 
+### In your own calendar app
+
+The family calendar can be subscribed to from Apple Calendar, Google Calendar or Outlook: **Settings → Subscribe in your calendar** issues a read-only link, and the calendar shows up next to the work one on a phone.
+
+Three properties are worth knowing. The link is **per person**, not per family — calendars can be private, so a feed shows exactly what its owner is allowed to see and nothing more. It is **read-only by construction**: there is no write path behind that URL, so the hub is not a CalDAV server and cannot be edited from outside. And it is **revocable in one click**, which is the safety story for an address that lives in someone else's app: revoke it and every subscribed device goes dark at once.
+
+Times travel as local wall-clock, unconverted — a 9am school run stays 9am in whatever zone the reading device is in, which is the same convention the hub uses everywhere. Repeating events travel as their rule, so a weekly event is one entry that the calendar app expands, not fifty copies.
+
 ## Lists
 
 The shopping list, and whatever else the household keeps as a list. Shared with everyone by default — a list nobody else can see would defeat the point, so this is the one user-owned thing in the hub with no per-person visibility.

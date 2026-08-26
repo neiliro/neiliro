@@ -13,6 +13,7 @@ import { COMMON_CURRENCIES, formatAmountInput, parseAmount } from '../lib/money'
 import { PeopleSection } from '../components/PeopleSection';
 import { MailSection } from '../components/MailSection';
 import { TotpSection } from '../components/TotpSection';
+import { CalendarFeedSection } from '../components/CalendarFeedSection';
 import { FamilyDataSection } from '../components/FamilyDataSection';
 
 /**
@@ -698,6 +699,10 @@ export function Settings() {
 
       <div className="mb-5 break-inside-avoid">
         <TotpSection />
+      </div>
+
+      <div className="mb-5 break-inside-avoid">
+        <CalendarFeedSection />
       </div>
 
       {usage && (

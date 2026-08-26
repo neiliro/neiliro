@@ -1,0 +1,16 @@
+-- A subscribe-by-URL token for the calendar (#29 in part).
+--
+-- Lets a phone add the family calendar next to the work one: Apple,
+-- Google and Outlook all subscribe to an ICS URL, so the family gets its
+-- events where it already looks without the hub becoming a CalDAV server.
+--
+-- Per user, not per family: calendars can be private (calendars.shared),
+-- so a feed has to show exactly what its owner is allowed to see. One
+-- token per person, revocable, and the feed is read-only by construction.
+--
+-- Stored in plaintext, like the wishlist token (021) and for the same
+-- reason: this link is long-lived and meant to be re-shown — pasted into
+-- a second device a month later. Hashing it would make it unrecoverable
+-- after the dialog closes, and revoke-and-recreate is not a substitute
+-- for "show me the link again".
+ALTER TABLE users ADD COLUMN calendar_feed_token TEXT;
