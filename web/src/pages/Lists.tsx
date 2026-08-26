@@ -15,6 +15,32 @@ import { listTitle, type ListItem, type ListWithItems, type SharedList } from '.
   show the truth" rather than a spinner on every checkbox. The input keeps
   focus after adding, because the real gesture is three items in a row.
 */
+/** One row, so an open item and a checked one cannot drift apart. */
+function ListRow({ item, onToggle }: { item: ListItem; onToggle: () => void }) {
+  return (
+    <li className="border-b border-line last:border-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-surface-2"
+      >
+        <span
+          className={`flex size-5 shrink-0 items-center justify-center rounded border ${
+            item.checked_at ? 'border-accent bg-accent text-white' : 'border-line'
+          }`}
+        >
+          {item.checked_at && (
+            <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="m5 13 4 4 10-10" />
+            </svg>
+          )}
+        </span>
+        <span className={item.checked_at ? 'text-muted line-through' : 'text-ink'}>{item.title}</span>
+      </button>
+    </li>
+  );
+}
+
 export function Lists() {
   const [lists, setLists] = useState<SharedList[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -72,13 +98,20 @@ export function Lists() {
     // The row shows immediately; the request follows
     setPending((p) => [...p, title]);
     try {
-      await api.post(`/lists/${activeId}/items`, { title });
-      await Promise.all([loadList(activeId), loadLists()]);
+      const created = await api.post<ListItem>(`/lists/${activeId}/items`, { title });
+      /*
+        Both updates in one tick, so React renders once: the real row in,
+        the placeholder out. Reloading the whole list here instead meant a
+        frame where the item existed twice — placeholder and row — which is
+        the other half of what looked like items jumping about.
+      */
+      setList((l) => (l ? { ...l, items: [...l.items, created] } : l));
+      setPending((p) => p.filter((x) => x !== title));
+      await loadLists();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('Something went wrong'));
-      void loadList(activeId);
-    } finally {
       setPending((p) => p.filter((x) => x !== title));
+      void loadList(activeId);
     }
   }
 
@@ -288,6 +321,12 @@ export function Lists() {
           </div>
         ) : (
           <ul className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+            {open.map((item) => (
+              <ListRow key={item.id} item={item} onToggle={() => void toggle(item)} />
+            ))}
+            {/* Between the open items and the checked pile — where the server
+                is about to put it. Rendered first, it appeared at the top and
+                then jumped to the end when the response arrived. */}
             {pending.map((title, i) => (
               <li key={`pending-${i}`} className="border-b border-line last:border-0">
                 <span className="flex items-center gap-3 px-4 py-3 text-muted">
@@ -296,29 +335,8 @@ export function Lists() {
                 </span>
               </li>
             ))}
-            {[...open, ...checked].map((item) => (
-              <li key={item.id} className="border-b border-line last:border-0">
-                <button
-                  type="button"
-                  onClick={() => void toggle(item)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-surface-2"
-                >
-                  <span
-                    className={`flex size-5 shrink-0 items-center justify-center rounded border ${
-                      item.checked_at ? 'border-accent bg-accent text-white' : 'border-line'
-                    }`}
-                  >
-                    {item.checked_at && (
-                      <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="3">
-                        <path d="m5 13 4 4 10-10" />
-                      </svg>
-                    )}
-                  </span>
-                  <span className={item.checked_at ? 'text-muted line-through' : 'text-ink'}>
-                    {item.title}
-                  </span>
-                </button>
-              </li>
+            {checked.map((item) => (
+              <ListRow key={item.id} item={item} onToggle={() => void toggle(item)} />
             ))}
           </ul>
         )}
