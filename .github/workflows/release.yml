@@ -43,3 +43,27 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      # Hand the released version to the control plane, which owns the
+      # hosted machine's credentials and does the actual deploy
+      # (neiliro/cloud, release-deploy.yml). Skipped when the token is
+      # absent — a fork, or before the token is configured — so a release
+      # still publishes its image either way.
+      - name: Tell the control plane to deploy it
+        env:
+          GH_TOKEN: ${{ secrets.CLOUD_DISPATCH_TOKEN }}
+          # The git tag carries a "v", the image tag does not — registry
+          # convention, see the comment at the top of this file
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          # Checked in the shell rather than a step-level `if`: the secrets
+          # context is not dependable in conditionals, and a release must
+          # never fail because a deploy token is absent.
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "no CLOUD_DISPATCH_TOKEN configured — image published, hosted deploy skipped"
+            exit 0
+          fi
+          gh api repos/neiliro/cloud/dispatches \
+            -f event_type=app-release \
+            -F client_payload[version]="$VERSION"
+
