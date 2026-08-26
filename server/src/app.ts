@@ -26,6 +26,7 @@ import { registerSetupRoutes } from './routes/setup.js';
 import { registerUserRoutes } from './routes/users.js';
 import { registerProfileRoutes, registerPublicWishlistRoutes } from './routes/profiles.js';
 import { registerProjectRoutes } from './routes/projects.js';
+import { registerListRoutes } from './routes/lists.js';
 import { registerTaskRoutes } from './routes/tasks.js';
 import { registerNoteRoutes } from './routes/notes.js';
 import { MAX_FILE_BYTES, registerAttachmentRoutes } from './routes/attachments.js';
@@ -284,6 +285,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerProfileRoutes(app);
   await registerPublicWishlistRoutes(app);
   await registerProjectRoutes(app);
+  await registerListRoutes(app);
   await registerTaskRoutes(app);
   await registerNoteRoutes(app);
   await registerAttachmentRoutes(app);
