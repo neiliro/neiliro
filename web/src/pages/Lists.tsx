@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { Empty, Page } from '../components/Page';
 import { onEnter } from '../lib/keys';
-import { useDialogs } from '../components/Dialog';
+import { inlineDanger, useDialogs } from '../components/Dialog';
 import { listTitle, type ListItem, type ListWithItems, type SharedList } from '../lib/lists';
 
 /*
@@ -232,7 +232,7 @@ export function Lists() {
             <button
               type="button"
               onClick={() => void removeList()}
-              className="text-sm text-muted underline underline-offset-2 hover:text-urgent"
+              className={`${inlineDanger} text-sm`}
             >
               {t('Delete the list')}
             </button>
@@ -261,7 +261,7 @@ export function Lists() {
                 <button
                   type="button"
                   onClick={() => void unshare()}
-                  className="text-sm text-muted underline underline-offset-2 hover:text-urgent"
+                  className={`${inlineDanger} text-sm`}
                 >
                   {t('Revoke the link')}
                 </button>
