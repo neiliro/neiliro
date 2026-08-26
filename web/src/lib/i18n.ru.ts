@@ -655,6 +655,15 @@ export const ru: Record<string, string> = {
   'Your own colors for projects, accounts, categories and calendars — on top of the stock ones. Grows from here and from the "+" button right in the color picker.': 'Свои цвета для проектов, счетов, категорий и календарей — поверх стандартных. Пополняется и отсюда, и кнопкой «+» прямо в выборе цвета.',
   'Zero — the goal is only a countdown': 'Ноль — только отсчёт, без накоплений',
 
+  // ── Ссылка на одно событие (гостевая страница) ────────────────────────
+  'Share this event by link': 'Поделиться событием по ссылке',
+  'Anyone with this link sees this event only — not the calendar it is in.':
+    'Любой, у кого есть ссылка, увидит только это событие — не календарь, в котором оно лежит.',
+  'You are invited': 'Вас приглашают',
+  'When': 'Когда',
+  'Details': 'Подробности',
+  'Add to my calendar': 'Добавить в мой календарь',
+
   // ── Подписка на календарь (ICS-фид) ───────────────────────────────────
   'Not found': 'Не найдено',
   'Subscribe in your calendar': 'Подписаться в календаре',

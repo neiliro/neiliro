@@ -67,6 +67,7 @@ describe('public API surface', () => {
     const prefixes = [...fn.matchAll(/startsWith\('(\/api[^']*)'\)/g)].map((m) => m[1]!);
     expect(prefixes.filter((p) => p !== '/api').sort()).toEqual([
       '/api/calendar/feed/',
+      '/api/event/',
       '/api/wishlist/',
     ]);
   });

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 import { db, id, now } from '../db/index.js';
+import { env } from '../env.js';
 import { buildCalendarFeed, type FeedEvent } from '../lib/ics.js';
 import { expandOccurrences, isValidRecurrence } from '../lib/recurrence.js';
 import { daysBetween, shiftDays } from '../lib/dates.js';
@@ -564,5 +565,84 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
       // Clients re-poll on their own schedule; nothing here is worth caching
       .header('cache-control', 'no-store')
       .send(buildCalendarFeed(home?.value?.trim() || 'Neiliro', events, new Date()));
+  });
+
+  // ── The public link for one event ─────────────────────────────────────
+
+  const shareRate = { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } };
+
+  /** The event, if this person is allowed to see it at all. */
+  function visibleEvent(eventId: string, userId: string) {
+    return db
+      .prepare(
+        `SELECT e.id, e.title, e.description, e.location, e.starts_at, e.ends_at,
+                e.all_day, e.recurrence_rule, e.updated_at, e.share_token
+           FROM events e
+           JOIN calendars c ON c.id = e.calendar_id
+          WHERE e.id = ? AND ${CALENDAR_VISIBLE}`,
+      )
+      .get(eventId, userId) as (FeedEvent & { share_token: string | null }) | undefined;
+  }
+
+  app.post('/api/events/:id/share', (req, reply) => {
+    const { id: eventId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    // A public sandbox must not mint public URLs into the real world
+    if (env.demoMode) return reply.code(403).send({ error: 'Disabled in the demo' });
+
+    const event = visibleEvent(eventId, req.user!.id);
+    // 404 and not 403: an event in someone else's private calendar must not
+    // confirm its own existence to a person who cannot see it
+    if (!event) return reply.code(404).send({ error: 'Event not found' });
+
+    // Asking twice hands back the same link, so it can be re-sent
+    if (event.share_token) return { path: `/event/${event.share_token}` };
+
+    const token = randomBytes(24).toString('base64url');
+    db.prepare('UPDATE events SET share_token = ? WHERE id = ?').run(token, eventId);
+    return reply.code(201).send({ path: `/event/${token}` });
+  });
+
+  app.delete('/api/events/:id/share', (req, reply) => {
+    const { id: eventId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const event = visibleEvent(eventId, req.user!.id);
+    if (!event) return reply.code(404).send({ error: 'Event not found' });
+    db.prepare('UPDATE events SET share_token = NULL WHERE id = ?').run(eventId);
+    return { ok: true };
+  });
+
+  /*
+    The public view is deliberately narrow: what, when, where, and whatever
+    the family wrote in the description — and nothing about the calendar it
+    lives in, who is attending, or what else is on that day. A shared
+    invitation must not become a window into a household. The calendar name
+    is the sharpest of those: it can itself be private ("Bob's therapy").
+  */
+  const sharedEvent = (token: string) =>
+    db
+      .prepare(
+        `SELECT id, title, description, location, starts_at, ends_at, all_day,
+                recurrence_rule, updated_at
+           FROM events WHERE share_token = ?`,
+      )
+      .get(token) as FeedEvent | undefined;
+
+  app.get('/api/event/:token', shareRate, (req, reply) => {
+    const { token } = z.object({ token: z.string().min(10).max(200) }).parse(req.params);
+    const event = sharedEvent(token);
+    if (!event) return reply.code(404).send({ error: 'This link is no longer valid' });
+    const { updated_at: _updated, ...publicFields } = event;
+    return publicFields;
+  });
+
+  /** The same event as a file, so a stranger can put it in their own calendar. */
+  app.get('/api/event/:token/ics', shareRate, (req, reply) => {
+    const { token } = z.object({ token: z.string().min(10).max(200) }).parse(req.params);
+    const event = sharedEvent(token);
+    if (!event) return reply.code(404).send({ error: 'This link is no longer valid' });
+
+    return reply
+      .type('text/calendar; charset=utf-8')
+      .header('content-disposition', 'attachment; filename="event.ics"')
+      .send(buildCalendarFeed(event.title, [event], new Date()));
   });
 }
