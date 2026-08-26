@@ -21,6 +21,14 @@ export interface ListItem {
   title: string;
   checked_at: string | null;
   position: number;
+  /** Null is normal, not "unfiled": typing an item never requires a place */
+  section_id?: string | null;
+}
+
+export interface ListSection {
+  id: string;
+  title: string;
+  position: number;
 }
 
 export interface SharedList {
@@ -35,4 +43,5 @@ export interface SharedList {
 
 export interface ListWithItems extends SharedList {
   items: ListItem[];
+  sections: ListSection[];
 }

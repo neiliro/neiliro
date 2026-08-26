@@ -162,6 +162,10 @@ Items are deliberately plain text with no quantity, assignee or due date: a list
 
 One list ships with a fresh hub, so the feature works before anyone configures anything; more can be added, renamed and deleted. Adding is also one of the four one-tap actions on the phone home screen.
 
+Long lists can be split into **sections** — "Vegetables", "Dairy", "Household" — for the case several lists do not cover: one trip through one shop, read by aisle. Membership is optional and depth is one level: an item with no section is normal, not unfiled, and sits above the sections so that typing into the main field stays the fastest path. Each section has its own input, so putting something in one is a tap rather than a menu.
+
+Deleting a section keeps its items — they rise back to the top of the list. The items are the point; the grouping is a convenience, and the confirmation says so before you click.
+
 **A list can be handed to someone without an account** — typically whoever is going to the shop. Unlike the other share links in the hub, this one accepts a write: the guest can tick items off, because a shopping list nobody can tick off is a screenshot. That is the only thing they can do — no adding, no renaming, no deleting, and nothing beyond that single list is visible. Ticks land on the same list the family sees, since it is the same list and not a copy. The link is revocable, deleting the list revokes it too, and asking twice returns the same link so it can be re-sent.
 
 ## Mail
