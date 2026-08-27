@@ -6,6 +6,13 @@ on:
   push:
     branches: [master, main]
   pull_request:
+  # Manual trigger, for when a run is lost rather than failed. An Actions
+  # incident on 2026-08-26 left the master run after #168 stuck in `queued`
+  # for sixteen hours: it never started, and it could be neither rerun
+  # ("already running") nor cancelled ("already completed"). Without this
+  # there was no way to ask for a fresh run — push to master is blocked by
+  # branch protection, which is correct and should stay that way.
+  workflow_dispatch:
 
 jobs:
   check:
