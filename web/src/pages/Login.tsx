@@ -1,5 +1,7 @@
 import { lang, setLang, t } from '../lib/i18n';
-import { ISSUES_URL, REPO_URL } from '../lib/build';
+import { REPO_URL } from '../lib/build';
+import { useServiceState } from '../lib/service';
+import { supportLink } from '../lib/support';
 import { useHomeName } from '../lib/home-name';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
@@ -22,6 +24,15 @@ function Frame({
   children: React.ReactNode;
 }) {
   const displayName = useHomeName();
+  /*
+    Every auth screen hangs off this frame — sign in, first run, an invite,
+    both halves of a password reset. That makes its footer the one place a
+    locked-out family can still reach, so the help link has to be right
+    here and not only inside the app. The lookup is shared and cached
+    (lib/service.ts); the answer cannot change while the tab is open.
+  */
+  const service = useServiceState();
+  const help = supportLink(service?.hosted ?? false, window.location.hostname);
 
   useEffect(() => {
     if (displayName) document.title = displayName;
@@ -61,12 +72,12 @@ function Frame({
             </a>
             <span aria-hidden>·</span>
             <a
-              href={ISSUES_URL}
+              href={help.href}
               target="_blank"
               rel="noopener noreferrer"
               className="underline decoration-line underline-offset-2 hover:text-ink"
             >
-              {t('Report a bug')}
+              {help.label === 'Support' ? t('Support') : t('Report a bug')}
             </a>
           </p>
         </div>
