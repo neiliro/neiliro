@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Empty } from './Page';
 import { EntityDialog } from './EntityDialog';
-import { inlineDanger, useDialogs } from './Dialog';
+import { dialogField, dialogLabel, inlineDanger, useDialogs } from './Dialog';
 import { reportFailure } from '../lib/failures';
+import { useAuth } from '../lib/auth';
 
 interface ManagedUser {
   id: string;
@@ -15,6 +16,8 @@ interface ManagedUser {
   last_login_at: string | null;
   disabled_at: string | null;
   must_change_password: number;
+  /** null where confirming an address means nothing — a self-hosted hub. */
+  email_verified: boolean | null;
 }
 
 const ROLE_LABEL: Record<ManagedUser['role'], string> = {
@@ -161,7 +164,12 @@ export function PeopleSection() {
   const [users, setUsers] = useState<ManagedUser[] | null>(null);
   const [password, setPassword] = useState<string | null>(null);
   const [editing, setEditing] = useState<ManagedUser | null>(null);
+  // Held beside the dialog draft rather than inside it: the address is not
+  // part of the entity being edited but a credential that travels through
+  // its own admin-only endpoint (see the dialog below).
+  const [address, setAddress] = useState('');
   const dialogs = useDialogs();
+  const { user, refresh } = useAuth();
 
   const load = () => api.get<ManagedUser[]>('/users').then(setUsers).catch(() => setUsers([]));
   useEffect(() => {
@@ -225,13 +233,25 @@ export function PeopleSection() {
                     {u.name}
                     {u.disabled_at && <span className="ml-2 text-xs text-muted">{t('disabled')}</span>}
                   </p>
-                  <p className="truncate font-mono text-xs text-muted">{u.email}</p>
+                  <p className="flex items-center gap-2 text-xs text-muted">
+                    <span className="truncate font-mono">{u.email}</span>
+                    {/* Only where the hub actually asks for the proof —
+                        null means the question does not apply here */}
+                    {u.email_verified === false && (
+                      <span className="shrink-0 rounded-full border border-line px-1.5 py-0.5">
+                        {t('unconfirmed')}
+                      </span>
+                    )}
+                  </p>
                 </div>
               </div>
               <span className="text-xs text-muted">{ROLE_LABEL[u.role]}</span>
               <button
                 type="button"
-                onClick={() => setEditing(u)}
+                onClick={() => {
+                  setEditing(u);
+                  setAddress(u.email);
+                }}
                 className="text-xs text-accent underline underline-offset-2"
               >
                 {t('Edit')}
@@ -260,11 +280,55 @@ export function PeopleSection() {
           title={t('Member')}
           initial={{ name: editing.name, color: editing.color }}
           onSave={async (draft) => {
-            await api.patch(`/users/${editing.id}`, { name: draft.name, color: draft.color });
-            await load();
+            /*
+              Two calls, because the server keeps two routes: name and
+              colour are personal identity and any member may edit their
+              own, the login address is a credential only an administrator
+              may move. Bundling them into one PATCH would widen that.
+
+              The address goes first — it is the call that can be refused
+              (the address is already someone's login) and a refusal has to
+              leave the dialog open with both edits still in the fields.
+              And it goes only when it actually changed: the server trims
+              and lower-cases before comparing, so this must too, or a
+              retyped address in different case is answered "Nothing to
+              change". Changing it clears the confirmation and mails a new
+              link — that is the server's doing, not ours.
+            */
+            try {
+              const next = address.trim().toLowerCase();
+              if (next !== editing.email) {
+                await api.post(`/users/${editing.id}/email`, { email: next });
+                // An administrator moving their own address: the session
+                // still carries the old one, and the "confirm your
+                // address" line in the header would name it
+                if (editing.id === user?.id) await refresh();
+              }
+              await api.patch(`/users/${editing.id}`, { name: draft.name, color: draft.color });
+            } finally {
+              // Even a half-applied change has to show: the address may
+              // have moved before the rename was refused
+              await load();
+            }
           }}
           onClose={() => setEditing(null)}
-        />
+        >
+          <label className="block">
+            <span className={dialogLabel}>{t('Login address')}</span>
+            <input
+              type="email"
+              value={address}
+              // The server's own cap, mirrored so the field stops rather
+              // than the save does
+              maxLength={120}
+              onChange={(e) => setAddress(e.target.value)}
+              className={`${dialogField} font-mono`}
+            />
+            <span className="mt-1.5 block text-xs text-muted">
+              {t('What they sign in with, and where password recovery is sent. A new address arrives unconfirmed — until they open the link mailed to it, it cannot recover the account.')}
+            </span>
+          </label>
+        </EntityDialog>
       )}
 
       <p className="mt-5 text-sm text-muted">

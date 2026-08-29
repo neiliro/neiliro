@@ -177,6 +177,23 @@ describe('address confirmation', () => {
     expect(sent).toHaveLength(beforeReset);
   });
 
+  it('tells the People list which addresses are still unproven', async () => {
+    /*
+      The administrator's own screen is where a typo gets noticed, so the
+      list has to carry the state — otherwise the only way to see that an
+      address was never confirmed is to watch a password reset silently
+      not arrive. Sam confirmed above; Dana was just moved to a fresh
+      address by the case before this one.
+    */
+    const list = await app.inject({
+      url: '/api/users',
+      headers: { host: HOST, cookie: adminCookie },
+    });
+    const users = list.json() as { email: string; email_verified: boolean | null }[];
+    expect(users.find((u) => u.email === ADMIN)?.email_verified).toBe(true);
+    expect(users.find((u) => u.email === 'dana.fixed@smiths-v1w2.test')?.email_verified).toBe(false);
+  });
+
   it('refuses a stale confirmation issued for a previous address', async () => {
     // The link mailed to dana.fixed in the previous case, still unopened
     const stale = await lastToken('Confirm your Neiliro address');
