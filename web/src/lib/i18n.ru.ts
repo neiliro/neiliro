@@ -544,6 +544,7 @@ export const ru: Record<string, string> = {
   'Subcategories roll up into the parent in the summary; the parent limit counts their spending': 'Подкатегории сворачиваются в родителя в сводке, лимит родителя считает их траты',
   'Subtask': 'Подзадача',
   'Sunday': 'Воскресенье',
+  'Support': 'Поддержка',
   'Switch to dark theme': 'Включить тёмную тему',
   'Switch to light theme': 'Включить светлую тему',
   'Table': 'Таблица',
