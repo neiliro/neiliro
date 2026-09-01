@@ -1,5 +1,5 @@
 import { t } from '../lib/i18n';
-import { BUILD_SHA, ISSUES_URL, REPO_URL, VERSION } from '../lib/build';
+import { BUILD_SHA, REPO_URL, VERSION } from '../lib/build';
 import { homeName } from '../lib/home-name';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -10,6 +10,8 @@ import { clearFailure, useFailure } from '../lib/failures';
 import { QuickAdd } from './QuickAdd';
 import { GlobalSearch, SearchTrigger } from './GlobalSearch';
 import { applyTheme, initialDark, persistTheme } from '../lib/theme';
+import { useServiceState } from '../lib/service';
+import { supportLink } from '../lib/support';
 
 interface NavItem {
   to: string;
@@ -280,6 +282,8 @@ export function AppShell() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [settings, setSettings] = useState<Record<string, string>>({});
   const sidebarNav = [...NAV, ...SECONDARY];
+  const service = useServiceState();
+  const help = supportLink(service?.hosted ?? false, window.location.hostname);
 
   useEffect(() => {
     void api
@@ -347,8 +351,10 @@ export function AppShell() {
           {/* The app's footer. Which build is on screen — a stale bundle in
               a long-lived tab looks exactly like a fix that never deployed,
               and this is the cheapest way to tell those apart — and the two
-              links worth having within reach. Settings → About repeats it
-              for phones, where this sidebar does not exist. */}
+              links worth having within reach. Where the second one goes
+              depends on who runs this hub: see lib/support.ts. Settings →
+              About repeats it for phones, where this sidebar does not
+              exist. */}
           <div className="px-2 text-muted">
             <p
               className="font-mono text-xs"
@@ -367,12 +373,12 @@ export function AppShell() {
                 {t('Source code')}
               </a>
               <a
-                href={ISSUES_URL}
+                href={help.href}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline decoration-line underline-offset-2 hover:text-ink"
               >
-                {t('Report a bug')}
+                {help.label === 'Support' ? t('Support') : t('Report a bug')}
               </a>
             </span>
           </div>

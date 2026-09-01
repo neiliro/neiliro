@@ -1,5 +1,5 @@
 import { lang, setLang, t } from '../lib/i18n';
-import { BUILD_SHA, ISSUES_URL, REPO_URL, VERSION } from '../lib/build';
+import { BUILD_SHA, REPO_URL, VERSION } from '../lib/build';
 import { formatStamp, setWeekStart, weekStart } from '../lib/format';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
@@ -15,6 +15,8 @@ import { MailSection } from '../components/MailSection';
 import { TotpSection } from '../components/TotpSection';
 import { CalendarFeedSection } from '../components/CalendarFeedSection';
 import { FamilyDataSection } from '../components/FamilyDataSection';
+import { useServiceState } from '../lib/service';
+import { supportLink } from '../lib/support';
 
 /**
  * Own name and avatar colour, self-service (#64). Colour is the whole
@@ -456,6 +458,9 @@ export function Settings() {
     it: the field holds what was typed until save parses it.
   */
   const [goalTarget, setGoalTarget] = useState('');
+  /* Same link as the sidebar footer, repeated for phones. */
+  const service = useServiceState();
+  const help = supportLink(service?.hosted ?? false, window.location.hostname);
 
   useEffect(() => {
     void api.get<Record<string, string>>('/settings').then((loaded) => {
@@ -740,12 +745,12 @@ export function Settings() {
             {t('Source code')}
           </a>
           <a
-            href={ISSUES_URL}
+            href={help.href}
             target="_blank"
             rel="noopener noreferrer"
             className="text-accent underline decoration-line underline-offset-2 hover:opacity-80"
           >
-            {t('Report a bug')}
+            {help.label === 'Support' ? t('Support') : t('Report a bug')}
           </a>
         </div>
       </section>

@@ -23,3 +23,10 @@ export const BUILD_SHA = __BUILD_SHA__;
  */
 export const REPO_URL = 'https://github.com/neiliro/neiliro';
 export const ISSUES_URL = `${REPO_URL}/issues`;
+
+/**
+ * The hosted service's help desk — FAQ and a form that reaches a human.
+ * It lives outside the hub deliberately: the moments that send someone
+ * looking for support are the moments the hub is unreachable.
+ */
+export const SUPPORT_URL = 'https://support.neiliro.com';
