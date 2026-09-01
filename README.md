@@ -138,7 +138,8 @@ you touch the money or the privacy code. Start with a
 [good first issue](https://github.com/neiliro/neiliro/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) —
 they are written to be picked up cold.
 
-Coming up next: CSV bank-statement import and shared shopping lists.
+Coming up next: CSV bank-statement import, and reading the family mailbox
+from an ordinary mail app.
 
 ## License
 
