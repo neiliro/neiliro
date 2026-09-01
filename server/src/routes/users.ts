@@ -4,18 +4,36 @@ import { db, now } from '../db/index.js';
 import { destroyAllSessions, requireAdmin } from '../lib/auth.js';
 import { log } from '../lib/log.js';
 import { generatePassword, hashPassword } from '../lib/password.js';
-import { sendVerificationEmail } from './email-verify.js';
+import { emailVerificationAvailable, sendVerificationEmail } from './email-verify.js';
 
 export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/users', (req, reply) => {
     if (!requireAdmin(req, reply)) return;
-    return db
+    const rows = db
       .prepare(
         `SELECT id, email, name, role, color, created_at, last_login_at,
-                disabled_at, must_change_password
+                disabled_at, must_change_password,
+                (email_verified_at IS NOT NULL) AS email_verified
            FROM users ORDER BY role, name`,
       )
-      .all();
+      .all() as { email_verified: number }[];
+
+    /*
+      `email_verified` is deliberately tri-state: true, false, or null for
+      "the question does not apply here".
+
+      Confirmation only means something on a hub that can ask for it. A
+      self-hosted family's login is an identifier people legitimately
+      invent (name@hub.local in the docs), so a plain false would brand
+      every row unconfirmed for a proof nobody will ever be asked to give.
+      null lets the People list stay quiet there and flag it where it
+      actually costs someone their recovery route.
+    */
+    const applies = emailVerificationAvailable();
+    return rows.map((row) => ({
+      ...row,
+      email_verified: applies ? Boolean(row.email_verified) : null,
+    }));
   });
 
   // Manual account creation is gone on purpose: invitation links cover

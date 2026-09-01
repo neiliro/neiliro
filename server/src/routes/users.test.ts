@@ -36,6 +36,23 @@ beforeAll(async () => {
   memberCookie = member.cookie;
 });
 
+describe('GET /api/users', () => {
+  it('leaves confirmation out of it on a self-hosted hub', async () => {
+    /*
+      A self-hosted login is an identifier people legitimately invent —
+      name@hub.local in our own docs — and nothing there ever asks for the
+      mailbox to be proven. A false here would put a permanent
+      "unconfirmed" beside every member for a proof that will never be
+      requested, so the answer is null: the question does not apply.
+    */
+    const res = await hub.as(hub.join('admin-list').cookie, 'GET', '/api/users');
+    expect(res.statusCode).toBe(200);
+    const users = res.json<{ email_verified: boolean | null }[]>();
+    expect(users.length).toBeGreaterThan(0);
+    expect(users.every((u) => u.email_verified === null)).toBe(true);
+  });
+});
+
 describe('PATCH /api/users/:id self-service', () => {
   it('a member changes their own name and colour', async () => {
     const res = await hub.as(memberCookie, 'PATCH', `/api/users/${memberId}`, {
