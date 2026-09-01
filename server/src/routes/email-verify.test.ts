@@ -52,12 +52,17 @@ let app: FastifyInstance;
 let adminCookie: string;
 let memberId: string;
 
-/** Wait for the detached mail, then take the token out of the last one. */
-async function lastToken(subject: string): Promise<string | null> {
+/** Wait for the detached mail, then take the whole link out of the last one. */
+async function lastLink(subject: string): Promise<URL | null> {
   await new Promise((r) => setTimeout(r, 60));
   const mail = [...sent].reverse().find((m) => m.subject === subject);
   if (!mail) return null;
-  return new URL(mail.text.match(/https:\/\/\S+/)![0]).searchParams.get('token');
+  return new URL(mail.text.match(/https:\/\/\S+/)![0]);
+}
+
+/** Wait for the detached mail, then take the token out of the last one. */
+async function lastToken(subject: string): Promise<string | null> {
+  return (await lastLink(subject))?.searchParams.get('token') ?? null;
 }
 
 function requestReset(email: string) {
@@ -115,6 +120,29 @@ describe('address confirmation', () => {
     expect(sent).toHaveLength(before);
   });
 
+  /*
+    Found in production: the confirmation link was built from HOSTED_DOMAIN
+    alone, so it pointed at the apex. On our own service that is the
+    landing site — it has no such route, served its front page, and the
+    address stayed unconfirmed with nothing to say so.
+
+    The old tests parsed this same link and kept only the token, which is
+    why they passed throughout. The reset link is the same shape and is
+    pinned too, further down — either one landing off the family is a dead
+    end for whoever is holding the mail.
+  */
+  it('sends the confirmation link to the family, not to the apex', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/profile/email-verify',
+      headers: { host: HOST, cookie: adminCookie },
+      payload: {},
+    });
+    const confirm = await lastLink('Confirm your Neiliro address');
+    expect(confirm?.host).toBe(HOST);
+    expect(confirm?.pathname).toBe('/verify-email');
+  });
+
   it('confirms an address once, and the reset starts working', async () => {
     // Ask for the link the way the prompt in the UI does
     const asked = await app.inject({
@@ -148,7 +176,11 @@ describe('address confirmation', () => {
     // ...and now a reset does go out
     sent.length = 0;
     expect((await requestReset(ADMIN)).statusCode).toBe(202);
-    expect(await lastToken('Reset your Neiliro password')).toBeTruthy();
+    const reset = await lastLink('Reset your Neiliro password');
+    expect(reset?.searchParams.get('token')).toBeTruthy();
+    // Same rule as the confirmation link: it has to open on the family
+    expect(reset?.host).toBe(HOST);
+    expect(reset?.pathname).toBe('/reset');
   });
 
   it('un-confirms the address when an administrator changes it', async () => {

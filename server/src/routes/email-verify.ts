@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { db, id, now } from '../db/index.js';
+import { currentTenant, db, id, now } from '../db/index.js';
 import { env } from '../env.js';
 import { log } from '../lib/log.js';
 import { sendServiceEmail, serviceMailAvailable } from '../lib/mail.js';
+import { familySlug } from '../lib/tenants.js';
 
 /*
   Confirming that a person owns the address they sign in with.
@@ -46,6 +47,20 @@ export async function sendVerificationEmail(userId: string): Promise<void> {
       .get(userId) as { email: string; name: string; email_verified_at: string | null } | undefined;
     if (!user || user.email_verified_at) return;
 
+    /*
+      The link has to open on the family's own subdomain, and the slug is
+      the only thing that knows which one that is. HOSTED_DOMAIN is the
+      apex — on our own service that is the landing site, which has no
+      such route and simply serves its front page, so the address never
+      gets confirmed. PUBLIC_URL is worse than useless here: one process
+      serves every family, so a single configured URL would send them all
+      to whichever family it names. Same shape as the reset link
+      (routes/password-reset.ts).
+    */
+    const { familyId } = currentTenant();
+    const slug = familyId ? familySlug(familyId) : null;
+    if (!slug) return; // the ghost, or a single-family install: nothing to link to
+
     const token = randomBytes(32).toString('base64url');
     db.transaction(() => {
       // One live link per person: the newest request is the one they hold
@@ -63,9 +78,7 @@ export async function sendVerificationEmail(userId: string): Promise<void> {
       );
     })();
 
-    // The host is the family's own subdomain: the link only has to work in
-    // a browser, and the session it may create belongs to that host.
-    const url = `${env.publicUrl || `https://${env.hostedDomain}`}/verify-email?token=${token}`;
+    const url = `https://${slug}.${env.hostedDomain}/verify-email?token=${token}`;
     await sendServiceEmail(
       user.email,
       'Confirm your Neiliro address',
