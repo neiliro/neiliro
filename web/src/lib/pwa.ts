@@ -1,5 +1,5 @@
 import { registerSW } from 'virtual:pwa-register';
-import { api } from './api';
+import { serviceState } from './service';
 
 /*
   Service-worker registration and update detection (#9).
@@ -31,7 +31,8 @@ export async function setupPwa(onNeedRefresh: () => void): Promise<void> {
   started = true;
 
   try {
-    const state = await api.get<{ demo?: boolean }>('/auth/state');
+    // Shares the app's one lookup rather than adding a second (lib/service.ts)
+    const state = await serviceState();
     if (state.demo) return;
   } catch {
     // The server is unreachable — the cached shell may still be useful,

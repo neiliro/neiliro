@@ -228,7 +228,8 @@ function SignInSection() {
   const { user, refresh } = useAuth();
   const dialogs = useDialogs();
   const [status, setStatus] = useState<string | null>(null);
-  const [googleAvailable, setGoogleAvailable] = useState(false);
+  // Shared with the rest of the page, so asking here costs no extra request
+  const googleAvailable = useServiceState().state?.google ?? false;
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
   const [showSessions, setShowSessions] = useState(false);
   const sessionCount = sessions?.length ?? null;
@@ -240,10 +241,6 @@ function SignInSection() {
       .catch(() => {});
 
   useEffect(() => {
-    void api
-      .get<{ google: boolean }>('/auth/state')
-      .then((s) => setGoogleAvailable(s.google))
-      .catch(() => {});
     void loadSessions();
     const code = new URLSearchParams(window.location.search).get('google');
     if (code && LINK_MESSAGES[code]) {
@@ -459,8 +456,8 @@ export function Settings() {
   */
   const [goalTarget, setGoalTarget] = useState('');
   /* Same link as the sidebar footer, repeated for phones. */
-  const service = useServiceState();
-  const help = supportLink(service?.hosted ?? false, window.location.hostname);
+  const { state: service } = useServiceState();
+  const help = supportLink(service ? service.hosted : null, window.location.hostname);
 
   useEffect(() => {
     void api.get<Record<string, string>>('/settings').then((loaded) => {
@@ -744,14 +741,17 @@ export function Settings() {
           >
             {t('Source code')}
           </a>
-          <a
-            href={help.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-accent underline decoration-line underline-offset-2 hover:opacity-80"
-          >
-            {help.label === 'Support' ? t('Support') : t('Report a bug')}
-          </a>
+          {/* Absent, not guessed, until the answer says which door this is */}
+          {help && (
+            <a
+              href={help.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent underline decoration-line underline-offset-2 hover:opacity-80"
+            >
+              {help.label === 'Support' ? t('Support') : t('Report a bug')}
+            </a>
+          )}
         </div>
       </section>
 

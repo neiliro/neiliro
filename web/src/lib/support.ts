@@ -19,9 +19,16 @@ const SERVICE_DOMAIN = 'neiliro.com';
  * families' messages. Whose service this is, only the address says.
  */
 export function supportLink(
-  hosted: boolean,
+  hosted: boolean | null,
   hostname: string,
-): { href: string; label: 'Support' | 'Report a bug' } {
+): { href: string; label: 'Support' | 'Report a bug' } | null {
+  // Null is "we have not been told yet", and it is not the same as false.
+  // Collapsing the two would render the self-hoster's link — a live one,
+  // pointing at GitHub — to a hosted family for as long as the answer is
+  // in flight. The sign-in screen is exactly where a locked-out family
+  // reads this, so a wrong door for one round trip is a wrong door.
+  if (hosted === null) return null;
+
   const ours = hostname === SERVICE_DOMAIN || hostname.endsWith(`.${SERVICE_DOMAIN}`);
   return hosted && ours
     ? { href: SUPPORT_URL, label: 'Support' }

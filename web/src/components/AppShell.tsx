@@ -282,8 +282,8 @@ export function AppShell() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [settings, setSettings] = useState<Record<string, string>>({});
   const sidebarNav = [...NAV, ...SECONDARY];
-  const service = useServiceState();
-  const help = supportLink(service?.hosted ?? false, window.location.hostname);
+  const { state: service } = useServiceState();
+  const help = supportLink(service ? service.hosted : null, window.location.hostname);
 
   useEffect(() => {
     void api
@@ -372,14 +372,17 @@ export function AppShell() {
               >
                 {t('Source code')}
               </a>
-              <a
-                href={help.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline decoration-line underline-offset-2 hover:text-ink"
-              >
-                {help.label === 'Support' ? t('Support') : t('Report a bug')}
-              </a>
+              {/* Absent, not guessed, until the answer says which door this is */}
+              {help && (
+                <a
+                  href={help.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-line underline-offset-2 hover:text-ink"
+                >
+                  {help.label === 'Support' ? t('Support') : t('Report a bug')}
+                </a>
+              )}
             </span>
           </div>
         </div>
