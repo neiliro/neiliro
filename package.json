@@ -2,7 +2,7 @@
   "name": "neiliro",
   "private": true,
   "license": "AGPL-3.0-only",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "type": "module",
   "workspaces": [
     "server",
