@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { useServiceState } from '../lib/service';
 import { t } from '../lib/i18n';
 
 /*
@@ -184,14 +185,8 @@ function DangerZone() {
 
 export function FamilyDataSection() {
   const { user } = useAuth();
-  const [state, setState] = useState<{ demo: boolean; hosted: boolean } | null>(null);
-
-  useEffect(() => {
-    void api
-      .get<{ demo: boolean; hosted: boolean }>('/auth/state')
-      .then(setState)
-      .catch(() => {});
-  }, []);
+  // The same shared answer the sidebar and Settings read — one request
+  const { state } = useServiceState();
 
   // Demo sandboxes are throwaways: nothing worth archiving, nothing to
   // delete — the sandbox buries itself. Both cards disappear entirely.

@@ -31,8 +31,8 @@ function Frame({
     here and not only inside the app. The lookup is shared and cached
     (lib/service.ts); the answer cannot change while the tab is open.
   */
-  const service = useServiceState();
-  const help = supportLink(service?.hosted ?? false, window.location.hostname);
+  const { state: service } = useServiceState();
+  const help = supportLink(service ? service.hosted : null, window.location.hostname);
 
   useEffect(() => {
     if (displayName) document.title = displayName;
@@ -70,15 +70,20 @@ function Frame({
             >
               {t('Source code')}
             </a>
-            <span aria-hidden>·</span>
-            <a
-              href={help.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline decoration-line underline-offset-2 hover:text-ink"
-            >
-              {help.label === 'Support' ? t('Support') : t('Report a bug')}
-            </a>
+            {/* Absent, not guessed, until the answer says which door this is */}
+            {help && (
+              <>
+                <span aria-hidden>·</span>
+                <a
+                  href={help.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-line underline-offset-2 hover:text-ink"
+                >
+                  {help.label === 'Support' ? t('Support') : t('Report a bug')}
+                </a>
+              </>
+            )}
           </p>
         </div>
       </div>
@@ -107,22 +112,24 @@ export function Login() {
   // A ticket means the password passed and a TOTP code is owed
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState('');
-  const [googleAvailable, setGoogleAvailable] = useState(false);
-  const [resetAvailable, setResetAvailable] = useState(false);
-  const [demo, setDemo] = useState(false);
-  // null — still finding out; false — empty DB, show the first-run setup
-  const [initialized, setInitialized] = useState<boolean | null>(null);
+  /*
+    Which doors exist is a property of the process, and the frame around
+    this form asks the same question for its help link — so both read the
+    one shared answer rather than each fetching it (lib/service.ts).
+  */
+  const { state: service, settled } = useServiceState();
+  const googleAvailable = service?.google ?? false;
+  const resetAvailable = Boolean(service?.password_reset);
+  const demo = Boolean(service?.demo);
+  /*
+    null — still finding out; false — empty DB, show the first-run setup.
+    A server that refused to answer is deliberately read as initialized:
+    offering to create an admin because a request failed would hand the
+    family's own hub to whoever reloads at the wrong moment.
+  */
+  const initialized = service ? service.initialized : settled ? true : null;
 
   useEffect(() => {
-    void api
-      .get<{ initialized: boolean; google: boolean; demo?: boolean; password_reset?: boolean }>('/auth/state')
-      .then((s) => {
-        setGoogleAvailable(s.google);
-        setResetAvailable(Boolean(s.password_reset));
-        setInitialized(s.initialized);
-        setDemo(Boolean(s.demo));
-      })
-      .catch(() => setInitialized(true));
     // The outcome of a Google sign-in arrives as a redirect with a code in the URL
     const code = new URLSearchParams(window.location.search).get('google');
     if (code && GOOGLE_MESSAGES[code]) {

@@ -29,21 +29,46 @@ function load(): Promise<ServiceState> {
   return pending;
 }
 
-/** Null until the answer arrives; callers render the neutral case meanwhile. */
-export function useServiceState(): ServiceState | null {
-  const [state, setState] = useState<ServiceState | null>(null);
+export interface ServiceAnswer {
+  /** What the process says about itself — null while that is still unknown. */
+  state: ServiceState | null;
+  /**
+   * False only while the request is in flight; true once it has succeeded
+   * *or* failed. A caller that must pick a safe default on failure needs to
+   * tell "not yet" from "never" — `state` alone cannot say which.
+   */
+  settled: boolean;
+}
+
+/**
+ * The shared answer. `state` is null until it arrives, so a caller renders
+ * nothing rather than guessing — guessing is how a footer link points at
+ * the wrong door for a round trip.
+ */
+export function useServiceState(): ServiceAnswer {
+  const [answer, setAnswer] = useState<ServiceAnswer>({ state: null, settled: false });
 
   useEffect(() => {
     let alive = true;
     load()
       .then((s) => {
-        if (alive) setState(s);
+        if (alive) setAnswer({ state: s, settled: true });
       })
-      .catch(() => {});
+      .catch(() => {
+        if (alive) setAnswer({ state: null, settled: true });
+      });
     return () => {
       alive = false;
     };
   }, []);
 
-  return state;
+  return answer;
+}
+
+/**
+ * The same answer outside React, sharing the same request. Callers that
+ * only need one flag still must not add a second round trip for it.
+ */
+export function serviceState(): Promise<ServiceState> {
+  return load();
 }
