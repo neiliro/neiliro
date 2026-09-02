@@ -17,7 +17,7 @@ import { log } from './log.js';
 
   The registry (registry.db next to the family folders) maps slug → family.
   A family's folder is named by its internal id, never the slug: renaming
-  a slug is a registry update, the files don't move. Like demo-stats.db,
+  a slug is a registry update, the files don't move (renameFamily below). Like demo-stats.db,
   the registry is not part of the app schema and has no migrations — it
   belongs to operating the service, not to the product.
 
@@ -50,6 +50,25 @@ export function initHosted(): void {
       slug       TEXT NOT NULL UNIQUE,
       status     TEXT NOT NULL DEFAULT 'active',
       created_at TEXT NOT NULL
+    )
+  `);
+  // The registry has no migrations (it is operations, not product), so a
+  // new column is added in place when it is missing. renamed_at is the
+  // one-shot rename's spent ticket: set once, never cleared.
+  const columns = (registry.prepare('PRAGMA table_info(families)').all() as { name: string }[]).map(
+    (c) => c.name,
+  );
+  if (!columns.includes('renamed_at')) {
+    registry.exec('ALTER TABLE families ADD COLUMN renamed_at TEXT');
+  }
+  // Slugs a family gave up by renaming. Same rule as a deleted family's
+  // slug: never re-issued, because bookmarks, PWA icons and mail addressed
+  // to the old name would land with whoever took it.
+  registry.exec(`
+    CREATE TABLE IF NOT EXISTS retired_slugs (
+      slug       TEXT PRIMARY KEY,
+      family_id  TEXT NOT NULL,
+      retired_at TEXT NOT NULL
     )
   `);
 
@@ -275,7 +294,7 @@ export function shutdownHosted(): void {
 
 /**
  * Default slugs are <family name>-<4 random chars>, so collisions are
- * designed out; vanity renames come later and pass the same gate.
+ * designed out; the family's one self-service rename passes the same gate.
  * The reserved list keeps service names out of family hands: a family
  * called "mail" or "api" would collide with infrastructure sooner or
  * later, and "admin" or "billing" is a phishing costume.
@@ -291,13 +310,28 @@ const RESERVED_SLUGS = new Set([
   'dev', 'staging', 'test', 'ns1', 'ns2', 'ftp', 'vpn', 'webmail',
 ]);
 
-export function createFamily(slug: string): { familyId: string; url: string } {
+/** True when the slug has the right shape — the cheap, public half of the gate. */
+export function isWellFormedSlug(slug: string): boolean {
+  return SLUG_RE.test(slug);
+}
+
+/** Shape and reserved-name checks, shared by creation and rename. */
+function checkSlug(slug: string): void {
   if (!SLUG_RE.test(slug)) {
     throw new Error(`Bad slug "${slug}": 3–30 chars of [a-z0-9-], letters or digits at the edges`);
   }
   if (RESERVED_SLUGS.has(slug)) {
     throw new Error(`Slug "${slug}" is reserved for the service itself`);
   }
+  if (registry!.prepare('SELECT 1 FROM retired_slugs WHERE slug = ?').get(slug)) {
+    // Told apart from a live collision only in the log: to the caller a
+    // retired slug is simply taken
+    throw new Error(`Slug "${slug}" is already taken`);
+  }
+}
+
+export function createFamily(slug: string): { familyId: string; url: string } {
+  checkSlug(slug);
 
   const familyId = id();
   try {
@@ -317,6 +351,77 @@ export function createFamily(slug: string): { familyId: string; url: string } {
   runWithTenant(tenantFor(familyId), migrate);
   log.notice(`family created: ${slug} (${familyId})`);
   return { familyId, url: `https://${slug}.${env.hostedDomain}/` };
+}
+
+// ── Self-service rename (routes/family.ts) ───────────────────────────────
+
+export interface FamilyAddress {
+  slug: string;
+  /** When the family spent its one rename, or null while it still has it. */
+  renamedAt: string | null;
+}
+
+/** The family's registry address. Null for the ghost and unknown ids. */
+export function familyAddress(familyId: string): FamilyAddress | null {
+  const row = registry!
+    .prepare('SELECT slug, renamed_at FROM families WHERE id = ?')
+    .get(familyId) as { slug: string; renamed_at: string | null } | undefined;
+  return row ? { slug: row.slug, renamedAt: row.renamed_at } : null;
+}
+
+/**
+ * Move a family to a new slug — once.
+ *
+ * The default slug is <name>-<4 random chars>, chosen by the operator so
+ * that collisions are designed out; the family never had a say. This is
+ * their one chance to pick something they can say out loud. Exactly one,
+ * because everything hangs off the slug: the subdomain (bookmarks, PWA
+ * icons, every session cookie — they are host-only, so everyone signs in
+ * again), the mail address <slug>@<mail domain>, calendar subscription
+ * links. Once a family has lived at an address, the cost of moving it is
+ * theirs to bear and ours to hear about; one move, early, keeps both
+ * small. The 24-hour window is enforced by the route, which knows when
+ * the family was set up; the registry only knows whether the ticket has
+ * been spent.
+ *
+ * Files never move — the folder is named by the internal id — so the
+ * rename is one registry transaction plus dropping two cache entries:
+ * the old slug (must stop routing now, not in 30 s) and the new one (may
+ * be cached as "unknown" from an earlier probe).
+ */
+export function renameFamily(familyId: string, newSlug: string): { url: string } {
+  checkSlug(newSlug);
+  const current = familyAddress(familyId);
+  if (!current) throw new Error('No such family');
+  if (current.renamedAt) throw new Error('The family has already been renamed once');
+  if (current.slug === newSlug) throw new Error('That is already the family address');
+
+  const move = registry!.transaction(() => {
+    const at = now();
+    const result = registry!
+      .prepare(
+        `UPDATE families SET slug = ?, renamed_at = ?
+          WHERE id = ? AND status = 'active' AND renamed_at IS NULL`,
+      )
+      .run(newSlug, at, familyId);
+    if (result.changes === 0) throw new Error('The family is not active, or has already been renamed');
+    registry!
+      .prepare('INSERT INTO retired_slugs (slug, family_id, retired_at) VALUES (?, ?, ?)')
+      .run(current.slug, familyId, at);
+  });
+  try {
+    move();
+  } catch (err) {
+    if ((err as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      throw new Error(`Slug "${newSlug}" is already taken`);
+    }
+    throw err;
+  }
+
+  slugCache.delete(current.slug);
+  slugCache.delete(newSlug);
+  log.notice(`family renamed: ${current.slug} → ${newSlug} (${familyId})`);
+  return { url: `https://${newSlug}.${env.hostedDomain}/` };
 }
 
 // ── Self-service deletion (GDPR, routes/family.ts) ───────────────────────

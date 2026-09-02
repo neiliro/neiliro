@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, statSync, writeFileSync } from 'n
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { currentTenant, db } from '../db/index.js';
 import { env } from '../env.js';
@@ -17,6 +17,8 @@ import { log } from '../lib/log.js';
   the delete-everything button behind it. Both are promises the privacy
   policy already makes; until now they were concierge operations
   (scripts/export.mjs by hand, family:delete in the control plane).
+  The family's address — its subdomain slug — lives here too: read-only,
+  except for the one rename a fresh family is allowed (lib/tenants.ts).
 
   Everything here goes through the tenant context (db proxy,
   currentTenant()), never the static paths.* — in hosted mode the
@@ -72,6 +74,28 @@ const deleteInput = z.object({
   code: z.string().min(6).max(10).optional(),
   confirm: z.string().min(1).max(100),
 });
+
+const renameInput = z.object({
+  slug: z.string().min(1).max(100),
+});
+
+/**
+ * How long after first-run setup the family may still pick its address.
+ *
+ * Counted from setup, not from provisioning: the operator creates the
+ * family when the invitation goes out, and the family may open the link
+ * days later. Their day starts when their admin exists.
+ */
+const RENAME_WINDOW_MS = 24 * 60 * 60_000;
+
+/** The moment the family's first account was created, as a Date — or null before setup. */
+function setupAt(): Date | null {
+  const row = db.prepare('SELECT min(created_at) AS at FROM users').get() as { at: string | null };
+  if (!row.at) return null;
+  // created_at is written by now() / datetime('now') — UTC without a zone marker
+  const at = new Date(`${row.at.replace(' ', 'T')}Z`);
+  return Number.isNaN(at.getTime()) ? null : at;
+}
 
 export async function registerFamilyRoutes(app: FastifyInstance): Promise<void> {
   /*
@@ -167,6 +191,103 @@ export async function registerFamilyRoutes(app: FastifyInstance): Promise<void> 
         .header('Content-Type', 'application/gzip')
         .header('Content-Disposition', `attachment; filename="neiliro-${stamp}.tar.gz"`)
         .send(tar.stdout);
+    },
+  );
+
+  // ── The family's address (hosted only) ─────────────────────────────────
+
+  const notHosted = (reply: FastifyReply) =>
+    reply.code(403).send({ error: 'The family address is managed by the hosted service only' });
+
+  /*
+    What the family is called on the wire and whether that can still
+    change. The rename is a one-shot ticket that expires 24 hours after
+    setup (see RENAME_WINDOW_MS); both halves are decided here so that the
+    settings card and the first-sign-in offer read one answer.
+  */
+  app.get('/api/family/address', async (req, reply) => {
+    if (!env.hostedMode) return notHosted(reply);
+    if (!requireAdmin(req, reply)) return;
+    const { familyId } = currentTenant();
+    if (!familyId) return notHosted(reply);
+
+    const { familyAddress } = await import('../lib/tenants.js');
+    const address = familyAddress(familyId);
+    if (!address) return notHosted(reply);
+
+    const since = setupAt();
+    const until = since ? new Date(since.getTime() + RENAME_WINDOW_MS) : null;
+    const available = !address.renamedAt && until !== null && until.getTime() > Date.now();
+    return {
+      slug: address.slug,
+      domain: env.hostedDomain,
+      // The mail domain, so the card can spell out the address that moves
+      // along — null where the service has no mail
+      mail: env.mailDomain || null,
+      rename: {
+        available,
+        // Only meaningful while the offer stands — the UI shows the deadline
+        until: available ? until!.toISOString() : null,
+        renamed: address.renamedAt !== null,
+      },
+    };
+  });
+
+  /*
+    The one rename. Admin only, inside the window, once. The reply carries
+    the new URL: the session cookie is host-only, so the browser is sent to
+    the new address to sign in again — there is nothing to hand over.
+
+    The rate limit is there because "not available" is, in principle, an
+    oracle for which names exist. A fresh family's admin is the only one
+    who can ask, and only for a day, but ten guesses an hour is all a
+    person picking a name needs and far too slow for a census.
+  */
+  app.post(
+    '/api/family/rename',
+    { config: { rateLimit: { max: 10, timeWindow: '1 hour' } } },
+    async (req, reply) => {
+      if (!env.hostedMode) return notHosted(reply);
+      if (!requireAdmin(req, reply)) return;
+      const { familyId } = currentTenant();
+      if (!familyId) return notHosted(reply);
+
+      const parsed = renameInput.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'Check the fields' });
+      }
+      const slug = parsed.data.slug.trim().toLowerCase();
+
+      const { familyAddress, isWellFormedSlug, renameFamily } = await import('../lib/tenants.js');
+      const address = familyAddress(familyId);
+      if (!address) return notHosted(reply);
+
+      const since = setupAt();
+      const open = since !== null && since.getTime() + RENAME_WINDOW_MS > Date.now();
+      if (address.renamedAt || !open) {
+        return reply.code(400).send({ error: 'The family address can no longer be changed' });
+      }
+      if (!isWellFormedSlug(slug)) {
+        return reply.code(400).send({
+          error: 'An address is 3–30 lowercase letters, digits and dashes, starting and ending with a letter or digit',
+        });
+      }
+      if (slug === address.slug) {
+        return reply.code(400).send({ error: 'That is already the family address' });
+      }
+
+      let url: string;
+      try {
+        ({ url } = renameFamily(familyId, slug));
+      } catch (err) {
+        // Reserved, taken and retired all read the same from outside: the
+        // reasons differ only for the operator's log
+        log.info(`family rename refused for ${address.slug}: ${(err as Error).message}`);
+        return reply.code(409).send({ error: 'This address is not available' });
+      }
+
+      log.notice(`family renamed: ${address.slug} → ${slug} by ${req.user!.email}`);
+      return { ok: true, url };
     },
   );
 

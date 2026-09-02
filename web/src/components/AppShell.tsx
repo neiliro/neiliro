@@ -1,8 +1,12 @@
 import { t } from '../lib/i18n';
 import { BUILD_SHA, REPO_URL, VERSION } from '../lib/build';
 import { homeName } from '../lib/home-name';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState, type ReactNode } from 'react';
+import { ADDRESS_ANCHOR } from './FamilyDataSection';
+import { Modal, dialogGhost, dialogPrimary } from './Dialog';
+import { useFamilyAddress, familyUrl } from '../lib/family-address';
+import { loadLocal, saveLocal } from '../lib/storage';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { applyUpdate, setupPwa } from '../lib/pwa';
@@ -400,6 +404,8 @@ export function AppShell() {
         <Outlet key={refreshKey} />
       </main>
 
+      <RenameOffer />
+
       <QuickAdd onAdded={() => setRefreshKey((k) => k + 1)} />
       <FailureToast />
       <UpdateToast />
@@ -543,5 +549,68 @@ function ConfirmAddressNotice() {
         ×
       </button>
     </div>
+  );
+}
+
+/*
+  The one-time offer to pick the family's address, shown to the admin of a
+  fresh hosted family. The default slug was the operator's choice
+  (<name>-<4 random chars>); nobody asked the family, and the window for
+  changing it is a day (routes/family.ts). Someone who never opens
+  Settings would miss it entirely — so it is said once, out loud.
+
+  Dismissal is device-local: a "no" on the laptop is not repeated there,
+  but the phone gets one ask of its own. Acceptable for something that
+  goes silent by itself within 24 hours, and cheaper than a setting that
+  would need its own write. Once the address is changed or the day has
+  passed, the server's answer switches the offer off everywhere.
+*/
+const RENAME_OFFER_KEY = 'hub-rename-offer-seen';
+
+function RenameOffer() {
+  const { user } = useAuth();
+  const { state } = useServiceState();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [seen, setSeen] = useState(() => loadLocal(RENAME_OFFER_KEY, false));
+  // On Settings the card itself is on the page — asking twice is noise
+  const eligible =
+    !seen && user?.role === 'admin' && Boolean(state?.hosted) && !state?.demo && location.pathname !== '/settings';
+  const address = useFamilyAddress(eligible);
+
+  if (!eligible || !address?.rename.available) return null;
+
+  function dismiss() {
+    saveLocal(RENAME_OFFER_KEY, true);
+    setSeen(true);
+  }
+
+  function choose() {
+    dismiss();
+    void navigate(`/settings#${ADDRESS_ANCHOR}`);
+  }
+
+  return (
+    <Modal
+      title={t('Pick your family address?')}
+      onClose={dismiss}
+      onSubmit={choose}
+      footer={
+        <>
+          <button type="button" onClick={dismiss} className={dialogGhost}>
+            {t('Keep this address')}
+          </button>
+          <button type="button" onClick={choose} className={dialogPrimary}>
+            {t('Choose an address')}
+          </button>
+        </>
+      }
+    >
+      <p className="text-sm text-ink">
+        {t('Your hub lives at {url}. For the first 24 hours after setup you can change that once — to something easier to say out loud. After that the address is permanent.', {
+          url: familyUrl(address.slug, address.domain),
+        })}
+      </p>
+    </Modal>
   );
 }
