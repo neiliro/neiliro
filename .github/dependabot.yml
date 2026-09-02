@@ -1,0 +1,37 @@
+# Two ecosystems, one reason: a pin that nobody moves rots instead of
+# drifting. Dependabot proposes the bumps for a human to merge.
+#
+# Actions are pinned to commit SHAs (a floating major tag is mutable, and
+# the release image reaches every self-hosted install); the bump moves the
+# SHA and its version comment together.
+#
+# npm: `npm audit` only knows advisories that were filed. The lockfile
+# once sat eight patch releases behind on imapflow and three behind on
+# nodemailer — hardening fixes in the address parser and the access
+# sandbox, none of them with a CVE — and a human had to notice. Weekly,
+# minor and patch grouped into one PR because they are semver-safe;
+# majors arrive one at a time, because zod 4 or vite 8 are migrations,
+# not bumps.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # The runtime image is node:22-bookworm-slim. Types above the
+      # runtime are an error, not an update — the major moves with the
+      # image, by hand.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
