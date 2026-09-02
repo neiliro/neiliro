@@ -7,6 +7,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { onEnter } from '../lib/keys';
+import { browserTimezone } from '../lib/timezone';
 
 /*
   The sign-in screen is the one page a stranger can reach, so its footer
@@ -363,7 +364,15 @@ function Setup() {
     setBusy(true);
     setError(null);
     try {
-      await api.post('/auth/setup', { name, email, password });
+      await api.post('/auth/setup', {
+        name,
+        email,
+        password,
+        // Not a question on the form: the browser knows, and a family that
+        // sets up from Chicago should not have to discover later why "today"
+        // was flipping in the afternoon. Changeable in Settings.
+        timezone: browserTimezone(),
+      });
       window.location.href = '/';
     } catch (err) {
       setError(err instanceof Error ? err.message : t('Something went wrong'));

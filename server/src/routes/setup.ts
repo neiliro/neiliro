@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { currentTenant, db, id, now } from '../db/index.js';
+import { currentTenant, db, id, invalidateTimezone, now } from '../db/index.js';
+import { isValidTimezone } from '../lib/timezone.js';
 import { createSession, setSessionCookie } from '../lib/auth.js';
 import { hashPassword } from '../lib/password.js';
 import { sendVerificationEmail } from './email-verify.js';
@@ -81,7 +82,15 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'The hub is already set up' });
     }
     const parsed = z
-      .object({ name: nameField, email: emailField, password: passwordField })
+      .object({
+        name: nameField,
+        email: emailField,
+        password: passwordField,
+        // Sent by the browser, not asked of the person: the first screen is
+        // not the place for a 400-entry dropdown, and the browser already
+        // knows the answer. Correctable later in Settings.
+        timezone: z.string().max(64).optional(),
+      })
       .safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
@@ -101,12 +110,25 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         `INSERT INTO users (id, email, name, role, password_hash, color, must_change_password, created_at)
          VALUES (?, ?, ?, 'admin', ?, ?, 0, ?)`,
       ).run(userId, parsed.data.email, parsed.data.name, passwordHash, nextColor(), now());
+      // A zone we cannot use is dropped rather than raised: a browser with an
+      // odd idea of its own timezone must not be able to block the one screen
+      // that stands between a family and their hub.
+      const tz = parsed.data.timezone?.trim();
+      if (tz && isValidTimezone(tz)) {
+        db.prepare(
+          `INSERT INTO settings (key, value, updated_at) VALUES ('home.timezone', ?, ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+        ).run(tz, now());
+      }
       return true;
     })();
 
     if (!created) {
       return reply.code(403).send({ error: 'The hub is already set up' });
     }
+
+    // The tenant may already have cached "no zone" from a today() before this.
+    invalidateTimezone();
 
     log.info(`initial setup: admin ${parsed.data.email} created from ${req.ip}`);
     // Hosted only, and a no-op elsewhere: an address that nobody confirmed

@@ -12,6 +12,7 @@ import { GlobalSearch, SearchTrigger } from './GlobalSearch';
 import { applyTheme, initialDark, persistTheme } from '../lib/theme';
 import { useServiceState } from '../lib/service';
 import { supportLink } from '../lib/support';
+import { setFamilyTimezone, TIMEZONE_KEY } from '../lib/timezone';
 
 interface NavItem {
   to: string;
@@ -288,7 +289,12 @@ export function AppShell() {
   useEffect(() => {
     void api
       .get<Record<string, string>>('/settings')
-      .then(setSettings)
+      .then((loaded) => {
+        // Before setSettings, not after: the re-render this schedules is the
+        // one where today() is read again, and it must already see the zone.
+        setFamilyTimezone(loaded[TIMEZONE_KEY]);
+        setSettings(loaded);
+      })
       .catch(() => {});
   }, []);
 

@@ -1,4 +1,5 @@
 import { t } from './i18n';
+import { dayIn, familyTimezone } from './timezone';
 import type { Task } from './api';
 
 export const STATUSES = ['backlog', 'todo', 'in_progress', 'done', 'cancelled'] as const;
@@ -96,9 +97,10 @@ export function isClosed(task: Task): boolean {
   return task.status === 'done' || task.status === 'cancelled';
 }
 
+/**
+ * Today for the family, not for this browser — a member in another zone has
+ * to see the same board as everyone at home. Matches today() on the server.
+ */
 export function today(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-    d.getDate(),
-  ).padStart(2, '0')}`;
+  return dayIn(familyTimezone(), new Date());
 }
