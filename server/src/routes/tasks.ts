@@ -7,6 +7,31 @@ const STATUSES = ['backlog', 'todo', 'in_progress', 'done', 'cancelled'] as cons
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/*
+  The list is capped, because on the hosted service one process serves
+  every family: a single family with tens of thousands of tasks made
+  `GET /api/tasks` load the whole table and serialise it on the shared
+  event loop, and unrelated families measurably waited for it. The cap is
+  far above any real household and the ORDER BY keeps the rows anyone
+  actually looks at, so nothing changes in practice — it only removes the
+  ceiling. `/api/transactions` has been capped the same way from the start.
+*/
+const LIST_LIMIT = 1000;
+const LIST_LIMIT_MAX = 2000;
+
+/*
+  One row's shape, shared by the list and by the single-task route so the
+  two can never drift apart — the client treats them interchangeably.
+*/
+const TASK_SELECT = `SELECT t.*, p.title AS project_title, p.color AS project_color,
+                u.name AS assignee_name, u.color AS assignee_color,
+                (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) AS child_count,
+                (SELECT count(*) FROM tasks c
+                  WHERE c.parent_id = t.id AND c.status = 'done') AS child_done
+           FROM tasks t
+           JOIN projects p ON p.id = t.project_id
+           LEFT JOIN users u ON u.id = t.assignee_id`;
+
 interface TaskRow {
   id: string;
   project_id: string;
@@ -91,6 +116,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         due_after: z.string().regex(DATE).optional(),
         include_done: z.enum(['true', 'false']).optional(),
         search: z.string().max(200).optional(),
+        limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).optional(),
       })
       .parse(req.query);
 
@@ -136,18 +162,29 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
     return db
       .prepare(
-        `SELECT t.*, p.title AS project_title, p.color AS project_color,
-                u.name AS assignee_name, u.color AS assignee_color,
-                (SELECT count(*) FROM tasks c WHERE c.parent_id = t.id) AS child_count,
-                (SELECT count(*) FROM tasks c
-                  WHERE c.parent_id = t.id AND c.status = 'done') AS child_done
-           FROM tasks t
-           JOIN projects p ON p.id = t.project_id
-           LEFT JOIN users u ON u.id = t.assignee_id
+        `${TASK_SELECT}
            ${clause}
-          ORDER BY t.position, t.created_at`,
+          ORDER BY t.position, t.created_at
+          LIMIT ?`,
       )
-      .all(...args);
+      .all(...args, q.limit ?? LIST_LIMIT);
+  });
+
+  /*
+    One task by id. Exists so that opening a task by link — from global
+    search, from a mail message, from the dashboard — does not have to
+    fetch the family's entire task list and find it client-side, which is
+    what forced the list to be unbounded in the first place.
+
+    Tasks carry no owner_id: they belong to the family, not to a person
+    (unlike notes and personal accounts), so the tenant and a session are
+    the whole guard here.
+  */
+  app.get('/api/tasks/:id', (req, reply) => {
+    const { id: taskId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const row = db.prepare(`${TASK_SELECT} WHERE t.id = ?`).get(taskId);
+    if (!row) return reply.code(404).send({ error: 'Task not found' });
+    return row;
   });
 
   app.post('/api/tasks', (req, reply) => {

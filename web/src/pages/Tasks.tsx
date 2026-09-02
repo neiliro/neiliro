@@ -103,14 +103,14 @@ export function Tasks() {
     if (!project && !target) return;
     if (project) setProjectId(project);
     if (target) {
+      // One task by id, not the whole family's list filtered client-side:
+      // the old version fetched every task including done ones just to
+      // find this one, which is what kept that endpoint uncapped.
       void api
-        .get<Task[]>('/tasks?include_done=true')
-        .then((all) => {
-          const found = all.find((t) => t.id === target);
-          if (found) {
-            setProjectId(found.project_id);
-            setSelected(found);
-          }
+        .get<Task>(`/tasks/${target}`)
+        .then((found) => {
+          setProjectId(found.project_id);
+          setSelected(found);
         })
         .catch(() => {});
     }
