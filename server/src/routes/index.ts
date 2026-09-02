@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { db, now, today as localToday } from '../db/index.js';
+import { db, invalidateTimezone, now, today as familyToday } from '../db/index.js';
+import { isValidTimezone } from '../lib/timezone.js';
 import { env } from '../env.js';
 import { listOccurrences, remindersFor } from './calendar.js';
 
@@ -59,6 +60,14 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply.code(400).send({ error: 'Settings must be pairs of strings' });
     }
+    // The family's timezone is the one setting that is not just a label:
+    // today() computes money, budgets and recurrence from it. An unusable
+    // name would not fail here, it would fail later and elsewhere, so it is
+    // rejected at the door. Empty means "clear it" — back to the process clock.
+    const tz = parsed.data['home.timezone'];
+    if (tz !== undefined && tz.trim() !== '' && !isValidTimezone(tz.trim())) {
+      return reply.code(400).send({ error: 'Unknown timezone' });
+    }
     // A ceiling on the total key count — the same protection from the other
     // end. Only new keys count: updating existing ones doesn't grow the base.
     const keys = Object.keys(parsed.data);
@@ -80,6 +89,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       for (const [k, v] of entries) stmt.run(k, v, now());
     });
     write(Object.entries(parsed.data));
+    // Unconditional: cheaper than deciding whether the zone was among the
+    // keys, and the next today() pays one indexed read of a tiny table.
+    invalidateTimezone();
     return { ok: true };
   });
 
@@ -254,8 +266,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // ── Dashboard ──────────────────────────────────────────────────────────
 
   app.get('/api/dashboard', (req) => {
-    // By the local clock: in UTC "today" is still yesterday after midnight
-    const today = localToday();
+    // By the family's clock: in UTC "today" is still yesterday after midnight,
+    // and on the server's clock it is somebody else's day entirely
+    const today = familyToday();
 
     /*
       All three buckets go by the effective date: when an expected

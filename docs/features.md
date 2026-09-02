@@ -89,7 +89,7 @@ An attachment is visible to whoever can see the note. Deleting a note removes th
 
 ![Calendar: shared and personal layers, recurring events, who is going](screenshots/calendar.png)
 
-Time is stored as local wall-clock time, not UTC. "Every Tuesday at 10:00" must stay at 10:00 after a clock change; storing UTC would force recalculating every series occurrence through DST rules. A household lives in one time zone.
+Time is stored as local wall-clock time, not UTC. "Every Tuesday at 10:00" must stay at 10:00 after a clock change; storing UTC would force recalculating every series occurrence through DST rules. A household lives in one time zone, and names it in Settings → Time zone.
 
 Recurring events expand on the fly per requested range and are never materialised into the database: "every year" with no end date is an infinite table. A single occurrence can be cancelled without touching the series; cancelled dates are kept as an exception list.
 

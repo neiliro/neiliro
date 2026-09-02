@@ -131,6 +131,11 @@ AGE_RECIPIENT=
 ENV
 ```
 
+`TZ` is the hub's default wall clock. It stays the simplest way to set the
+time zone for a single household, and it is what the hub falls back to — but
+the family can also name its own zone in Settings → Time zone, which then
+wins and travels with the database through backups and moves.
+
 `SECURE_COOKIES` and `TRUST_PROXY` need no setting — the production
 compose enables them unconditionally, because behind Caddy there is no
 other valid configuration.

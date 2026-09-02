@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { env, legacyDataDir, paths } from '../env.js';
 import { log } from '../lib/log.js';
+import { dayIn, isValidTimezone, localDay } from '../lib/timezone.js';
 
 /**
  * One-time move of data from the old ./data to the new place.
@@ -108,6 +109,13 @@ export interface Tenant {
   familyId?: string;
   /** Only the hosted decoy behind unknown subdomains. See lib/tenants.ts */
   ghost?: boolean;
+  /**
+   * Cached family timezone, read lazily from settings on first use:
+   * undefined means "not looked up yet", null means "none set, follow the
+   * process clock". Invalidated by invalidateTimezone() when settings are
+   * written — the tenant object outlives the request, it lives in the pool.
+   */
+  timezone?: string | null;
 }
 
 const defaultTenant: Tenant = {
@@ -137,7 +145,9 @@ export function runWithTenant<T>(tenant: Tenant, fn: () => T): T {
  * irrelevant; hosted tenants must use runWithTenant.
  */
 export function runWithDb<T>(d: Database.Database, fn: () => T): T {
-  return dbContext.run({ ...defaultTenant, db: d }, fn);
+  // timezone is reset explicitly: spreading defaultTenant would carry its
+  // cached lookup onto a different database, which has its own settings.
+  return dbContext.run({ ...defaultTenant, db: d, timezone: undefined }, fn);
 }
 
 /*
@@ -162,16 +172,50 @@ export function now(): string {
 }
 
 /**
- * Today's date by the process's local clock (TZ), not UTC.
+ * The current family's timezone, or null to follow the process clock.
+ *
+ * Read once per tenant and cached on it. The read is wrapped because
+ * today() must never throw: it runs during seeding and on the ghost's
+ * in-memory database, and a tenant whose migrations have not created
+ * `settings` yet would otherwise take a request down with it.
+ */
+export function familyTimezone(): string | null {
+  const tenant = currentTenant();
+  if (tenant.timezone !== undefined) return tenant.timezone;
+
+  let resolved: string | null = null;
+  try {
+    const row = tenant.db
+      .prepare("SELECT value FROM settings WHERE key = 'home.timezone'")
+      .get() as { value: string } | undefined;
+    const tz = row?.value?.trim();
+    // Validated on the way in too (PATCH /api/settings); checked again here
+    // because a database can also arrive by restore, import or hand-editing.
+    if (tz && isValidTimezone(tz)) resolved = tz;
+  } catch {
+    resolved = null;
+  }
+
+  tenant.timezone = resolved;
+  return resolved;
+}
+
+/** Drop the cached zone after a settings write. Runs inside the tenant. */
+export function invalidateTimezone(): void {
+  currentTenant().timezone = undefined;
+}
+
+/**
+ * Today's date for the current family — its own timezone when it has set
+ * one, otherwise the process's local clock (TZ), and never UTC.
  *
  * toISOString() gives the Greenwich date: between midnight and +01/+02 it
  * is still yesterday's, and the dashboard and recurring transactions would
- * live in "yesterday". The frontend (web/src/lib/tasks.ts) computes
- * "today" the same way — by the local clock; the server must agree.
+ * live in "yesterday". The frontend computes "today" from the same family
+ * zone (web/src/lib/tasks.ts); the server must agree.
  */
 export function today(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-    d.getDate(),
-  ).padStart(2, '0')}`;
+  const at = new Date();
+  const tz = familyTimezone();
+  return tz ? dayIn(tz, at) : localDay(at);
 }

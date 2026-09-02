@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { currentTenant, db, id, now, today } from '../db/index.js';
+import { currentTenant, db, familyTimezone, id, now, today } from '../db/index.js';
 
 interface NoteRow {
   id: string;
@@ -140,8 +140,11 @@ function resolveLocale(locale: string | undefined): string {
 export function applyPlaceholders(text: string, authorName: string, locale?: string): string {
   const date = new Date();
   const tag = resolveLocale(locale);
-  const longDate = new Intl.DateTimeFormat(tag, { dateStyle: 'long' }).format(date);
-  const shortTime = new Intl.DateTimeFormat(tag, { timeStyle: 'short' }).format(date);
+  // The family's zone, not the server's: {{time}} in particular is worthless
+  // stamped with a clock nobody in the house reads. undefined = process TZ.
+  const timeZone = familyTimezone() ?? undefined;
+  const longDate = new Intl.DateTimeFormat(tag, { dateStyle: 'long', timeZone }).format(date);
+  const shortTime = new Intl.DateTimeFormat(tag, { timeStyle: 'short', timeZone }).format(date);
   const values: Record<string, string> = {
     дата: longDate,
     date: longDate,

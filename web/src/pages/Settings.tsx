@@ -1,6 +1,7 @@
 import { lang, setLang, t } from '../lib/i18n';
 import { BUILD_SHA, REPO_URL, VERSION } from '../lib/build';
 import { formatStamp, setWeekStart, weekStart } from '../lib/format';
+import { dayIn, knownTimezones, setFamilyTimezone, TIMEZONE_KEY } from '../lib/timezone';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -488,6 +489,9 @@ export function Settings() {
     };
     try {
       await api.patch('/settings', payload);
+      // Applied here rather than on change: until the save lands, the rest of
+      // the app must keep computing "today" the way the server still does.
+      setFamilyTimezone(values[TIMEZONE_KEY]);
       setValues(payload);
       setGoalTarget(formatAmountInput(target));
       setStatus(t('Saved'));
@@ -685,6 +689,26 @@ export function Settings() {
             {t('Sunday')}
           </button>
         </div>
+
+        <h2 className="eyebrow mt-6 mb-4">{t('Time zone')}</h2>
+        <select
+          value={values[TIMEZONE_KEY] ?? ''}
+          onChange={(e) => setValues({ ...values, [TIMEZONE_KEY]: e.target.value })}
+          aria-label={t('Time zone')}
+          className="w-full max-w-sm rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+        >
+          <option value="">{t('Follow the server clock')}</option>
+          {knownTimezones().map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
+        </select>
+        <p className="mt-3 text-xs text-muted">
+          {t('Shared by the whole family, unlike the two settings above: it decides when today becomes tomorrow for due tasks, budget periods and recurring payments.')}
+          {(values[TIMEZONE_KEY] ?? '').trim() !== '' &&
+            ` ${t('Today there:')} ${dayIn((values[TIMEZONE_KEY] ?? '').trim(), new Date())}`}
+        </p>
       </section>
 
       <div className="mb-5 break-inside-avoid">

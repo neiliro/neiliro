@@ -32,7 +32,13 @@ Passwords are hashed with scrypt from Node's standard library. The sessions tabl
 
 ## Time
 
-Everything a person enters or reads is local wall-clock time, server included: due dates, "today" on the dashboard, recurring transaction dates, calendar events and note placeholders are computed in the `TZ` time zone. Otherwise everything would live in "yesterday" between midnight and one-two a.m., and "every Tuesday at 10:00" would drift with DST. A household lives in one time zone; set `TZ` accordingly.
+Everything a person enters or reads is local wall-clock time, server included: due dates, "today" on the dashboard, recurring transaction dates, calendar events and note placeholders are all computed on a wall clock. Otherwise everything would live in "yesterday" between midnight and one-two a.m., and "every Tuesday at 10:00" would drift with DST.
+
+Which wall clock is the family's own. A household lives in one time zone, and it names it in Settings → Time zone, stored as an IANA name under the settings key `home.timezone`. `today()` in `db/index.ts` is the single place the hub reads a clock, so it is the single place the zone enters; everything downstream — overdue tasks, budget periods, `runAutoCreate` — inherits it without knowing it exists. The frontend computes "today" from the same family zone rather than from the browser's, so a member travelling sees the board the rest of the house sees.
+
+A family that has named no zone falls back to the process `TZ`, which is what every family got before the setting existed — so a self-hosted hub can keep treating `TZ` as the control and change nothing. A hosted process, though, serves families on several continents at once, and there `TZ` is only a default: it is one variable, and the families are not.
+
+The setting lives in the family's own database rather than in the hosted registry, so it travels with an export, a restore and a move between machines, and self-hosted hubs get the same feature rather than a hosted-only one.
 
 Machine timestamps are the deliberate exception: `created_at`, `updated_at`, session stamps and note-version times are written in UTC (`now()` in `db/index.ts`, and the `datetime('now')` column defaults). They are never compared against a wall-clock date — only against each other — so one monotonic scale is the safer choice, and it survives a server that changes time zone. The rule of thumb when adding a column: a date a person picked is local, a moment the machine recorded is UTC.
 

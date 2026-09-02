@@ -65,13 +65,18 @@ await eachFamily(() => {
   const created = runAutoCreate();
   if (created > 0) log.info(`recurring transactions: created ${created}`);
 });
-// ...and once a day from then on. Catch-up used to be boot-only, which a
+// ...and hourly from then on. Catch-up used to be boot-only, which a
 // server that never restarts (hosted, a long-lived home box) never hits:
 // auto-created payments silently stopped between deploys. runAutoCreate
 // is idempotent — a repeat run creates nothing extra.
+//
+// Hourly rather than daily because families now keep their own timezones:
+// a daily tick fires at one instant, and a family whose midnight falls just
+// after it would wait almost a full day for the day's transactions. An hour
+// is the coarsest interval that bounds that lag by the width of the zones.
 setInterval(
   () => void eachFamily(runAutoCreate),
-  24 * 60 * 60_000,
+  60 * 60_000,
 ).unref();
 
 try {
