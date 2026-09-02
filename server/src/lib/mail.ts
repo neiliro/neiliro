@@ -3,7 +3,13 @@ import { ImapFlow } from 'imapflow';
 import nodemailer from 'nodemailer';
 import { currentTenant, db, id, now } from '../db/index.js';
 import { env } from '../env.js';
-import { saveMailAttachment } from '../routes/attachments.js';
+import {
+  attachmentBytesUsed,
+  discardStaged,
+  insertStagedAttachment,
+  stageMailAttachment,
+  type StagedAttachment,
+} from '../routes/attachments.js';
 import { log } from './log.js';
 import { familySlug } from './tenants.js';
 
@@ -221,62 +227,125 @@ export async function sendServiceEmail(to: string, subject: string, text: string
   }
 }
 
-/** Sanity cap: a message source larger than this is not household mail. */
-const MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
+/**
+ * Sanity cap: a message source larger than this is not household mail.
+ * The IMAP fetch truncates at it; the webhook refuses past it — and does
+ * so before parsing, so an oversized delivery costs a length check rather
+ * than a run of postal-mime over 25 MB on the shared event loop (#189).
+ */
+export const MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
+
+/**
+ * A message that can never be ingested, however many times it is retried:
+ * malformed beyond what postal-mime accepts, or over the size cap. The
+ * webhook answers these with a permanent refusal (406) and everything else
+ * — a full disk, a busy database — with a retryable one, because ingest
+ * is all-or-nothing and the next attempt can succeed (#187).
+ */
+export class UnparseableMail extends Error {
+  constructor(message: string, options?: { cause: unknown }) {
+    super(message, options);
+    this.name = 'UnparseableMail';
+  }
+}
 
 /**
  * Parses raw MIME and stores the message. Returns the new row id, or
  * null when the message is already known (same Message-ID) — ingest is
  * idempotent, so a re-poll or a restart never duplicates anything.
+ *
+ * All-or-nothing. Attachment files are staged first, then the message
+ * row and every attachment row commit in one transaction; if anything
+ * fails, the staged files are removed and nothing is left in the
+ * database. That is what makes a retry safe: a message that failed is
+ * not "known" on the next attempt, and one that succeeded is complete.
  */
 export async function ingestEmail(raw: Uint8Array | string): Promise<string | null> {
-  const email: Email = await PostalMime.parse(raw);
+  const size = typeof raw === 'string' ? Buffer.byteLength(raw) : raw.byteLength;
+  if (size > MAX_MESSAGE_BYTES) {
+    throw new UnparseableMail(`Message of ${size} bytes is over the ${MAX_MESSAGE_BYTES}-byte cap`);
+  }
+
+  let email: Email;
+  try {
+    email = await PostalMime.parse(raw);
+  } catch (err) {
+    throw new UnparseableMail('postal-mime could not parse the message', { cause: err });
+  }
 
   const messageId = email.messageId?.slice(0, 500) ?? null;
-  if (messageId) {
-    const known = db
-      .prepare('SELECT id FROM mail_messages WHERE message_id = ?')
-      .get(messageId);
-    if (known) return null;
+  const known = () =>
+    messageId !== null &&
+    db.prepare('SELECT 1 FROM mail_messages WHERE message_id = ?').get(messageId) !== undefined;
+  // Cheap exit before any disk work; checked again inside the transaction,
+  // where it is authoritative
+  if (known()) return null;
+
+  const staged: StagedAttachment[] = [];
+  try {
+    let used = attachmentBytesUsed();
+    for (const part of email.attachments ?? []) {
+      // Inline images of HTML signatures and the like are noise, not documents
+      if (part.disposition === 'inline' && !part.filename) continue;
+      // postal-mime yields string | ArrayBuffer | Uint8Array depending on encoding
+      const content =
+        typeof part.content === 'string'
+          ? Buffer.from(part.content)
+          : part.content instanceof ArrayBuffer
+            ? Buffer.from(new Uint8Array(part.content))
+            : Buffer.from(part.content);
+      const s = await stageMailAttachment(
+        {
+          filename: part.filename || 'attachment',
+          mime: part.mimeType || 'application/octet-stream',
+          content,
+        },
+        used,
+      );
+      if (s) {
+        staged.push(s);
+        used += s.size;
+      }
+    }
+
+    const rowId = id();
+    // `immediate`: take the write lock at BEGIN, so the duplicate check and
+    // the insert cannot interleave with another ingest of the same letter
+    const stored = db
+      .transaction((): string | null => {
+        if (known()) return null;
+        db.prepare(
+          `INSERT INTO mail_messages (id, message_id, kind, from_address, from_name, to_address,
+                                      subject, body_text, sent_at, received_at)
+           VALUES (?, ?, 'in', ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          rowId,
+          messageId,
+          email.from?.address?.slice(0, 300) ?? '(unknown)',
+          email.from?.name?.slice(0, 200) || null,
+          email.to?.[0]?.address?.slice(0, 300) ?? null,
+          (email.subject ?? '').slice(0, 500),
+          // The text part; when a message is HTML-only, fall back to a crude
+          // tag strip so the reader is never left with an empty body
+          (email.text ?? textFromHtml(email.html)).slice(0, 100_000),
+          email.date ? email.date.replace('T', ' ').slice(0, 19) : null,
+          now(),
+        );
+        for (const s of staged) insertStagedAttachment(rowId, s);
+        return rowId;
+      })
+      .immediate();
+
+    if (stored === null) {
+      // Lost the race to an identical delivery: its files are the ones that count
+      await discardStaged(staged);
+      return null;
+    }
+    return stored;
+  } catch (err) {
+    await discardStaged(staged);
+    throw err;
   }
-
-  const rowId = id();
-  db.prepare(
-    `INSERT INTO mail_messages (id, message_id, kind, from_address, from_name, to_address,
-                                subject, body_text, sent_at, received_at)
-     VALUES (?, ?, 'in', ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    rowId,
-    messageId,
-    email.from?.address?.slice(0, 300) ?? '(unknown)',
-    email.from?.name?.slice(0, 200) || null,
-    email.to?.[0]?.address?.slice(0, 300) ?? null,
-    (email.subject ?? '').slice(0, 500),
-    // The text part; when a message is HTML-only, fall back to a crude
-    // tag strip so the reader is never left with an empty body
-    (email.text ?? textFromHtml(email.html)).slice(0, 100_000),
-    email.date ? email.date.replace('T', ' ').slice(0, 19) : null,
-    now(),
-  );
-
-  for (const part of email.attachments ?? []) {
-    // Inline images of HTML signatures and the like are noise, not documents
-    if (part.disposition === 'inline' && !part.filename) continue;
-    // postal-mime yields string | ArrayBuffer | Uint8Array depending on encoding
-    const content =
-      typeof part.content === 'string'
-        ? Buffer.from(part.content)
-        : part.content instanceof ArrayBuffer
-          ? Buffer.from(new Uint8Array(part.content))
-          : Buffer.from(part.content);
-    await saveMailAttachment(rowId, {
-      filename: part.filename || 'attachment',
-      mime: part.mimeType || 'application/octet-stream',
-      content,
-    });
-  }
-
-  return rowId;
 }
 
 /** Last-resort readable text for HTML-only messages. Not a renderer. */
