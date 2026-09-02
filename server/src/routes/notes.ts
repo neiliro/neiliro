@@ -25,6 +25,17 @@ interface NoteRow {
  */
 const VISIBLE = "(n.visibility = 'shared' OR n.owner_id = ?)";
 
+/*
+  The list is capped, for the same reason `/api/tasks` is: on the hosted
+  service one process serves every family, and a single family with tens
+  of thousands of notes made this endpoint load the whole table — each row
+  carrying a 400-character excerpt — and serialise it on the shared event
+  loop, which unrelated families measurably waited for. Pinned-first,
+  newest-first ordering means the cap keeps the rows people actually read.
+*/
+const LIST_LIMIT = 1000;
+const LIST_LIMIT_MAX = 2000;
+
 /**
  * Note preview for the list: markdown syntax is stripped, text remains.
  * A real markdown parser is overkill here — the preview lives on a single
@@ -285,6 +296,7 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
         folder_id: z.string().optional(),
         templates: z.enum(['true', 'false']).optional(),
         q: z.string().max(200).optional(),
+        limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).optional(),
       })
       .parse(req.query);
 
@@ -311,9 +323,10 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
            FROM notes n
            LEFT JOIN users u ON u.id = n.owner_id
           WHERE ${where.join(' AND ')}
-          ORDER BY n.pinned DESC, n.updated_at DESC`,
+          ORDER BY n.pinned DESC, n.updated_at DESC
+          LIMIT ?`,
       )
-      .all(...args) as Record<string, unknown>[];
+      .all(...args, q.limit ?? LIST_LIMIT) as Record<string, unknown>[];
 
     // The preview is cleaned here, not in SQL: the query used to cut raw
     // markdown, and the list showed **asterisks** and [[brackets]]
