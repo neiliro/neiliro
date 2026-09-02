@@ -77,6 +77,48 @@ describe('createFamily', () => {
   });
 });
 
+describe('renameFamily', () => {
+  beforeAll(() => tenants.initHosted());
+
+  it('moves the family once, routes the new slug at once and retires the old one', () => {
+    const family = tenants.createFamily('smiths-r1n1');
+    expect(tenants.familyAddress(family.familyId)).toEqual({ slug: 'smiths-r1n1', renamedAt: null });
+
+    // Warm the cache both ways: the old slug as a hit, the new one as a
+    // miss. A rename that left either entry behind would keep routing
+    // the old name (or refusing the new one) for the cache's 30 s.
+    expect(tenants.tenantForSlug('smiths-r1n1')?.familyId).toBe(family.familyId);
+    expect(tenants.tenantForSlug('smiths')).toBeNull();
+
+    const { url } = tenants.renameFamily(family.familyId, 'smiths');
+    expect(url).toBe('https://smiths.neiliro.test/');
+    expect(tenants.familySlug(family.familyId)).toBe('smiths');
+    expect(tenants.familyAddress(family.familyId)?.renamedAt).not.toBeNull();
+    expect(tenants.tenantForSlug('smiths')?.familyId).toBe(family.familyId);
+    expect(tenants.tenantForSlug('smiths-r1n1')).toBeNull();
+
+    // Once: the ticket is spent
+    expect(() => tenants.renameFamily(family.familyId, 'smiths-again')).toThrow(/already been renamed/);
+
+    // The old name is retired for good — like a deleted family's slug, a
+    // stranger inheriting it would inherit bookmarks and mail
+    expect(() => tenants.createFamily('smiths-r1n1')).toThrow(/already taken/);
+    const other = tenants.createFamily('other-o1o1');
+    expect(() => tenants.renameFamily(other.familyId, 'smiths-r1n1')).toThrow(/already taken/);
+  });
+
+  it('passes the same gate as creation', () => {
+    const family = tenants.createFamily('gated-g1t1');
+    tenants.createFamily('occupied-c1c1');
+    expect(() => tenants.renameFamily(family.familyId, 'ab')).toThrow(/Bad slug/);
+    expect(() => tenants.renameFamily(family.familyId, 'mail')).toThrow(/reserved/);
+    expect(() => tenants.renameFamily(family.familyId, 'occupied-c1c1')).toThrow(/already taken/);
+    expect(() => tenants.renameFamily(family.familyId, 'gated-g1t1')).toThrow(/already the family address/);
+    // A refused rename spends nothing
+    expect(tenants.familyAddress(family.familyId)).toEqual({ slug: 'gated-g1t1', renamedAt: null });
+  });
+});
+
 describe('suspension and deletion', () => {
   let app: FastifyInstance;
 
@@ -304,8 +346,19 @@ describe('host routing', () => {
     await tenants.forEachFamily(() => {
       seen.push((db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n);
     });
-    // Three families exist by now (taken-q1w2, smiths, jones); exactly one has a user
-    expect(seen).toHaveLength(3);
+    // One visit per active family — the count comes from the registry
+    // rather than a tally of what earlier tests created, so a new test
+    // above does not have to know about this one. Exactly one family
+    // (smiths) has a user.
+    const { default: Database } = await import('better-sqlite3');
+    const { join } = await import('node:path');
+    const registry = new Database(join(env.dataDir, 'registry.db'), { readonly: true });
+    const { n: active } = registry
+      .prepare("SELECT count(*) AS n FROM families WHERE status = 'active'")
+      .get() as { n: number };
+    registry.close();
+    expect(active).toBeGreaterThanOrEqual(3);
+    expect(seen).toHaveLength(active);
     expect(seen.filter((n) => n === 1)).toHaveLength(1);
   });
 });

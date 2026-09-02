@@ -850,6 +850,27 @@ export const ru: Record<string, string> = {
   'Delete the family forever': 'Удалить семью навсегда',
   'Family deletion is available on the hosted service only': 'Удаление семьи доступно только в облачном сервисе',
   'The confirmation phrase does not match the family address': 'Контрольная фраза не совпадает с адресом семьи',
+
+  // ── Family address: the one rename (Settings → admin, first sign-in offer) ──
+  'Hub address': 'Адрес хаба',
+  'Your hub lives at {url}. You can change that once, until {when} — after that the address is permanent.': 'Ваш хаб живёт по адресу {url}. Его можно сменить один раз, до {when} — после этого адрес окончательный.',
+  'New address': 'Новый адрес',
+  '3–30 lowercase letters, digits and dashes.': '3–30 строчных латинских букв, цифр и дефисов.',
+  'Everything moves with the address: everyone signs in again at the new one, old links stop working, and the family mail address becomes {email}.': 'Вместе с адресом переезжает всё: все входят заново по новому адресу, старые ссылки перестают работать, а почтовый адрес семьи становится {email}.',
+  'Everything moves with the address: everyone signs in again at the new one, and old links stop working.': 'Вместе с адресом переезжает всё: все входят заново по новому адресу, старые ссылки перестают работать.',
+  'Change the address…': 'Сменить адрес…',
+  'Move the family to {url}?': 'Переехать на {url}?',
+  'This is the one rename the family gets — there is no second one. Everyone signs in again at the new address, and old links stop working.': 'Это единственное переименование — второго не будет. Все входят заново по новому адресу, старые ссылки перестают работать.',
+  'Move the family': 'Переехать',
+  'Pick your family address?': 'Выбрать адрес семьи?',
+  'Your hub lives at {url}. For the first 24 hours after setup you can change that once — to something easier to say out loud. After that the address is permanent.': 'Ваш хаб живёт по адресу {url}. В первые 24 часа после настройки его можно сменить один раз — на что-то, что легко сказать вслух. После этого адрес окончательный.',
+  'Keep this address': 'Оставить этот',
+  'Choose an address': 'Выбрать адрес',
+  'The family address is managed by the hosted service only': 'Адрес семьи есть только в облачном сервисе',
+  'The family address can no longer be changed': 'Адрес семьи уже нельзя изменить',
+  'An address is 3–30 lowercase letters, digits and dashes, starting and ending with a letter or digit': 'Адрес — 3–30 строчных латинских букв, цифр и дефисов, в начале и в конце буква или цифра',
+  'That is already the family address': 'Это и есть текущий адрес семьи',
+  'This address is not available': 'Этот адрес недоступен',
 };
 
 /** one / few / many, keyed by the English singular used in plural() calls. */

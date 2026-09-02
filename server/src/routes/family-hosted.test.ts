@@ -231,3 +231,112 @@ describe('family self-deletion', () => {
     expect(alive.json().email).toBe(survivor.email);
   });
 });
+
+describe('family address and the one rename', () => {
+  let fresh: Family;
+  let neighbour: Family;
+
+  beforeAll(async () => {
+    tenants.initHosted();
+    app = app ?? (await buildApp());
+    fresh = await bringUpFamily('newcomers-n1x1', 'Nia');
+    neighbour = await bringUpFamily('settled-s1x1', 'Sol');
+  });
+
+  it('offers a fresh family its rename for a day after setup', async () => {
+    const res = await app.inject({ url: '/api/family/address', headers: onFamily(fresh) });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      slug: string;
+      domain: string;
+      rename: { available: boolean; until: string | null; renamed: boolean };
+    };
+    expect(body.slug).toBe('newcomers-n1x1');
+    expect(body.domain).toBe('neiliro.test');
+    expect(body.rename.available).toBe(true);
+    expect(body.rename.renamed).toBe(false);
+    // The deadline is a day after the admin was created — setup was moments ago
+    const untilMs = new Date(body.rename.until!).getTime() - Date.now();
+    expect(untilMs).toBeGreaterThan(23 * 60 * 60_000);
+    expect(untilMs).toBeLessThanOrEqual(24 * 60 * 60_000);
+  });
+
+  it('refuses malformed, occupied and unchanged addresses without spending the rename', async () => {
+    const attempt = (slug: string) =>
+      app.inject({ method: 'POST', url: '/api/family/rename', headers: onFamily(fresh), payload: { slug } });
+
+    expect((await attempt('Ab')).statusCode).toBe(400);
+    expect((await attempt('newcomers-n1x1')).json().error).toBe('That is already the family address');
+    // A live neighbour and a reserved service name answer identically:
+    // the difference is nobody's business but the operator's log
+    const taken = await attempt(neighbour.slug);
+    expect(taken.statusCode).toBe(409);
+    expect(taken.json().error).toBe('This address is not available');
+    const reserved = await attempt('mail');
+    expect(reserved.statusCode).toBe(409);
+    expect(reserved.json().error).toBe('This address is not available');
+
+    const still = await app.inject({ url: '/api/family/address', headers: onFamily(fresh) });
+    expect(still.json().rename.available).toBe(true);
+  });
+
+  it('moves the family once; the old host becomes the ghost', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/family/rename',
+      headers: onFamily(fresh),
+      payload: { slug: ' Newcomers ' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, url: 'https://newcomers.neiliro.test/' });
+
+    // Same family, same sessions, new host
+    const moved = { ...fresh, slug: 'newcomers' };
+    const me = await app.inject({ url: '/api/auth/me', headers: onFamily(moved) });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().email).toBe(fresh.email);
+
+    // The old host answers like any unknown subdomain: set up, nobody home
+    const old = await app.inject({ url: '/api/auth/me', headers: onFamily(fresh) });
+    expect(old.statusCode).toBe(401);
+
+    const after = await app.inject({ url: '/api/family/address', headers: onFamily(moved) });
+    expect(after.json()).toMatchObject({
+      slug: 'newcomers',
+      rename: { available: false, until: null, renamed: true },
+    });
+    const again = await app.inject({
+      method: 'POST',
+      url: '/api/family/rename',
+      headers: onFamily(moved),
+      payload: { slug: 'newcomers-two' },
+    });
+    expect(again.statusCode).toBe(400);
+    expect(again.json().error).toBe('The family address can no longer be changed');
+
+    // The neighbour never noticed
+    const neighbourAddress = await app.inject({ url: '/api/family/address', headers: onFamily(neighbour) });
+    expect(neighbourAddress.json().slug).toBe(neighbour.slug);
+  });
+
+  it('closes the window a day after setup', async () => {
+    const late = await bringUpFamily('latecomers-l1x1', 'Lee');
+    // Age the admin account past the window, straight in the family's file
+    const direct = new Database(join(env.dataDir, 'families', late.familyId, 'hub.db'));
+    direct.prepare(`UPDATE users SET created_at = datetime('now', '-25 hours')`).run();
+    direct.close();
+
+    const state = await app.inject({ url: '/api/family/address', headers: onFamily(late) });
+    expect(state.json().rename).toEqual({ available: false, until: null, renamed: false });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/family/rename',
+      headers: onFamily(late),
+      payload: { slug: 'latecomers' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('The family address can no longer be changed');
+    expect(tenants.familySlug(late.familyId)).toBe('latecomers-l1x1');
+  });
+});

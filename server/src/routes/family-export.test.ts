@@ -29,6 +29,17 @@ beforeAll(async () => {
   admin = h.join('alex');
 });
 
+describe('family address, single-family mode', () => {
+  it('is a hosted-only feature', async () => {
+    // A self-hosted hub's address is whatever the operator's DNS says —
+    // there is no registry to rename in
+    const res = await h.as(admin.cookie, 'GET', '/api/family/address');
+    expect(res.statusCode).toBe(403);
+    const rename = await h.as(admin.cookie, 'POST', '/api/family/rename', { slug: 'anything' });
+    expect(rename.statusCode).toBe(403);
+  });
+});
+
 describe('family export, single-family mode', () => {
   it('round-trips through scripts/import.mjs', async () => {
     // Content worth checking on the far side: a note through the API and
