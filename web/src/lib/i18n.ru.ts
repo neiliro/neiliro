@@ -871,6 +871,10 @@ export const ru: Record<string, string> = {
   'An address is 3–30 lowercase letters, digits and dashes, starting and ending with a letter or digit': 'Адрес — 3–30 строчных латинских букв, цифр и дефисов, в начале и в конце буква или цифра',
   'That is already the family address': 'Это и есть текущий адрес семьи',
   'This address is not available': 'Этот адрес недоступен',
+
+  // ── Founder invitation: the hosted first run behind a mailed token (#157) ──
+  'The address the invitation came to — already confirmed for password recovery.': 'Адрес, на который пришло приглашение — уже подтверждён для восстановления пароля.',
+  'A different address than the invitation came to: we will ask you to confirm it.': 'Адрес отличается от того, куда пришло приглашение: мы попросим его подтвердить.',
 };
 
 /** one / few / many, keyed by the English singular used in plural() calls. */

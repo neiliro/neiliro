@@ -538,11 +538,27 @@ function ResetPassword() {
   );
 }
 
-/** Signup via an invite link: /join?token=... */
+interface InviteCheck {
+  valid: true;
+  role: 'admin' | 'member' | 'kid';
+  /** The address the invitation was mailed to — the founder's, confirmed by construction. */
+  email: string | null;
+}
+
+/**
+ * Signup via an invite link: /join?token=...
+ *
+ * The same page serves two arrivals. A member invited by the admin fills
+ * in the usual three fields. The founder of a hosted family arrives here
+ * too — the service mailed them the link (#157) — and for them this *is*
+ * the first-run screen: the copy says so, the login is pre-filled with the
+ * address the invitation reached, and the browser's timezone rides along
+ * exactly as it does on the open first run.
+ */
 function Join() {
   const token = new URLSearchParams(window.location.search).get('token') ?? '';
   // null — validating the link; then either the form or an explanation
-  const [valid, setValid] = useState<boolean | null>(null);
+  const [invite, setInvite] = useState<InviteCheck | false | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -551,21 +567,33 @@ function Join() {
 
   useEffect(() => {
     if (!token) {
-      setValid(false);
+      setInvite(false);
       return;
     }
     void api
-      .get(`/auth/invite?token=${encodeURIComponent(token)}`)
-      .then(() => setValid(true))
-      .catch(() => setValid(false));
+      .get<InviteCheck>(`/auth/invite?token=${encodeURIComponent(token)}`)
+      .then((check) => {
+        setInvite(check);
+        if (check.email) setEmail(check.email);
+      })
+      .catch(() => setInvite(false));
   }, [token]);
+
+  const founder = invite !== null && invite !== false && invite.role === 'admin';
+  const proven = invite !== null && invite !== false && invite.email !== null && email.trim().toLowerCase() === invite.email;
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await api.post('/auth/join', { token, name, email, password });
+      await api.post('/auth/join', {
+        token,
+        name,
+        email,
+        password,
+        ...(founder ? { timezone: browserTimezone() } : {}),
+      });
       window.location.href = '/';
     } catch (err) {
       setError(err instanceof Error ? err.message : t('Something went wrong'));
@@ -573,8 +601,8 @@ function Join() {
     }
   }
 
-  if (valid === null) return null;
-  if (!valid) {
+  if (invite === null) return null;
+  if (invite === false) {
     return (
       <Frame title={t('Invitation')}>
         <p className="text-sm text-muted">
@@ -585,8 +613,12 @@ function Join() {
   }
 
   return (
-    <Frame title={t('Invitation')}>
-      <p className="mb-5 text-sm text-muted">{t('You have been invited to Neiliro. Set up your account:')}</p>
+    <Frame title={founder ? t('First run') : t('Invitation')}>
+      <p className="mb-5 text-sm text-muted">
+        {founder
+          ? t('Create the first account — it becomes the administrator: it can invite family members and reset passwords.')
+          : t('You have been invited to Neiliro. Set up your account:')}
+      </p>
       <form onSubmit={(e) => void submit(e)} className="space-y-4">
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">{t('Name')}</span>
@@ -595,6 +627,13 @@ function Join() {
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">{t('Login (email)')}</span>
           <input value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} autoComplete="username" />
+          {invite.email && (
+            <span className="mt-1 block text-xs text-muted">
+              {proven
+                ? t('The address the invitation came to — already confirmed for password recovery.')
+                : t('A different address than the invitation came to: we will ask you to confirm it.')}
+            </span>
+          )}
         </label>
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">{t('Password')}</span>
@@ -609,7 +648,7 @@ function Join() {
         </label>
         {error && <p className="text-sm text-urgent">{error}</p>}
         <button type="submit" disabled={busy} className={buttonClass}>
-          {busy ? t('Creating') : t('Join')}
+          {busy ? t('Creating') : founder ? t('Create and sign in') : t('Join')}
         </button>
       </form>
     </Frame>
