@@ -6,6 +6,7 @@ import { openDatabase, runWithDb } from '../db/index.js';
 import { migrate } from '../db/migrate.js';
 import { env } from '../env.js';
 import { seedDemo } from './demo.js';
+import { DEMO_LANGS, type DemoLang } from './demo.strings.js';
 import {
   type EndReason,
   apiModule,
@@ -47,8 +48,18 @@ const MAX_SANDBOXES = 100;
 const MAX_DB_BYTES = 50 * 1024 * 1024;
 
 const demoDir = join(env.dataDir, 'demo');
-const templatePath = join(demoDir, 'template.db');
 const sandboxesDir = join(demoDir, 'sandboxes');
+
+/*
+  One template per language, not one template plus a translation pass.
+
+  The demo's content is seeded from a typed table (demo.strings.ts), so a
+  language missing a string cannot compile; a pass that rewrote seeded rows
+  afterwards would instead leave that string in English and say nothing.
+  Templates are a few hundred kilobytes each and are built at startup, so
+  the cost of the second one is milliseconds nobody is waiting on.
+*/
+const templatePath = (lang: DemoLang): string => join(demoDir, `template.${lang}.db`);
 
 export interface Sandbox {
   id: string;
@@ -57,6 +68,9 @@ export interface Sandbox {
   lastSeen: number;
   /** Row in demo-stats.db to close when the sandbox dies (null — stats are off). */
   statsId: number | null;
+  /** Which template this sandbox came from; a visitor who switches
+   *  language is given a new sandbox rather than a translated one. */
+  lang: DemoLang;
   requests: number;
   writes: number;
   modules: Set<string>;
@@ -71,11 +85,11 @@ export async function initDemo(): Promise<void> {
   rmSync(demoDir, { recursive: true, force: true });
   mkdirSync(sandboxesDir, { recursive: true });
 
-  await buildTemplate();
+  await buildTemplates();
 
   setInterval(sweep, SWEEP_MS).unref();
   setInterval(() => {
-    buildTemplate().catch((err) => log.error('demo: template rebuild failed', err));
+    buildTemplates().catch((err) => log.error('demo: template rebuild failed', err));
   }, TEMPLATE_REBUILD_MS).unref();
 
   log.block([
@@ -93,28 +107,42 @@ export async function initDemo(): Promise<void> {
  * sandbox created mid-rebuild copies either the old template or the new
  * one — never a half-built one.
  */
-async function buildTemplate(): Promise<void> {
-  const tmp = `${templatePath}.new`;
+async function buildTemplate(lang: DemoLang): Promise<void> {
+  const path = templatePath(lang);
+  const tmp = `${path}.new`;
   rmSync(tmp, { force: true });
 
   const template = openDatabase(tmp);
   try {
     await runWithDb(template, async () => {
       migrate();
-      await seedDemo();
+      await seedDemo(lang);
     });
   } finally {
     // close() flushes the WAL into the main file — the copy will be whole
     template.close();
   }
-  renameSync(tmp, templatePath);
-  log.info('demo: template built');
+  renameSync(tmp, path);
+  log.info(`demo: template built (${lang})`);
 }
 
-export function createSandbox(meta: {
-  referrer?: string | null;
-  userAgent?: string | null;
-} = {}): Sandbox {
+/*
+  Every language is built eagerly, at startup, and a failure is left to
+  propagate. A broken INSERT in the seeder has to take the demo server
+  down where CI and the deploy can see it — building a language lazily on
+  its first visitor would turn that into one stranger's 500.
+*/
+async function buildTemplates(): Promise<void> {
+  for (const lang of DEMO_LANGS) await buildTemplate(lang);
+}
+
+export function createSandbox(
+  meta: {
+    referrer?: string | null;
+    userAgent?: string | null;
+  } = {},
+  lang: DemoLang = 'en',
+): Sandbox {
   if (sandboxes.size >= MAX_SANDBOXES) evictOldest();
 
   // The identifier is effectively the second half of authorization, hence
@@ -122,7 +150,7 @@ export function createSandbox(meta: {
   // the visitor's cookie is looked up strictly as a registry key.
   const id = randomBytes(16).toString('base64url');
   const file = join(sandboxesDir, `${id}.db`);
-  copyFileSync(templatePath, file);
+  copyFileSync(templatePath(lang), file);
 
   const sandbox: Sandbox = {
     id,
@@ -130,12 +158,13 @@ export function createSandbox(meta: {
     file,
     lastSeen: Date.now(),
     statsId: statsSessionStarted(meta.referrer, meta.userAgent),
+    lang,
     requests: 0,
     writes: 0,
     modules: new Set(),
   };
   sandboxes.set(id, sandbox);
-  log.info(`demo: sandbox created (${sandboxes.size} active)`);
+  log.info(`demo: sandbox created, ${lang} (${sandboxes.size} active)`);
   return sandbox;
 }
 

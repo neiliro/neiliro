@@ -1,4 +1,4 @@
-import { lang, setLang, t } from '../lib/i18n';
+import { lang, setLang, t, type Lang } from '../lib/i18n';
 import { BUILD_SHA, REPO_URL, VERSION } from '../lib/build';
 import { formatStamp, setWeekStart, weekStart } from '../lib/format';
 import { dayIn, knownTimezones, setFamilyTimezone, TIMEZONE_KEY } from '../lib/timezone';
@@ -460,6 +460,29 @@ export function Settings() {
   const { state: service } = useServiceState();
   const help = supportLink(service ? service.hosted : null, window.location.hostname);
 
+  /*
+    In the demo the sample family's own content is seeded per language and
+    copied into the sandbox at login, so switching the language has to fetch
+    a sandbox built from the other template — the rows are already there and
+    there is nothing to translate them with. That means a fresh demo family,
+    which the copy under the buttons says out loud.
+
+    Everywhere else this is just setLang. If the swap fails, the language
+    still changes: a Russian interface over an English sample family is a
+    worse demo, but it is not a broken one.
+  */
+  async function chooseLang(next: Lang): Promise<void> {
+    if (lang === next) return;
+    if (service?.demo) {
+      try {
+        await api.post('/auth/demo', { lang: next });
+      } catch {
+        // Fall through — setLang reloads and the visitor sees the change
+      }
+    }
+    setLang(next);
+  }
+
   useEffect(() => {
     void api.get<Record<string, string>>('/settings').then((loaded) => {
       setValues(loaded);
@@ -647,7 +670,7 @@ export function Settings() {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => lang !== 'en' && setLang('en')}
+            onClick={() => void chooseLang('en')}
             className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
               lang === 'en' ? 'border-accent bg-accent-soft text-accent' : 'border-line text-muted hover:text-ink'
             }`}
@@ -656,7 +679,7 @@ export function Settings() {
           </button>
           <button
             type="button"
-            onClick={() => lang !== 'ru' && setLang('ru')}
+            onClick={() => void chooseLang('ru')}
             className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
               lang === 'ru' ? 'border-accent bg-accent-soft text-accent' : 'border-line text-muted hover:text-ink'
             }`}
@@ -666,6 +689,7 @@ export function Settings() {
         </div>
         <p className="mt-3 text-xs text-muted">
           {t('A per-device setting: a phone and the shared kiosk can speak different languages.')}
+          {service?.demo && ` ${t('In the demo, switching also starts a fresh sample family in that language.')}`}
         </p>
 
         <h2 className="eyebrow mt-6 mb-4">{t('Week starts on')}</h2>

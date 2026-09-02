@@ -387,7 +387,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     and generosity here would be a hole.
   */
   if (env.demoMode) {
-    const { SANDBOX_COOKIE, createSandbox } = await import('../lib/sandbox.js');
+    const { SANDBOX_COOKIE, createSandbox, destroySandbox } = await import('../lib/sandbox.js');
+    const { isDemoLang } = await import('../lib/demo.strings.js');
     const { runWithDb } = await import('../db/index.js');
 
     app.post(
@@ -398,12 +399,31 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         // "how did they find the demo" answer exists. Anything unparseable
         // is simply an absent referrer, never an error.
         const parsed = z
-          .object({ referrer: z.string().max(500).nullish() })
+          .object({
+            referrer: z.string().max(500).nullish(),
+            // The demo's content is seeded per language, so the visitor's
+            // choice has to reach the server before the sandbox is copied.
+            // An unknown or absent language is English, never an error.
+            lang: z.string().max(16).nullish(),
+          })
           .safeParse(req.body);
-        const sandbox = createSandbox({
-          referrer: parsed.success ? (parsed.data.referrer ?? null) : null,
-          userAgent: req.headers['user-agent'] ?? null,
-        });
+        const requested = parsed.success ? parsed.data.lang : null;
+        const lang = isDemoLang(requested) ? requested : 'en';
+
+        // Asking for a demo while already holding one means the visitor
+        // wants a different one — switching language is the way it happens.
+        // Without this the abandoned sandbox would sit on disk until its
+        // idle TTL, holding a file and a stats row open.
+        const previous = req.cookies[SANDBOX_COOKIE];
+        if (previous) destroySandbox(previous, 'logout');
+
+        const sandbox = createSandbox(
+          {
+            referrer: parsed.success ? (parsed.data.referrer ?? null) : null,
+            userAgent: req.headers['user-agent'] ?? null,
+          },
+          lang,
+        );
         return runWithDb(sandbox.db, () => {
           const admin = db
             .prepare(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`)

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { db, now, today } from '../db/index.js';
 import { hashPassword } from './password.js';
+import { type DemoLang, demoStrings } from './demo.strings.js';
 
 /*
   Demo mode (DEMO_MODE=true) — a public "try before installing" sandbox.
@@ -67,10 +68,20 @@ function day(offset: number): string {
   return `${y}-${m}-${d}`;
 }
 
-/** Fills the current context's database with an example family. Expects an empty database. */
-export async function seedDemo(): Promise<void> {
+/**
+ * Fills the current context's database with an example family, in `lang`.
+ * Expects an empty database.
+ *
+ * Every human-readable string comes from demo.strings.ts rather than from
+ * the SQL below: sandbox.ts builds one template per language, and a visitor
+ * gets the copy that matches theirs. Nothing here may be an inline literal,
+ * or that language quietly keeps a word of English.
+ */
+export async function seedDemo(lang: DemoLang): Promise<void> {
   const n = (db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n;
   if (n > 0) return;
+
+  const S = demoStrings(lang);
 
   // Demo login is automatic (POST /api/auth/demo), the password is never
   // told to anyone — hence random. The hardcoded demo1234 was shorter
@@ -83,61 +94,72 @@ export async function seedDemo(): Promise<void> {
     // ── Family ──
     db.prepare(
       `INSERT INTO users (id, email, name, role, password_hash, color, created_at) VALUES
-       (?, 'alex@neiliro.example', 'Alex', 'admin', ?, '#2E6F8E', ?),
-       (?, 'sam@neiliro.example', 'Sam', 'member', ?, '#B4654A', ?)`,
-    ).run(alex, passwordHash, now(), sam, passwordHash, now());
+       (?, 'alex@neiliro.example', ?, 'admin', ?, '#2E6F8E', ?),
+       (?, 'sam@neiliro.example', ?, 'member', ?, '#B4654A', ?)`,
+    ).run(alex, S.users.alex, passwordHash, now(), sam, S.users.sam, passwordHash, now());
 
     // ── Projects and tasks ──
     const home = id();
     const trip = id();
     db.prepare(
       `INSERT INTO projects (id, title, description, color, position, created_by) VALUES
-       (?, 'Home improvement', 'Everything the house keeps asking for', '#4A7A5A', 1, ?),
-       (?, 'Summer trip', 'Two weeks along the coast', '#B4654A', 2, ?)`,
-    ).run(home, alex, trip, alex);
+       (?, ?, ?, '#4A7A5A', 1, ?),
+       (?, ?, ?, '#B4654A', 2, ?)`,
+    ).run(
+      home, S.projects.home.title, S.projects.home.description, alex,
+      trip, S.projects.trip.title, S.projects.trip.description, alex,
+    );
 
+    // Nesting is set here, by id. It used to be a second statement matching
+    // WHERE title IN (...), which quietly tied the shape of the demo to the
+    // English wording — the ids were always available, just thrown away.
     const paint = id();
+    const pickColour = id();
+    const buyPaint = id();
     // Descriptions on the dated ones: the wide agenda shows a line of
     // the description, and it should have something to show
     db.prepare(
-      `INSERT INTO tasks (id, project_id, level, title, description, status, priority, due_date, assignee_id, position, created_by) VALUES
-       (?, ?, 0, 'Repaint the hallway', NULL, 'in_progress', 'normal', ?, ?, 1, ?),
-       (?, ?, 1, 'Pick the colour together', NULL, 'done', 'normal', NULL, ?, 2, ?),
-       (?, ?, 1, 'Buy paint and tape', 'Two cans of Misty Sage and the wide tape', 'todo', 'high', ?, ?, 3, ?),
-       (?, ?, 0, 'Fix the dripping tap', 'The kitchen one — the washer kit is in the garage', 'todo', 'urgent', ?, ?, 4, ?),
-       (?, ?, 0, 'Book the ferry', 'The evening crossing, the cabin with a window', 'todo', 'high', ?, ?, 5, ?),
-       (?, ?, 0, 'Renew passports', NULL, 'backlog', 'normal', NULL, NULL, 6, ?)`,
+      `INSERT INTO tasks (id, project_id, parent_id, level, title, description, status, priority, due_date, assignee_id, position, created_by) VALUES
+       (?, ?, NULL, 0, ?, NULL, 'in_progress', 'normal', ?, ?, 1, ?),
+       (?, ?, ?,    1, ?, NULL, 'done', 'normal', NULL, ?, 2, ?),
+       (?, ?, ?,    1, ?, ?,    'todo', 'high', ?, ?, 3, ?),
+       (?, ?, NULL, 0, ?, ?,    'todo', 'urgent', ?, ?, 4, ?),
+       (?, ?, NULL, 0, ?, ?,    'todo', 'high', ?, ?, 5, ?),
+       (?, ?, NULL, 0, ?, NULL, 'backlog', 'normal', NULL, NULL, 6, ?)`,
     ).run(
-      paint, home, day(5), alex, alex,
-      id(), home, sam, alex,
-      id(), home, day(2), alex, alex,
-      id(), home, day(0), sam, sam,
-      id(), trip, day(12), sam, sam,
-      id(), trip, alex,
+      paint, home, S.tasks.repaint, day(5), alex, alex,
+      pickColour, home, paint, S.tasks.pickColour, sam, alex,
+      buyPaint, home, paint, S.tasks.buyPaint.title, S.tasks.buyPaint.description, day(2), alex, alex,
+      id(), home, S.tasks.tap.title, S.tasks.tap.description, day(0), sam, sam,
+      id(), trip, S.tasks.ferry.title, S.tasks.ferry.description, day(12), sam, sam,
+      id(), trip, S.tasks.passports, alex,
     );
     // Showcases the expected-finish date (#7): the due date is past, but
     // the repair is known to take a week — the task is not overdue
     db.prepare(
       `INSERT INTO tasks (id, project_id, level, title, status, priority, due_date, expected_date,
                           assignee_id, position, created_by)
-       VALUES (?, ?, 0, 'Coffee machine in repair', 'in_progress', 'normal', ?, ?, ?, 7, ?)`,
-    ).run(id(), home, day(-3), day(4), alex, alex);
-    // Nesting: "buy paint" goes under the repaint story
-    db.prepare(
-      `UPDATE tasks SET parent_id = ?, level = 1 WHERE title IN ('Pick the colour together', 'Buy paint and tape')`,
-    ).run(paint);
+       VALUES (?, ?, 0, ?, 'in_progress', 'normal', ?, ?, ?, 7, ?)`,
+    ).run(id(), home, S.tasks.coffeeMachine, day(-3), day(4), alex, alex);
 
     // ── Notes ──
     const recipes = id();
-    db.prepare(
-      `INSERT INTO folders (id, name, position) VALUES (?, 'Recipes', 1)`,
-    ).run(recipes);
+    db.prepare(`INSERT INTO folders (id, name, position) VALUES (?, ?, 1)`).run(
+      recipes,
+      S.notes.folder,
+    );
     db.prepare(
       `INSERT INTO notes (id, title, body_md, folder_id, owner_id, pinned) VALUES
-       (?, 'Shopping list', '- Milk\n- Eggs\n- Coffee beans\n- Paint tape (see [[Repaint the hallway]])\n- Something nice for Friday', NULL, ?, 1),
-       (?, 'Pizza dough', '**500 g** flour · 325 ml water · 10 g salt · 3 g yeast\n\nKnead, rest overnight in the fridge, bake as hot as the oven goes.', ?, ?, 0),
-       (?, 'House rules for guests', 'Wi-Fi: *neiliro / pizzafriday*\n\nCoffee machine: one scoop, button, patience.', NULL, ?, 0)`,
-    ).run(id(), alex, id(), recipes, sam, id(), alex);
+       (?, ?, ?, NULL, ?, 1),
+       (?, ?, ?, ?, ?, 0),
+       (?, ?, ?, NULL, ?, 0)`,
+    ).run(
+      // The shopping list links to the repaint task: same language, or the
+      // wiki-link points at a title that exists in no database
+      id(), S.notes.shopping.title, S.notes.shopping.body(S.tasks.repaint), alex,
+      id(), S.notes.dough.title, S.notes.dough.body, recipes, sam,
+      id(), S.notes.guests.title, S.notes.guests.body, alex,
+    );
 
     // ── Calendar ──
     const shared = '00000000-0000-4000-8000-000000000201'; // the seeded shared calendar from the migration
@@ -150,15 +172,18 @@ export async function seedDemo(): Promise<void> {
     // event there to unfold
     db.prepare(
       `INSERT INTO events (id, calendar_id, title, description, location, starts_at, ends_at, all_day, recurrence_rule, remind_days_before, created_by) VALUES
-       (?, ?, 'Movie night', 'The new Miyazaki — tickets are in the mail', 'Odeon', ?, ?, 0, NULL, NULL, ?),
-       (?, ?, 'Gym', 'Legs and the sauna after', 'Iron Temple', ?, ?, 0, 'FREQ=WEEKLY;INTERVAL=1', NULL, ?),
-       (?, ?, 'Dentist', 'The crown on the left, ask about a night guard', 'Dr. Molar', ?, ?, 0, NULL, 1, ?),
-       (?, ?, 'Grandma''s birthday', NULL, NULL, ?, ?, 1, 'FREQ=YEARLY;INTERVAL=1', 7, ?)`,
+       (?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?),
+       (?, ?, ?, ?, ?, ?, ?, 0, 'FREQ=WEEKLY;INTERVAL=1', NULL, ?),
+       (?, ?, ?, ?, ?, ?, ?, 0, NULL, 1, ?),
+       (?, ?, ?, NULL, NULL, ?, ?, 1, 'FREQ=YEARLY;INTERVAL=1', 7, ?)`,
     ).run(
-      movie, shared, `${day(0)}T20:00`, `${day(0)}T22:30`, sam,
-      gym, shared, `${day(1)}T18:30`, `${day(1)}T20:00`, alex,
-      dentist, shared, `${day(3)}T11:00`, `${day(3)}T11:45`, sam,
-      birthday, shared, day(9), day(9), alex,
+      movie, shared, S.events.movie.title, S.events.movie.description, S.events.movie.location,
+      `${day(0)}T20:00`, `${day(0)}T22:30`, sam,
+      gym, shared, S.events.gym.title, S.events.gym.description, S.events.gym.location,
+      `${day(1)}T18:30`, `${day(1)}T20:00`, alex,
+      dentist, shared, S.events.dentist.title, S.events.dentist.description, S.events.dentist.location,
+      `${day(3)}T11:00`, `${day(3)}T11:45`, sam,
+      birthday, shared, S.events.grandmaBirthday, day(9), day(9), alex,
     );
     db.prepare(
       `INSERT INTO event_participants (event_id, user_id) VALUES (?, ?), (?, ?), (?, ?), (?, ?), (?, ?)`,
@@ -181,21 +206,26 @@ export async function seedDemo(): Promise<void> {
     const vet = id();
     db.prepare(
       `INSERT INTO events (id, calendar_id, title, description, location, starts_at, ends_at, all_day, recurrence_rule, remind_days_before, created_by) VALUES
-       (?, ?, 'Swimming lesson', NULL, 'City pool', ?, ?, 0, 'FREQ=WEEKLY;INTERVAL=1', NULL, ?),
-       (?, ?, 'Farmers market', 'Bread, the good tomatoes, flowers if they have tulips', NULL, ?, ?, 0, 'FREQ=WEEKLY;INTERVAL=1', NULL, ?),
-       (?, ?, 'Car service', 'The rattle from the back, and an oil change', 'Vulco', ?, ?, 0, NULL, NULL, ?),
-       (?, ?, 'Dinner at Sam''s parents', NULL, NULL, ?, ?, 0, NULL, NULL, ?),
-       (?, ?, 'Boiler service', 'The engineer from the email — someone has to be home', NULL, ?, ?, 0, NULL, 1, ?),
-       (?, ?, 'Vet — Bruno''s shots', NULL, 'Dr. Pawel', ?, ?, 0, NULL, 1, ?),
-       (?, ?, 'Lake weekend', 'Two nights, take the small tent', NULL, ?, ?, 1, NULL, 3, ?)`,
+       (?, ?, ?, NULL, ?, ?, ?, 0, 'FREQ=WEEKLY;INTERVAL=1', NULL, ?),
+       (?, ?, ?, ?, NULL, ?, ?, 0, 'FREQ=WEEKLY;INTERVAL=1', NULL, ?),
+       (?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?),
+       (?, ?, ?, NULL, NULL, ?, ?, 0, NULL, NULL, ?),
+       (?, ?, ?, ?, NULL, ?, ?, 0, NULL, 1, ?),
+       (?, ?, ?, NULL, ?, ?, ?, 0, NULL, 1, ?),
+       (?, ?, ?, ?, NULL, ?, ?, 1, NULL, 3, ?)`,
     ).run(
-      swim, shared, `${day(-19)}T16:30`, `${day(-19)}T17:15`, sam,
-      market, shared, `${day(-16)}T10:00`, `${day(-16)}T11:00`, alex,
-      id(), shared, `${day(-13)}T09:00`, `${day(-13)}T10:30`, alex,
-      dinner, shared, `${day(-8)}T18:30`, `${day(-8)}T21:00`, sam,
-      boiler, shared, `${day(7)}T10:00`, `${day(7)}T12:00`, alex,
-      vet, shared, `${day(24)}T15:30`, `${day(24)}T16:00`, sam,
-      lake, shared, day(18), day(19), alex,
+      swim, shared, S.events.swim.title, S.events.swim.location,
+      `${day(-19)}T16:30`, `${day(-19)}T17:15`, sam,
+      market, shared, S.events.market.title, S.events.market.description,
+      `${day(-16)}T10:00`, `${day(-16)}T11:00`, alex,
+      id(), shared, S.events.carService.title, S.events.carService.description, S.events.carService.location,
+      `${day(-13)}T09:00`, `${day(-13)}T10:30`, alex,
+      dinner, shared, S.events.dinner, `${day(-8)}T18:30`, `${day(-8)}T21:00`, sam,
+      boiler, shared, S.events.boiler.title, S.events.boiler.description,
+      `${day(7)}T10:00`, `${day(7)}T12:00`, alex,
+      vet, shared, S.events.vet.title, S.events.vet.location,
+      `${day(24)}T15:30`, `${day(24)}T16:00`, sam,
+      lake, shared, S.events.lake.title, S.events.lake.description, day(18), day(19), alex,
     );
     db.prepare(
       `INSERT INTO event_participants (event_id, user_id) VALUES (?, ?), (?, ?), (?, ?), (?, ?), (?, ?), (?, ?), (?, ?), (?, ?)`,
@@ -211,22 +241,27 @@ export async function seedDemo(): Promise<void> {
     db.prepare(
       `INSERT INTO mail_messages (id, kind, from_address, from_name, to_address, subject,
                                   body_text, sent_at, received_at, read_at) VALUES
-       (?, 'in', 'office@riverside-school.example', 'Riverside School', 'family@neiliro.example',
-        'Parent-teacher evening on Thursday',
-        'Dear parents,' || char(10) || char(10) ||
-        'We look forward to seeing you this Thursday at 17:30 in the main hall. Please confirm your attendance by replying to this email.' || char(10) || char(10) ||
-        'Riverside School office', ?, ?, NULL),
-       (?, 'in', 'no-reply@citypower.example', 'City Power & Light', 'family@neiliro.example',
-        'Your electricity bill for July',
-        'Your bill for July is ready: 64.20 EUR, due by the 25th.' || char(10) ||
-        'The detailed statement is attached as a PDF in the original message.', ?, ?, ?)`,
-    ).run(school, day(-1) + ' 09:15', day(-1) + ' 09:15', id(), day(-4) + ' 08:00', day(-4) + ' 08:00', day(-3) + ' 20:11');
+       (?, 'in', 'office@riverside-school.example', ?, 'family@neiliro.example', ?, ?, ?, ?, NULL),
+       (?, 'in', 'no-reply@citypower.example', ?, 'family@neiliro.example', ?, ?, ?, ?, ?)`,
+    ).run(
+      school, S.mail.school.fromName, S.mail.school.subject, S.mail.school.body,
+      `${day(-1)} 09:15`, `${day(-1)} 09:15`,
+      id(), S.mail.power.fromName, S.mail.power.subject, S.mail.power.body,
+      `${day(-4)} 08:00`, `${day(-4)} 08:00`, `${day(-3)} 20:11`,
+    );
 
     const schoolTask = id();
     db.prepare(
       `INSERT INTO tasks (id, project_id, level, title, description, status, priority, due_date, assignee_id, position, created_by)
-       VALUES (?, '00000000-0000-4000-8000-000000000001', 0, 'Confirm parent-teacher evening', 'Reply to the school before Thursday', 'todo', 'normal', ?, ?, 8, ?)`,
-    ).run(schoolTask, day(1), sam, alex);
+       VALUES (?, '00000000-0000-4000-8000-000000000001', 0, ?, ?, 'todo', 'normal', ?, ?, 8, ?)`,
+    ).run(
+      schoolTask,
+      S.tasks.confirmSchool.title,
+      S.tasks.confirmSchool.description,
+      day(1),
+      sam,
+      alex,
+    );
     db.prepare('UPDATE mail_messages SET task_id = ? WHERE id = ?').run(schoolTask, school);
 
     // ── Family profiles ──
@@ -248,32 +283,39 @@ export async function seedDemo(): Promise<void> {
     db.prepare(
       `INSERT INTO events (id, calendar_id, title, starts_at, ends_at, all_day,
                            recurrence_rule, birth_year, profile_user_id, created_at, updated_at)
-       VALUES (?, ?, 'Alex', ?, ?, 1, 'FREQ=YEARLY', ?, ?, ?, ?),
-              (?, ?, 'Sam', ?, ?, 1, 'FREQ=YEARLY', ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, 1, 'FREQ=YEARLY', ?, ?, ?, ?),
+              (?, ?, ?, ?, ?, 1, 'FREQ=YEARLY', ?, ?, ?, ?)`,
     ).run(
-      id(), shared, alexBirthday, alexBirthday, 1988, alex, now(), now(),
-      id(), shared, samBirthday, samBirthday, 1990, sam, now(), now(),
+      id(), shared, S.users.alex, alexBirthday, alexBirthday, 1988, alex, now(), now(),
+      id(), shared, S.users.sam, samBirthday, samBirthday, 1990, sam, now(), now(),
     );
     db.prepare(
       `INSERT INTO profile_entries (id, user_id, kind, label, value, position) VALUES
-       (?, ?, 'preference', 'Shoes', '44', 1),
-       (?, ?, 'preference', 'Coffee', 'flat white, no sugar', 2),
-       (?, ?, 'preference', 'Shoes', '38', 1),
-       (?, ?, 'preference', 'Tea', 'Earl Grey', 2),
-       (?, ?, 'preference', 'Flowers', 'tulips, never lilies', 3),
-       (?, ?, 'allergy', 'peanuts', NULL, 4)`,
-    ).run(id(), alex, id(), alex, id(), sam, id(), sam, id(), sam, id(), sam);
+       (?, ?, 'preference', ?, '44', 1),
+       (?, ?, 'preference', ?, ?, 2),
+       (?, ?, 'preference', ?, '38', 1),
+       (?, ?, 'preference', ?, ?, 2),
+       (?, ?, 'preference', ?, ?, 3),
+       (?, ?, 'allergy', ?, NULL, 4)`,
+    ).run(
+      id(), alex, S.profile.shoes,
+      id(), alex, S.profile.coffee.label, S.profile.coffee.value,
+      id(), sam, S.profile.shoes,
+      id(), sam, S.profile.tea.label, S.profile.tea.value,
+      id(), sam, S.profile.flowers.label, S.profile.flowers.value,
+      id(), sam, S.profile.peanuts,
+    );
     db.prepare(
       `INSERT INTO wishes (id, user_id, title, url, claimed_by, claimed_by_name, claimed_at, position, created_at) VALUES
-       (?, ?, 'A proper espresso tamper', NULL, NULL, NULL, NULL, 1, ?),
-       (?, ?, 'Wool hiking socks', NULL, NULL, NULL, NULL, 2, ?),
-       (?, ?, 'Weekend at a spa', NULL, NULL, 'Grandma Vera', ?, 1, ?),
-       (?, ?, 'A very sharp kitchen knife', NULL, NULL, NULL, NULL, 2, ?)`,
+       (?, ?, ?, NULL, NULL, NULL, NULL, 1, ?),
+       (?, ?, ?, NULL, NULL, NULL, NULL, 2, ?),
+       (?, ?, ?, NULL, NULL, ?, ?, 1, ?),
+       (?, ?, ?, NULL, NULL, NULL, NULL, 2, ?)`,
     ).run(
-      id(), alex, now(),
-      id(), alex, now(),
-      id(), sam, now(), now(),
-      id(), sam, now(),
+      id(), alex, S.wishes.tamper, now(),
+      id(), alex, S.wishes.socks, now(),
+      id(), sam, S.wishes.spa, S.wishes.claimedBy, now(), now(),
+      id(), sam, S.wishes.knife, now(),
     );
 
     // ── Money ──
@@ -281,9 +323,9 @@ export async function seedDemo(): Promise<void> {
     const cash = id();
     db.prepare(
       `INSERT INTO accounts (id, name, currency, kind, opening_balance, shared, color, position, created_by) VALUES
-       (?, 'Joint card', 'EUR', 'card', 250000, 1, '#1F6E8C', 1, ?),
-       (?, 'Cash', 'EUR', 'cash', 12000, 1, '#4A7A5A', 2, ?)`,
-    ).run(card, alex, cash, alex);
+       (?, ?, 'EUR', 'card', 250000, 1, '#1F6E8C', 1, ?),
+       (?, ?, 'EUR', 'cash', 12000, 1, '#4A7A5A', 2, ?)`,
+    ).run(card, S.money.accounts.card, alex, cash, S.money.accounts.cash, alex);
 
     const groceries = id();
     const eatingOut = id();
@@ -291,27 +333,32 @@ export async function seedDemo(): Promise<void> {
     const salary = id();
     db.prepare(
       `INSERT INTO categories (id, name, kind, color, position) VALUES
-       (?, 'Groceries', 'expense', '#4A7A5A', 1),
-       (?, 'Eating out', 'expense', '#B4654A', 2),
-       (?, 'Household', 'expense', '#5A6A74', 3),
-       (?, 'Salary', 'income', '#2E6F8E', 4)`,
-    ).run(groceries, eatingOut, household, salary);
+       (?, ?, 'expense', '#4A7A5A', 1),
+       (?, ?, 'expense', '#B4654A', 2),
+       (?, ?, 'expense', '#5A6A74', 3),
+       (?, ?, 'income', '#2E6F8E', 4)`,
+    ).run(
+      groceries, S.money.categories.groceries,
+      eatingOut, S.money.categories.eatingOut,
+      household, S.money.categories.household,
+      salary, S.money.categories.salary,
+    );
 
     db.prepare(
       `INSERT INTO transactions (id, kind, occurred_on, account_id, amount, to_account_id, to_amount, category_id, note, place, created_by) VALUES
-       (?, 'income',  ?, ?, 210000, NULL, NULL, ?, 'Salary', NULL, ?),
-       (?, 'expense', ?, ?, 6470,  NULL, NULL, ?, NULL, 'Lidl', ?),
-       (?, 'expense', ?, ?, 3890,  NULL, NULL, ?, NULL, 'Market', ?),
-       (?, 'expense', ?, ?, 5200,  NULL, NULL, ?, 'Pizza night', 'Napoli', ?),
-       (?, 'expense', ?, ?, 2340,  NULL, NULL, ?, 'Paint rollers', 'DIY store', ?),
-       (?, 'transfer', ?, ?, 10000, ?, 10000, NULL, 'Pocket cash', NULL, ?)`,
+       (?, 'income',  ?, ?, 210000, NULL, NULL, ?, ?, NULL, ?),
+       (?, 'expense', ?, ?, 6470,  NULL, NULL, ?, NULL, ?, ?),
+       (?, 'expense', ?, ?, 3890,  NULL, NULL, ?, NULL, ?, ?),
+       (?, 'expense', ?, ?, 5200,  NULL, NULL, ?, ?, ?, ?),
+       (?, 'expense', ?, ?, 2340,  NULL, NULL, ?, ?, ?, ?),
+       (?, 'transfer', ?, ?, 10000, ?, 10000, NULL, ?, NULL, ?)`,
     ).run(
-      id(), day(-9), card, salary, alex,
-      id(), day(-6), card, groceries, sam,
-      id(), day(-3), cash, groceries, alex,
-      id(), day(-2), card, eatingOut, sam,
-      id(), day(-1), card, household, alex,
-      id(), day(-5), card, cash, alex,
+      id(), day(-9), card, salary, S.money.notes.salary, alex,
+      id(), day(-6), card, groceries, S.money.places.lidl, sam,
+      id(), day(-3), cash, groceries, S.money.places.market, alex,
+      id(), day(-2), card, eatingOut, S.money.notes.pizza, S.money.places.pizzeria, sam,
+      id(), day(-1), card, household, S.money.notes.rollers, S.money.places.diy, alex,
+      id(), day(-5), card, cash, S.money.notes.pocketCash, alex,
     );
 
     db.prepare(
@@ -333,29 +380,34 @@ export async function seedDemo(): Promise<void> {
     */
     db.prepare(
       `INSERT INTO recurring_transactions (id, title, kind, start_on, recurrence_rule, account_id, amount, category_id, auto_create, active) VALUES
-       (?, 'Rent', 'expense', ?, 'FREQ=MONTHLY;INTERVAL=1', ?, 95000, ?, 1, 1),
-       (?, 'Salary', 'income', ?, 'FREQ=MONTHLY;INTERVAL=1', ?, 210000, ?, 0, 1),
-       (?, 'Water bill', 'expense', ?, 'FREQ=MONTHLY;INTERVAL=1', ?, 3450, ?, 0, 1),
-       (?, 'Internet', 'expense', ?, 'FREQ=MONTHLY;INTERVAL=1', ?, 3000, ?, 0, 1)`,
+       (?, ?, 'expense', ?, 'FREQ=MONTHLY;INTERVAL=1', ?, 95000, ?, 1, 1),
+       (?, ?, 'income', ?, 'FREQ=MONTHLY;INTERVAL=1', ?, 210000, ?, 0, 1),
+       (?, ?, 'expense', ?, 'FREQ=MONTHLY;INTERVAL=1', ?, 3450, ?, 0, 1),
+       (?, ?, 'expense', ?, 'FREQ=MONTHLY;INTERVAL=1', ?, 3000, ?, 0, 1)`,
     ).run(
-      id(), day(-40), card, household,
-      id(), day(5), card, salary,
-      id(), day(-3), card, household,
-      id(), day(2), card, household,
+      id(), S.money.recurring.rent, day(-40), card, household,
+      id(), S.money.recurring.salary, day(5), card, salary,
+      id(), S.money.recurring.water, day(-3), card, household,
+      id(), S.money.recurring.internet, day(2), card, household,
     );
 
     // ── Dashboard ──
     db.prepare(
       `INSERT INTO settings (key, value, updated_at) VALUES
-       ('goal.title', 'Trip to Japan', ?),
+       ('goal.title', ?, ?),
        ('goal.date', ?, ?),
-       ('goal.saved_label', 'Saved for the trip', ?),
+       ('goal.saved_label', ?, ?),
        ('goal.target', '300000', ?),
        ('goal.saved', '125000', ?),
        ('goal.currency', 'EUR', ?),
        ('money.default_currency', 'EUR', ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-    ).run(now(), day(45), now(), now(), now(), now(), now(), now());
+    ).run(
+      S.dashboard.goalTitle, now(),
+      day(45), now(),
+      S.dashboard.goalSavedLabel, now(),
+      now(), now(), now(), now(),
+    );
   });
 
   seed();

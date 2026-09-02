@@ -331,6 +331,6 @@ The sidebar does not scroll with the content: on a long task list the sections s
 
 "All projects" shows a total open-task counter — the same one each project has individually.
 
-The interface speaks English by default; Russian is available in Settings. The first day of the week (Monday or Sunday) is configurable there too. Both are per-device settings: a phone and the shared kiosk can differ.
+The interface speaks whichever of its languages your browser asks for — English and Russian today — and Settings has the switch when you want the other one. The first day of the week (Monday or Sunday) is configurable there too. Both are per-device settings: a phone and the shared kiosk can differ.
 
 The hub also answers to a name of your own: Settings → **Home name** replaces "Neiliro" in the sidebar, on the sign-in screen and in the browser tab. Unlike the language and the first weekday it belongs to the household, not to the device — everyone sees it. It is a label, never an address: two families may both call themselves "Home". On the hosted service the public sign-in screen keeps saying Neiliro — a chosen name is the family's own business, and a renamed family has to stay indistinguishable from a subdomain that does not exist.
