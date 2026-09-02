@@ -4,6 +4,7 @@ import { db, invalidateTimezone, now, today as familyToday } from '../db/index.j
 import { isValidTimezone } from '../lib/timezone.js';
 import { env } from '../env.js';
 import { listOccurrences, remindersFor } from './calendar.js';
+import { ATTACHMENT_VISIBLE, ATTACHMENT_VISIBLE_JOINS } from './attachments.js';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // Only the fact of life goes outside. The version and other details are
@@ -188,16 +189,20 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       color: string;
     }[];
 
+    // The same visibility expression the direct fetch uses, rather than a
+    // second opinion about it: a receipt on someone else's personal
+    // account has no note to hide behind, and search used to name it
+    // while every other surface hid it (#184).
     const attachments = db
       .prepare(
         `SELECT a.id, a.filename, a.size_bytes, n.id AS note_id, n.title AS note_title
            FROM attachments a
-           LEFT JOIN notes n ON n.id = a.note_id
+           ${ATTACHMENT_VISIBLE_JOINS}
           WHERE ci_contains(a.filename, ?)
-            AND (a.note_id IS NULL OR n.visibility = 'shared' OR n.owner_id = ?)
+            AND ${ATTACHMENT_VISIBLE}
           LIMIT 15`,
       )
-      .all(query, userId) as {
+      .all(query, userId, userId) as {
       id: string;
       filename: string;
       size_bytes: number;
