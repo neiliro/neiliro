@@ -1,0 +1,13 @@
+# Actions are pinned to commit SHAs (a floating major tag is mutable, and
+# this image reaches every self-hosted install). A pin that never moves
+# rots instead, so Dependabot proposes the bumps — SHA and the version
+# comment together — for a human to merge, weekly and grouped into one PR.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
