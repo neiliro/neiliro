@@ -38,7 +38,7 @@ import { registerEmailVerifyRoutes } from './routes/email-verify.js';
 import { registerMoneyRoutes } from './routes/money.js';
 import { registerBudgetRoutes } from './routes/budgets.js';
 import { registerFamilyRoutes } from './routes/family.js';
-import { authenticate } from './lib/auth.js';
+import { TOKEN_PATH_PREFIXES, authenticate } from './lib/auth.js';
 import { log } from './lib/log.js';
 
 /*
@@ -58,12 +58,21 @@ import { log } from './lib/log.js';
   the secret ended up in the log by default. Parameter names are kept:
   for diagnostics "which parameter came in" matters, not "with which value".
 */
+/*
+  Share tokens travel in the PATH, not the query — a rate-limited or
+  mistyped guest request would otherwise write a live link into the log at
+  warn level (invites dodge this only because their token is a query
+  value). The prefixes come from the same list `authenticate` exempts, so
+  a token surface cannot be opened without also being masked here: when
+  the two were maintained separately, the calendar feed, the event link
+  and the shared list were all logged in clear (#186).
+*/
+const TOKEN_SEGMENT = new RegExp(
+  `^(${TOKEN_PATH_PREFIXES.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})[^/?]+`,
+);
+
 export function redactUrl(url: string): string {
-  // The wishlist share token travels in the PATH, not the query — a
-  // rate-limited or mistyped request would otherwise write a live guest
-  // link into the log at warn level (invites dodge this only because
-  // their token is a query value).
-  const masked = url.replace(/^(\/api\/wishlist\/)[^/?]+/, '$1…');
+  const masked = url.replace(TOKEN_SEGMENT, '$1…');
   const q = masked.indexOf('?');
   if (q === -1) return masked;
   const params = new URLSearchParams(masked.slice(q + 1));

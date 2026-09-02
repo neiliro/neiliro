@@ -106,6 +106,45 @@ export function clearSessionCookie(reply: FastifyReply): void {
 
 // ── Route protection ──────────────────────────────────────────────────────
 
+/*
+  The token-addressed subtrees: paths whose next segment is an unguessable
+  token standing in for a session. A guest holding the link needs no
+  account, so `authenticate` lets these through — and because the secret
+  travels in the PATH rather than the query, `redactUrl` (app.ts) has to
+  mask that segment before a 404 or a 429 writes the live link into the
+  log. One list feeds both, so a fifth surface cannot be opened without
+  also being redacted; the two drifted apart once and three of four
+  tokens were logged in clear (#186).
+
+  All four share one shape — one token, one object, revocable — and the
+  public-surface snapshot test pins the list, so widening it is a
+  deliberate act with a diff to explain, never a side effect.
+
+  - /api/wishlist/    (#68) the hub's only anonymous content surface: one
+                      first name and wish titles, under a login-strength
+                      rate limit. The token is stored in the clear so the
+                      link can be re-sent (migration 021).
+  - /api/calendar/feed/  one person's view of the calendar, read-only by
+                      construction — a calendar app has no session to
+                      present. The sibling endpoints that create and
+                      revoke the token (/api/calendar/feed with no trailing
+                      segment) stay behind auth, which is why the prefix
+                      ends in a slash.
+  - /api/event/       a single shared event: one row, and deliberately
+                      not the calendar around it, whose name can itself be
+                      private.
+  - /api/list/        a shared list — the only public surface that accepts
+                      a write, ticking an item, because a shopping list
+                      nobody can tick off is a screenshot. The token scopes
+                      both the read and that write to one list.
+*/
+export const TOKEN_PATH_PREFIXES = [
+  '/api/wishlist/',
+  '/api/calendar/feed/',
+  '/api/event/',
+  '/api/list/',
+] as const;
+
 const PUBLIC_PATHS = new Set([
   '/api/health',
   // Home name for the sign-in screen; hosted mode answers the brand
@@ -147,33 +186,8 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply): Pr
   if (!req.url.startsWith('/api')) return;
   const path = req.url.split('?')[0] ?? '';
   if (PUBLIC_PATHS.has(path)) return;
-  // The public wishlist (#68) — the hub's only anonymous content surface.
-  // Token-addressed: the path carries an unguessable token stored hashed,
-  // the routes reveal one first name and wish titles, nothing else, under
-  // a login-strength rate limit. Everything under this prefix is designed
-  // for strangers; nothing else is.
-  if (path.startsWith('/api/wishlist/')) return;
-  /*
-    The calendar subscription feed. Same shape as the wishlist: an
-    unguessable token in the path, addressing one person's view, read-only
-    by construction. A calendar app has no session to present — and the
-    sibling endpoints that create and revoke the token (/api/calendar/feed
-    with no trailing segment) stay behind auth, which is why this prefix
-    ends in a slash.
-  */
-  if (path.startsWith('/api/calendar/feed/')) return;
-  /*
-    A single shared event, addressed by its own token. Same family as the
-    two above: unguessable, read-only, and scoped to one row — it reveals
-    one event and deliberately not the calendar around it.
-  */
-  if (path.startsWith('/api/event/')) return;
-  /*
-    A shared list. The only public surface that accepts a write — ticking
-    an item — because a shopping list nobody can tick off is a screenshot.
-    The token scopes both the read and that write to one list.
-  */
-  if (path.startsWith('/api/list/')) return;
+  // The token-addressed subtrees — what they are and why, at the list itself
+  if (TOKEN_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))) return;
 
   const token = req.cookies[SESSION_COOKIE];
   const user = token ? userForToken(token) : null;

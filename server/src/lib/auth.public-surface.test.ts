@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { buildTestApp } from '../test-harness.js';
+import { TOKEN_PATH_PREFIXES } from './auth.js';
 
 /*
   The list of routes reachable without a session, pinned.
@@ -57,20 +58,25 @@ describe('public API surface', () => {
   it('exempts only the token-addressed subtrees', () => {
     /*
       A prefix exemption is broader than a path and deserves louder review.
-      Both entries here are the same shape: an unguessable token in the
-      path, read-only, addressing one person's data — the public wishlist
-      and the calendar subscription feed. Anything else appearing in this
-      list is a subtree opened to the internet, which is the point of
-      failing here.
+      Every entry is the same shape: an unguessable token in the path,
+      addressing one object, revocable. Anything else appearing here is a
+      subtree opened to the internet, which is the point of failing.
+
+      The list is the exported constant rather than a scrape of
+      `authenticate`: it is what the wall actually consults, and it is also
+      what redactUrl masks — so this one assertion pins both the door and
+      the log at once.
     */
-    const fn = source.slice(source.indexOf('export async function authenticate'));
-    const prefixes = [...fn.matchAll(/startsWith\('(\/api[^']*)'\)/g)].map((m) => m[1]!);
-    expect(prefixes.filter((p) => p !== '/api').sort()).toEqual([
+    expect([...TOKEN_PATH_PREFIXES].sort()).toEqual([
       '/api/calendar/feed/',
       '/api/event/',
       '/api/list/',
       '/api/wishlist/',
     ]);
+    // And authenticate really consults it, rather than a copy
+    const fn = source.slice(source.indexOf('export async function authenticate'));
+    expect(fn).toContain('TOKEN_PATH_PREFIXES.some(');
+    expect(fn.match(/startsWith\('\/api\//g)).toBeNull();
   });
 
   it('still refuses an anonymous request to a route outside the list', async () => {
