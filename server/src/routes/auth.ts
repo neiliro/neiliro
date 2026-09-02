@@ -7,6 +7,7 @@ import { env } from '../env.js';
 import { googleSignInAvailable } from './google.js';
 import { serviceMailAvailable } from '../lib/mail.js';
 import { emailVerificationAvailable } from './email-verify.js';
+import { founderInvited } from './setup.js';
 import {
   SESSION_COOKIE,
   clearSessionCookie,
@@ -137,7 +138,11 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
     const n = (db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n;
     return {
-      initialized: n > 0,
+      // A family awaiting its founder claims to be set up too: its first run
+      // opens only through the mailed link (routes/setup.ts), so the bare
+      // URL shows the sign-in screen — like a ghost, and like every other
+      // family — rather than a form that would only ever answer 403.
+      initialized: n > 0 || founderInvited(),
       // Whether showing the "Sign in with Google" button makes sense
       google: googleSignInAvailable(),
       demo: false,

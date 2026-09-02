@@ -249,6 +249,15 @@ export function resolveTenant(host: string | undefined): Tenant {
 }
 
 /**
+ * The tenant behind a family id — for the operator's tools, which hold an
+ * id from the registry rather than a Host header. Opens (and creates) the
+ * family's files like a request would.
+ */
+export function tenantForFamily(familyId: string): Tenant {
+  return tenantFor(familyId);
+}
+
+/**
  * The tenant behind a family slug, or null when no active family owns it.
  *
  * Deliberately unlike resolveTenant(): no ghost fallback. The ghost exists

@@ -36,21 +36,31 @@ function nextColor(): string {
   link, the person opens it and fills in their own name, login and
   password. The link lives a week, is shown to its creator once
   (only the hash is stored) and goes dark after use.
+
+  On the hosted service the first account is itself created through an
+  invite — the founder invitation (lib/founder.ts, #157): issued by the
+  service before any user exists, role 'admin', mailed to the address the
+  family gave. While one exists, the open first-run screen is closed: a
+  bare family URL that leaks is worth nothing, and the administrator's
+  login starts out confirmed, because receiving the link proved the
+  mailbox. A family provisioned without one (tests, a self-hosted hub,
+  the operator's own smoke test) keeps the open first run.
 */
 
-const INVITE_TTL_MS = 7 * 24 * 60 * 60_000;
+export const INVITE_TTL_MS = 7 * 24 * 60 * 60_000;
 
 const nameField = z.string().trim().min(1, 'The name cannot be empty').max(80);
 const emailField = z.string().trim().toLowerCase().email('Invalid login address').max(120);
 const passwordField = z.string().min(10, 'Password must be at least 10 characters').max(200);
 
-function hashToken(token: string): string {
+export function hashInviteToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
 interface InviteRow {
   id: string;
-  role: 'member' | 'kid';
+  role: 'admin' | 'member' | 'kid';
+  email: string | null;
   expires_at: string;
   used_at: string | null;
 }
@@ -58,10 +68,42 @@ interface InviteRow {
 /** A live invite by token: not used and not expired. */
 function liveInvite(token: string): InviteRow | null {
   const row = db
-    .prepare('SELECT id, role, expires_at, used_at FROM invites WHERE token_hash = ?')
-    .get(hashToken(token)) as InviteRow | undefined;
+    .prepare('SELECT id, role, email, expires_at, used_at FROM invites WHERE token_hash = ?')
+    .get(hashInviteToken(token)) as InviteRow | undefined;
   if (!row || row.used_at || row.expires_at <= new Date().toISOString()) return null;
+  // A founder invitation outlives its purpose the moment the family has
+  // an administrator; it must not mint a second one
+  if (row.role === 'admin' && userCount() > 0) return null;
   return row;
+}
+
+function userCount(): number {
+  return (db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n;
+}
+
+/**
+ * Whether this family was provisioned with a founder invitation. While the
+ * founder has not arrived, the family must look set up from outside
+ * (/api/auth/state): a bare URL that showed a first-run screen would
+ * advertise exactly the door the invitation exists to close.
+ */
+export function founderInvited(): boolean {
+  return Boolean(db.prepare("SELECT 1 FROM invites WHERE role = 'admin'").get());
+}
+
+/**
+ * Store the family's timezone as the browser reported it. A zone we cannot
+ * use is dropped rather than raised: a browser with an odd idea of its own
+ * timezone must not be able to block the one screen that stands between a
+ * family and their hub.
+ */
+function stampTimezone(zone: string | undefined): void {
+  const tz = zone?.trim();
+  if (!tz || !isValidTimezone(tz)) return;
+  db.prepare(
+    `INSERT INTO settings (key, value, updated_at) VALUES ('home.timezone', ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+  ).run(tz, now());
 }
 
 export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
@@ -80,6 +122,14 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     // whoever "set it up" would own every nonexistent subdomain at once.
     if (currentTenant().ghost) {
       return reply.code(403).send({ error: 'The hub is already set up' });
+    }
+    // The door is closed when the service mailed an invitation: the first
+    // run then happens through /api/auth/join with that token, and a bare
+    // URL — leaked, guessed, forwarded — opens nothing.
+    if (founderInvited()) {
+      return reply.code(403).send({
+        error: 'This hub is set up through the invitation that was emailed to its administrator',
+      });
     }
     const parsed = z
       .object({
@@ -110,16 +160,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         `INSERT INTO users (id, email, name, role, password_hash, color, must_change_password, created_at)
          VALUES (?, ?, ?, 'admin', ?, ?, 0, ?)`,
       ).run(userId, parsed.data.email, parsed.data.name, passwordHash, nextColor(), now());
-      // A zone we cannot use is dropped rather than raised: a browser with an
-      // odd idea of its own timezone must not be able to block the one screen
-      // that stands between a family and their hub.
-      const tz = parsed.data.timezone?.trim();
-      if (tz && isValidTimezone(tz)) {
-        db.prepare(
-          `INSERT INTO settings (key, value, updated_at) VALUES ('home.timezone', ?, ?)
-           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-        ).run(tz, now());
-      }
+      stampTimezone(parsed.data.timezone);
       return true;
     })();
 
@@ -157,7 +198,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
        VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(
       inviteId,
-      hashToken(token),
+      hashInviteToken(token),
       parsed.data.role,
       req.user.id,
       now(),
@@ -172,6 +213,8 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     if (req.user?.role !== 'admin') {
       return reply.code(403).send({ error: 'Administrators only' });
     }
+    // The founder invitation is the service's, not the admin's: it is
+    // history by the time anyone can read this list, and not theirs to revoke
     return db
       .prepare(
         `SELECT i.id, i.role, i.created_at, i.expires_at,
@@ -179,6 +222,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
                 u.name AS used_by_name
            FROM invites i
            LEFT JOIN users u ON u.id = i.used_by
+          WHERE i.role <> 'admin'
           ORDER BY i.created_at DESC
           LIMIT 20`,
       )
@@ -191,20 +235,22 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     }
     const { id: inviteId } = z.object({ id: z.string().uuid() }).parse(req.params);
     // Used ones stay untouched — that's history now, not an invite
-    db.prepare('DELETE FROM invites WHERE id = ? AND used_at IS NULL').run(inviteId);
+    db.prepare("DELETE FROM invites WHERE id = ? AND used_at IS NULL AND role <> 'admin'").run(inviteId);
     return { ok: true };
   });
 
   // ── Invites: the invitee side (public) ─────────────────────────────────
 
-  // Whoever opens the link learns whether it is alive before filling the form
+  // Whoever opens the link learns whether it is alive before filling the
+  // form — and, for the founder, which address it was sent to, so the login
+  // field is already filled with the one that counts as confirmed.
   app.get('/api/auth/invite', strictRate, (req, reply) => {
     const { token } = z.object({ token: z.string().min(1) }).parse(req.query);
     const invite = liveInvite(token);
     if (!invite) {
       return reply.code(404).send({ error: 'The link is invalid: expired or already used' });
     }
-    return { valid: true };
+    return { valid: true, role: invite.role, email: invite.email };
   });
 
   app.post('/api/auth/join', strictRate, async (req, reply) => {
@@ -214,6 +260,9 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         name: nameField,
         email: emailField,
         password: passwordField,
+        // Sent by the browser for the founder, exactly as the open first
+        // run does: the hub's clock is set by whoever sets the hub up
+        timezone: z.string().max(64).optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) {
@@ -234,6 +283,10 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
 
     const passwordHash = await hashPassword(parsed.data.password);
     const userId = id();
+    // The address the invitation was mailed to is proven by the arrival of
+    // the link. Any other login the person types is unproven and gets the
+    // ordinary confirmation ask.
+    const proven = invite.email !== null && invite.email === parsed.data.email;
 
     // A race of two visits via one link is settled by the transaction:
     // the second one sees used_at and gets refused
@@ -242,15 +295,28 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         .prepare('SELECT used_at FROM invites WHERE id = ?')
         .get(invite.id) as { used_at: string | null };
       if (fresh.used_at) return false;
+      // The founder invitation creates the first account and only the
+      // first: checked inside the transaction like the open first run is
+      if (invite.role === 'admin' && userCount() > 0) return false;
       db.prepare(
-        `INSERT INTO users (id, email, name, role, password_hash, color, must_change_password, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
-      ).run(userId, parsed.data.email, parsed.data.name, invite.role, passwordHash, nextColor(), now());
+        `INSERT INTO users (id, email, name, role, password_hash, color, must_change_password, created_at, email_verified_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      ).run(
+        userId,
+        parsed.data.email,
+        parsed.data.name,
+        invite.role,
+        passwordHash,
+        nextColor(),
+        now(),
+        proven ? now() : null,
+      );
       db.prepare('UPDATE invites SET used_by = ?, used_at = ? WHERE id = ?').run(
         userId,
         now(),
         invite.id,
       );
+      if (invite.role === 'admin') stampTimezone(parsed.data.timezone);
       return true;
     })();
 
@@ -258,8 +324,13 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'The link is invalid: expired or already used' });
     }
 
-    log.info(`invite join: ${parsed.data.email} (${invite.role}) from ${req.ip}`);
-    void sendVerificationEmail(userId);
+    if (invite.role === 'admin') {
+      invalidateTimezone();
+      log.info(`founder join: admin ${parsed.data.email} created from ${req.ip}`);
+    } else {
+      log.info(`invite join: ${parsed.data.email} (${invite.role}) from ${req.ip}`);
+    }
+    if (!proven) void sendVerificationEmail(userId);
     setSessionCookie(reply, createSession(userId, req.headers['user-agent'], req.ip));
     return reply.code(201).send({ ok: true });
   });
