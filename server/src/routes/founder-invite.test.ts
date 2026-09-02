@@ -86,9 +86,8 @@ describe('the founder invitation', () => {
       payload: { name: 'Squatter', email: 'squatter@example.test', password: PASSWORD },
     });
     expect(bare.statusCode).toBe(403);
-    expect(bare.json().error).toBe(
-      'This hub is set up through the invitation that was emailed to its administrator',
-    );
+    // Word-for-word what a ghost says — see the enumeration test below
+    expect(bare.json().error).toBe('The hub is already set up');
 
     // The link tells the founder which address it came to
     const check = await app.inject({
@@ -259,5 +258,59 @@ describe('the founder invitation', () => {
     });
     expect(list.statusCode).toBe(200);
     expect(list.json()).toEqual([]);
+  });
+
+  /*
+    #185. Closing the open first run introduced a way to enumerate the
+    service: the founder branch answered with its own sentence, so one
+    unauthenticated POST told a stranger whether a subdomain belonged to a
+    real family. The ghost exists to make that impossible, and the state
+    endpoint was already careful about it — this is the same promise, on
+    the one route that had stopped keeping it.
+
+    The claimed case is the one worth pinning rather than the pending one:
+    founderInvited() looks for an admin invite without asking whether it
+    was used, so the row outlives the founder's arrival and every family
+    on the service would have answered differently from every name that
+    was never provisioned, for as long as it existed.
+  */
+  it('refuses the first run identically for a ghost, a waiting family and a claimed one', async () => {
+    const setup = (slug: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/auth/setup',
+        headers: onHost(slug),
+        payload: { name: 'Squatter', email: 'squatter@example.test', password: PASSWORD },
+      });
+
+    // 1. A family provisioned with an invitation, founder not yet arrived
+    const { familyId } = tenants.createFamily('parity-f5e1');
+    await founder.issueFounderInvite(familyId, 'parity@example.test');
+    const waiting = await setup('parity-f5e1');
+
+    // 2. A subdomain nobody ever provisioned
+    const ghost = await setup('no-such-family-f5e2');
+
+    // 3. The same family after its founder has claimed it — the used
+    //    admin invite row is still there, which is what made this leak
+    //    permanent rather than a window
+    const token = tokenFrom(sent.at(-1)!);
+    const joined = await app.inject({
+      method: 'POST',
+      url: '/api/auth/join',
+      headers: onHost('parity-f5e1'),
+      payload: { token, name: 'Parity', email: 'parity@example.test', password: PASSWORD },
+    });
+    expect(joined.statusCode).toBe(201);
+    const claimed = await setup('parity-f5e1');
+
+    for (const res of [waiting, ghost, claimed]) expect(res.statusCode).toBe(403);
+    expect(waiting.json()).toEqual(ghost.json());
+    expect(claimed.json()).toEqual(ghost.json());
+
+    // And the sign-in screen still cannot tell them apart either
+    const state = (slug: string) =>
+      app.inject({ url: '/api/auth/state', headers: onHost(slug) }).then((r) => r.json());
+    expect(await state('parity-f5e1')).toEqual(await state('no-such-family-f5e2'));
   });
 });

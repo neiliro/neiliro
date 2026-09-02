@@ -49,6 +49,19 @@ function nextColor(): string {
 
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60_000;
 
+/*
+  Every refusal of the first-run screen says exactly this, and it is one
+  constant rather than three literals because the wording is a promise
+  rather than a message: an unknown subdomain, a family waiting for its
+  founder, and a family that already has an admin must be impossible to
+  tell apart from outside. When the founder branch had its own sentence,
+  a single unauthenticated POST separated every real family on the
+  service from every name that was never provisioned — the ghost exists
+  precisely so that cannot be done, and /api/auth/state was already
+  careful about it.
+*/
+const ALREADY_SET_UP = 'The hub is already set up';
+
 const nameField = z.string().trim().min(1, 'The name cannot be empty').max(80);
 const emailField = z.string().trim().toLowerCase().email('Invalid login address').max(120);
 const passwordField = z.string().min(10, 'Password must be at least 10 characters').max(200);
@@ -121,15 +134,15 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     // must act it: its shared decoy database may never grow an admin —
     // whoever "set it up" would own every nonexistent subdomain at once.
     if (currentTenant().ghost) {
-      return reply.code(403).send({ error: 'The hub is already set up' });
+      return reply.code(403).send({ error: ALREADY_SET_UP });
     }
     // The door is closed when the service mailed an invitation: the first
     // run then happens through /api/auth/join with that token, and a bare
-    // URL — leaked, guessed, forwarded — opens nothing.
+    // URL — leaked, guessed, forwarded — opens nothing. The refusal is
+    // word-for-word the ghost's: whoever opened that URL learns that this
+    // hub is not theirs to set up, and nothing about whether it exists.
     if (founderInvited()) {
-      return reply.code(403).send({
-        error: 'This hub is set up through the invitation that was emailed to its administrator',
-      });
+      return reply.code(403).send({ error: ALREADY_SET_UP });
     }
     const parsed = z
       .object({
@@ -165,7 +178,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     })();
 
     if (!created) {
-      return reply.code(403).send({ error: 'The hub is already set up' });
+      return reply.code(403).send({ error: ALREADY_SET_UP });
     }
 
     // The tenant may already have cached "no zone" from a today() before this.

@@ -875,7 +875,6 @@ export const ru: Record<string, string> = {
   // ── Founder invitation: the hosted first run behind a mailed token (#157) ──
   'The address the invitation came to — already confirmed for password recovery.': 'Адрес, на который пришло приглашение — уже подтверждён для восстановления пароля.',
   'A different address than the invitation came to: we will ask you to confirm it.': 'Адрес отличается от того, куда пришло приглашение: мы попросим его подтвердить.',
-  'This hub is set up through the invitation that was emailed to its administrator': 'Этот хаб настраивается по приглашению, отправленному его администратору на почту',
 };
 
 /** one / few / many, keyed by the English singular used in plural() calls. */
