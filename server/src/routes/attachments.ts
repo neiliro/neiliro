@@ -39,6 +39,31 @@ interface AttachmentRow {
   transaction_id: string | null;
 }
 
+/*
+  Who may see an attachment, as one expression rather than one per caller.
+
+  An attachment inherits the privacy of whatever it hangs on: a note's
+  visibility, or the account behind a transaction. Both have to be asked,
+  because a receipt on a personal account carries `note_id IS NULL` — and
+  a guard that only looked at the note clause therefore let every
+  member's receipt filenames through. That is exactly what happened in
+  global search (#184): the row was hidden from the money screens and
+  from a direct fetch, and named in search results.
+
+  Mail attachments hang on neither and stay visible: family mail has no
+  owner_id, it belongs to the household by design.
+
+  Shared so that the three places privacy has to agree in — the list, the
+  search and the direct fetch — agree by construction. Two `?` for the
+  reader's id, in this order.
+*/
+export const ATTACHMENT_VISIBLE_JOINS = `LEFT JOIN notes n ON n.id = a.note_id
+         LEFT JOIN transactions t ON t.id = a.transaction_id
+         LEFT JOIN accounts acc ON acc.id = t.account_id`;
+
+export const ATTACHMENT_VISIBLE = `(a.note_id IS NULL OR n.visibility = 'shared' OR n.owner_id = ?)
+          AND (a.transaction_id IS NULL OR acc.shared = 1 OR acc.owner_id = ?)`;
+
 /**
  * A human-supplied filename never takes part in the on-disk path.
  * The file is stored under a generated name while the original name
@@ -58,17 +83,14 @@ function contentDisposition(filename: string, inline: boolean): string {
   )}`;
 }
 
-/** An attachment is visible to whoever can see the note it is attached to. */
+/** An attachment is visible to whoever can see the thing it hangs on. */
 function loadVisible(attachmentId: string, userId: string): AttachmentRow | null {
   const row = db
     .prepare(
       `SELECT a.* FROM attachments a
-         LEFT JOIN notes n ON n.id = a.note_id
-         LEFT JOIN transactions t ON t.id = a.transaction_id
-         LEFT JOIN accounts acc ON acc.id = t.account_id
+         ${ATTACHMENT_VISIBLE_JOINS}
         WHERE a.id = ?
-          AND (a.note_id IS NULL OR n.visibility = 'shared' OR n.owner_id = ?)
-          AND (a.transaction_id IS NULL OR acc.shared = 1 OR acc.owner_id = ?)`,
+          AND ${ATTACHMENT_VISIBLE}`,
     )
     .get(attachmentId, userId, userId) as AttachmentRow | undefined;
   return row ?? null;
