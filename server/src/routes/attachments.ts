@@ -105,40 +105,80 @@ interface UploadedInfo {
   url: string;
 }
 
-/**
- * Attachment arriving as a buffer (a MIME part of a family-mail
- * message) rather than a multipart upload. Same storage layout, same
- * budget; an oversized part or a full store skips the file rather than
- * failing the whole message — the text always lands.
- */
-export async function saveMailAttachment(
-  mailMessageId: string,
-  file: { filename: string; mime: string; content: Buffer },
-): Promise<void> {
-  if (file.content.length === 0 || file.content.length > MAX_FILE_BYTES) return;
+/*
+  Attachments arriving as MIME parts of a family-mail message, rather than
+  as a multipart upload. Same storage layout, same budget.
+
+  Split into "write the file" and "write the row" on purpose. A message
+  and its attachments have to land together or not at all: better-sqlite3
+  transactions are synchronous and cannot span an `await`, so the files
+  are staged first, then message row and attachment rows go into one
+  transaction, and a failure anywhere unlinks what was staged. Before this
+  split the message row committed on its own and a failed attachment left
+  it behind half-stored — and, being known by Message-ID from then on,
+  never repaired (#187).
+
+  An oversized part or a full store skips the file rather than failing the
+  message: the text always lands. That is a decision about the part, not a
+  failure, so it returns null rather than throwing.
+*/
+
+export interface StagedAttachment {
+  filename: string;
+  mime: string;
+  size: number;
+  /** Relative to the family's attachments directory, as stored in the row. */
+  storagePath: string;
+  absPath: string;
+}
+
+/** Bytes already on this family's tab — the budget is cumulative across parts. */
+export function attachmentBytesUsed(): number {
   const { used } = db
     .prepare('SELECT coalesce(sum(size_bytes), 0) AS used FROM attachments')
     .get() as { used: number };
-  if (used + file.content.length > BUDGET_BYTES) return;
+  return used;
+}
+
+/**
+ * Write one part to disk, or decide not to. `usedBytes` is the running
+ * total the caller keeps, so the budget holds across the parts of one
+ * message without re-reading the table per part.
+ */
+export async function stageMailAttachment(
+  file: { filename: string; mime: string; content: Buffer },
+  usedBytes: number,
+): Promise<StagedAttachment | null> {
+  if (file.content.length === 0 || file.content.length > MAX_FILE_BYTES) return null;
+  if (usedBytes + file.content.length > BUDGET_BYTES) return null;
 
   const storageName = storageNameFor(file.filename);
   const month = today().slice(0, 7);
   const folder = join(currentTenant().attachmentsDir, month);
   await mkdir(folder, { recursive: true });
-  await writeFile(join(folder, storageName), file.content);
+  const absPath = join(folder, storageName);
+  await writeFile(absPath, file.content);
 
+  return {
+    filename: file.filename.slice(0, 300),
+    mime: safeMime(file.mime),
+    size: file.content.length,
+    storagePath: join(month, storageName),
+    absPath,
+  };
+}
+
+/** The row for a staged part — synchronous, meant for the caller's transaction. */
+export function insertStagedAttachment(mailMessageId: string, staged: StagedAttachment): void {
   db.prepare(
     `INSERT INTO attachments (id, filename, mime, size_bytes, storage_path, mail_message_id, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id(),
-    file.filename.slice(0, 300),
-    safeMime(file.mime),
-    file.content.length,
-    join(month, storageName),
-    mailMessageId,
-    now(),
-  );
+  ).run(id(), staged.filename, staged.mime, staged.size, staged.storagePath, mailMessageId, now());
+}
+
+/** Undo staging when the message did not land. Best effort: a file that is already gone is fine. */
+export async function discardStaged(staged: StagedAttachment[]): Promise<void> {
+  await Promise.all(staged.map((s) => unlink(s.absPath).catch(() => undefined)));
 }
 
 /**

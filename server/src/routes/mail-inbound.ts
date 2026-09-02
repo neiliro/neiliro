@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { runWithTenant } from '../db/index.js';
 import { env } from '../env.js';
-import { ingestEmail } from '../lib/mail.js';
+import { UnparseableMail, ingestEmail } from '../lib/mail.js';
 import { log } from '../lib/log.js';
 import { tenantForSlug } from '../lib/tenants.js';
 
@@ -34,9 +34,14 @@ const INBOUND_PATH = '/api/mail/inbound/mime';
 
 /*
   A letter arrives percent-encoded inside a form field, which inflates it
-  well past the raw MIME cap ingestEmail enforces. Fastify's default body
-  limit is 1 MB — far too small for a scan of a utility bill, and it would
-  fail as a 413 that Mailgun retries for eight hours.
+  past the 25 MB raw-MIME cap ingestEmail enforces (MAX_MESSAGE_BYTES) —
+  hence the headroom here. Fastify's default body limit is 1 MB, far too
+  small for a scan of a utility bill, and it would fail as a 413 that
+  Mailgun retries for eight hours.
+
+  The signature lives in the same form as the letter, so the body has to
+  be parsed before it can be checked; that pre-auth cost is bounded by
+  this limit, and the raw-MIME cap is checked before any MIME parsing.
 */
 const MAX_INBOUND_BYTES = 40 * 1024 * 1024;
 
@@ -96,7 +101,9 @@ export async function registerInboundMailRoutes(app: FastifyInstance): Promise<v
     Response codes are a protocol here, not decoration: Mailgun retries
     for eight hours on anything that is not 200 or 406. Every permanent
     rejection below must therefore be 406 — a 500 on an unknown family
-    would turn one stray letter into hours of retries.
+    would turn one stray letter into hours of retries. The converse holds
+    too: a letter that failed for a reason that can pass tomorrow (a full
+    disk, a busy database) must NOT be 406, or it is dropped for good.
   */
   app.post(INBOUND_PATH, { bodyLimit: MAX_INBOUND_BYTES }, async (req, reply) => {
     const form = (req.body ?? {}) as Record<string, string | undefined>;
@@ -139,9 +146,16 @@ export async function registerInboundMailRoutes(app: FastifyInstance): Promise<v
       log.info(`mail inbound: ${rowId === null ? 'duplicate' : 'stored'} for "${slug}"`);
       return { ok: true, stored: rowId !== null };
     } catch (err) {
-      // Unparseable MIME is permanent — retrying it changes nothing.
-      log.error(`mail inbound: ingest failed for "${slug}"`, err);
-      return reply.code(406).send({ error: 'Could not parse the message' });
+      if (err instanceof UnparseableMail) {
+        // Malformed or oversized: permanent, retrying it changes nothing
+        log.error(`mail inbound: unparseable message for "${slug}"`, err);
+        return reply.code(406).send({ error: 'Could not parse the message' });
+      }
+      // Storage or database trouble. Ingest is all-or-nothing, so nothing
+      // of this letter was kept and the next attempt can succeed — and a
+      // 5xx is exactly what asks the provider to make one (#187).
+      log.error(`mail inbound: could not store a message for "${slug}", asking for a retry`, err);
+      return reply.code(500).send({ error: 'Could not store the message' });
     }
   });
 }

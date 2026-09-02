@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHmac } from 'node:crypto';
-import { readdirSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
@@ -25,6 +25,8 @@ process.env.MAILGUN_SIGNING_KEY = 'test-signing-key';
 const tenants = await import('../lib/tenants.js');
 const { buildApp } = await import('../app.js');
 const { env } = await import('../env.js');
+const { MAX_MESSAGE_BYTES } = await import('../lib/mail.js');
+const { today } = await import('../db/index.js');
 
 const SIGNING_KEY = 'test-signing-key';
 const INBOUND = '/api/mail/inbound/mime';
@@ -352,6 +354,92 @@ describe('inbound family mail', () => {
 
     const smiths = await mailbox(SMITHS, smithsCookie);
     expect(smiths.messages.map((m) => m.subject)).toContain('Your bill');
+  });
+
+  it('stores nothing and asks for a retry when the attachment store fails (#187)', async () => {
+    /*
+      Ingest used to commit the message row and then save attachments one
+      by one. A failure in between left a half-stored letter that was
+      "known" by Message-ID from then on and never repaired — and every
+      failure was answered 406, which told Mailgun to give up on it.
+
+      Its own family, so the half-stored / retried state cannot disturb a
+      sibling test's mailbox. The failure is real, not mocked: a regular
+      file where the month folder has to be created makes the attachment
+      write fail with EEXIST.
+    */
+    const FRAGILE = 'fragile-m5n6';
+    tenants.createFamily(FRAGILE);
+    const registry = new Database(join(env.dataDir, 'registry.db'), { readonly: true });
+    const fragileId = (registry.prepare('SELECT id FROM families WHERE slug = ?').get(FRAGILE) as { id: string }).id;
+    registry.close();
+    const monthDir = join(env.dataDir, 'families', fragileId, 'attachments', today().slice(0, 7));
+    mkdirSync(join(env.dataDir, 'families', fragileId, 'attachments'), { recursive: true });
+    writeFileSync(monthDir, 'not a directory');
+
+    const withAttachment = [
+      'Message-ID: <fragile-1@school.example>',
+      'From: office@school.example',
+      `To: ${FRAGILE}@mail.neiliro.test`,
+      'Subject: Permission slip',
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/mixed; boundary="B"',
+      '',
+      '--B',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      'Please sign.',
+      '--B',
+      'Content-Type: application/pdf',
+      'Content-Disposition: attachment; filename="slip.pdf"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      Buffer.from('%PDF-1.4 slip').toString('base64'),
+      '--B--',
+      '',
+    ].join('\r\n');
+    const send = () =>
+      post(delivery({ recipient: `${FRAGILE}@mail.neiliro.test`, 'body-mime': withAttachment }));
+
+    try {
+      const failed = await send();
+      // Retryable, not permanent
+      expect(failed.statusCode).toBe(500);
+      // And genuinely nothing was kept: no half-stored letter
+      const fragileDb = new Database(join(env.dataDir, 'families', fragileId, 'hub.db'), { readonly: true });
+      const rows = fragileDb.prepare("SELECT id FROM mail_messages WHERE subject = 'Permission slip'").all();
+      const files = fragileDb.prepare('SELECT id FROM attachments').all();
+      fragileDb.close();
+      expect(rows).toEqual([]);
+      expect(files).toEqual([]);
+    } finally {
+      rmSync(monthDir, { force: true });
+    }
+
+    // The retry Mailgun would make now succeeds, with the attachment
+    const retried = await send();
+    expect(retried.statusCode).toBe(200);
+    expect(retried.json()).toEqual({ ok: true, stored: true });
+    const fragileDb = new Database(join(env.dataDir, 'families', fragileId, 'hub.db'), { readonly: true });
+    const stored = fragileDb
+      .prepare(
+        `SELECT (SELECT count(*) FROM attachments a WHERE a.mail_message_id = m.id) AS n
+           FROM mail_messages m WHERE m.subject = 'Permission slip'`,
+      )
+      .get() as { n: number } | undefined;
+    fragileDb.close();
+    expect(stored?.n).toBe(1);
+  });
+
+  it('refuses an oversized letter for good, before parsing it (#189)', { timeout: 30_000 }, async () => {
+    // Over the raw-MIME cap: permanent, since a retry will not shrink it,
+    // and rejected on a length check rather than a run of postal-mime.
+    const huge = 'a'.repeat(MAX_MESSAGE_BYTES + 1);
+    const started = Date.now();
+    const res = await post(delivery({ recipient: `${SMITHS}@mail.neiliro.test`, 'body-mime': huge }));
+    expect(res.statusCode).toBe(406);
+    // Generous, but a parse of 25 MB of nothing would take far longer
+    expect(Date.now() - started).toBeLessThan(10_000);
   });
 
   it('routes a "+tag" address to the family that owns the local part', async () => {
