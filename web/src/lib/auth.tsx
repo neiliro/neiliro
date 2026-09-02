@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { ApiError, api } from './api';
+import { lang } from './i18n';
 
 export interface User {
   id: string;
@@ -71,8 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginDemo = useCallback(async () => {
     // document.referrer is the only trace of how the visitor found the
-    // demo — the server keeps it in anonymous usage stats (demo mode only)
-    const me = await api.post<User>('/auth/demo', { referrer: document.referrer || null });
+    // demo — the server keeps it in anonymous usage stats (demo mode only).
+    // The language decides which template the sandbox is copied from: the
+    // sample family's own content is seeded per language, not translated.
+    const me = await api.post<User>('/auth/demo', {
+      referrer: document.referrer || null,
+      lang,
+    });
     setUser(me);
   }, []);
 

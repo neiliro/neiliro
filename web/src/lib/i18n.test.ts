@@ -2,14 +2,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /*
   i18n is module-level state (the language is read once at import), so each
-  case stubs localStorage and imports a fresh copy of the module.
+  case stubs its inputs and imports a fresh copy of the module.
+
+  navigator is stubbed too, and deliberately: with no stored choice the
+  language now comes from the browser's preference, so leaving it to the
+  real environment would make these cases pass or fail by whatever locale
+  the machine running them happens to have.
 */
-async function loadI18n(language: string | null) {
+async function loadI18n(language: string | null, browser: string[] = ['en-US']) {
   vi.resetModules();
   vi.stubGlobal('localStorage', {
     getItem: () => language,
     setItem: () => {},
   });
+  vi.stubGlobal('navigator', { languages: browser, language: browser[0] });
   return import('./i18n');
 }
 
@@ -54,5 +60,43 @@ describe('tPlural', () => {
     expect(tPlural(11, ['day', 'days'])).toBe('дней');
     expect(tPlural(21, ['day', 'days'])).toBe('день');
     expect(tPlural(102, ['task', 'tasks'])).toBe('задачи');
+  });
+});
+
+/*
+  Until this existed, a visitor whose browser asked for Russian met an
+  English hub and had to find the switch. On the public demo most never
+  did, which made the whole Russian half of the product invisible.
+*/
+describe('language detection', () => {
+  it('takes the browser preference when nothing was ever chosen', async () => {
+    const { t } = await loadI18n(null, ['ru-RU']);
+    expect(t('Save')).toBe('Сохранить');
+  });
+
+  it('ignores the region subtag', async () => {
+    const { t } = await loadI18n(null, ['ru-BY']);
+    expect(t('Save')).toBe('Сохранить');
+  });
+
+  it('takes the first preference it can actually speak', async () => {
+    // Asked for German, then Russian: German is not on offer, Russian is
+    const { t } = await loadI18n(null, ['de-DE', 'ru-RU']);
+    expect(t('Save')).toBe('Сохранить');
+  });
+
+  it('falls back to English for a language the hub does not speak', async () => {
+    const { t } = await loadI18n(null, ['ja-JP']);
+    expect(t('Save')).toBe('Save');
+  });
+
+  it('lets an explicit choice beat the browser', async () => {
+    const { t } = await loadI18n('en', ['ru-RU']);
+    expect(t('Save')).toBe('Save');
+  });
+
+  it('survives a browser that reports no languages at all', async () => {
+    const { t } = await loadI18n(null, []);
+    expect(t('Save')).toBe('Save');
   });
 });

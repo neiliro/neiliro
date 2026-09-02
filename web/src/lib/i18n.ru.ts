@@ -88,6 +88,8 @@ export const ru: Record<string, string> = {
   'A note for this date already exists, and it is private': 'Заметка на эту дату уже есть, и она приватная',
   'A one-off exception. Other months keep the standing budget': 'Разовое исключение. В остальных месяцах останется постоянный лимит',
   'A per-device setting: a phone and the shared kiosk can speak different languages.': 'Настройка этого устройства: телефон и общий стенд могут говорить на разных языках.',
+  'In the demo, switching also starts a fresh sample family in that language.':
+    'В демо переключение ещё и заводит новую примерную семью на этом языке.',
   'A private note is visible only to its owner': 'Приватную заметку видит только её владелец',
   'A receipt can be attached after the transaction is saved.': 'Чек можно приложить после сохранения операции.',
   'A subcategory cannot be a parent': 'Подкатегория не может быть родителем',

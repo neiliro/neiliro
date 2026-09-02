@@ -14,9 +14,12 @@ import { ru, ruPlurals } from './i18n.ru';
   — a new language is one dictionary file away (see i18n.ru.ts).
 
   Language is a device setting (localStorage), not an account one: a
-  phone and a shared kiosk may speak different languages. Default is
-  English. Switching languages reloads the page: it is a one-off action,
-  and the reload removes the need for reactive plumbing — t() stays a pure
+  phone and a shared kiosk may speak different languages. A device that
+  has never chosen takes the browser's own preference — until it did,
+  every visitor met an English hub and had to find the switch, which on
+  the public demo meant most of them never saw their own language at all.
+  Switching languages reloads the page: it is a one-off action, and the
+  reload removes the need for reactive plumbing — t() stays a pure
   function, usable outside React too.
 */
 
@@ -24,13 +27,40 @@ export type Lang = 'en' | 'ru';
 
 const STORAGE_KEY = 'hub-lang';
 
+const LANGS: readonly Lang[] = ['en', 'ru'];
+
+/**
+ * The browser's preference, narrowed to a language the hub speaks.
+ *
+ * navigator.languages is the ordered list the person actually configured;
+ * the first entry the hub can speak wins, so someone who asked for German
+ * and then Russian gets Russian rather than the English default. Region
+ * subtags are ignored: ru-BY and ru are the same dictionary.
+ */
+function detectLang(): Lang {
+  try {
+    const preferred = navigator.languages?.length ? navigator.languages : [navigator.language];
+    for (const tag of preferred) {
+      const base = String(tag).toLowerCase().split('-')[0];
+      const match = LANGS.find((l) => l === base);
+      if (match) return match;
+    }
+  } catch {
+    // No navigator at all (Node, tests) — English, as before
+  }
+  return 'en';
+}
+
 function readLang(): Lang {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored === 'ru' ? 'ru' : 'en';
+    // Only an explicit choice counts as stored: anything else, including
+    // the absence of a value, falls through to what the browser prefers
+    if (stored === 'ru' || stored === 'en') return stored;
   } catch {
-    return 'en';
+    // Private mode without localStorage — fall through and detect
   }
+  return detectLang();
 }
 
 export const lang: Lang = readLang();
