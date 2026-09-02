@@ -15,6 +15,11 @@ subdomain plus the mail domain, e.g. `smiths-a1b2@mail.neiliro.com`, and
 on their own; there is no IMAP to connect and no password to store.
 Replies go out from that address.
 
+The address is derived from the subdomain every time it is used, never
+stored — so it follows the one rename a fresh family may make in its first
+24 hours ([features](features.md)). Letters to the old name stop arriving
+the moment the hub moves; hand the address out once the name is settled.
+
 Everything below is for a self-hosted hub — or for a hosted family that
 would rather use a mailbox of its own, which takes over from the issued
 address once connected.
