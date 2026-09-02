@@ -123,9 +123,22 @@ up)
     sleep 1
   done
 
+  # --no-invite: the stand hands the hub over locally, which is exactly the
+  # operator case that flag exists for (#157). And the result is checked
+  # rather than grepped for a happy line: when the CLI's signature changed
+  # the old `|| true` swallowed the usage error, and the banner below went
+  # on promising family URLs that all answered as ghosts (#190).
   for slug in "${FAMILIES[@]}"; do
-    docker exec "$CONTAINER" node server/dist/cli/create-family.js "$slug" 2>&1 |
-      grep -E 'Family created|already taken' || true
+    if out=$(docker exec "$CONTAINER" node server/dist/cli/create-family.js "$slug" --no-invite 2>&1); then
+      echo "$out" | grep -E 'Family created' || true
+    elif echo "$out" | grep -q 'already taken'; then
+      # A second `up` over kept data: the family is there, nothing to do
+      echo "  ${slug}: already provisioned"
+    else
+      echo "!! could not provision ${slug}:" >&2
+      echo "$out" | sed 's/^/   /' >&2
+      exit 1
+    fi
   done
 
   start_www
