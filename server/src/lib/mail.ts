@@ -160,21 +160,39 @@ function serviceSender(address: string): Outgoing {
         form.set('h:References', message.inReplyTo);
       }
 
-      const auth = Buffer.from(`api:${env.mailgunApiKey}`).toString('base64');
-      const res = await fetch(`${env.mailgunApiBase}/v3/${env.mailDomain}/messages`, {
-        method: 'POST',
-        headers: { Authorization: `Basic ${auth}` },
-        body: form,
-      });
-      if (!res.ok) {
-        // The body names the actual reason — an unverified domain, a
-        // compliance hold — and the person pressing "send reply" is the
-        // one who needs to see it.
-        const detail = await res.text().catch(() => '');
-        throw new Error(`Mailgun refused the message (${res.status}) ${detail.slice(0, 200)}`.trim());
-      }
+      await postToMailgun(form);
     },
   };
+}
+
+/**
+ * The one place a message leaves for Mailgun. Every outbound path goes
+ * through here so that the delivery options are set once, not per sender.
+ *
+ * `o:tracking=no` is the privacy policy in code: it promises no open or
+ * click tracking. Today that holds by accident — everything we send is
+ * plain text, and Mailgun tracks opens with a pixel in the HTML part and
+ * clicks by rewriting HTML links, so there is nothing for it to touch. The
+ * day a message gains an HTML part, the domain's dashboard settings would
+ * silently decide for us. Sending the flag makes the promise hold
+ * regardless of what is configured on their side (#158).
+ */
+async function postToMailgun(form: FormData): Promise<void> {
+  form.set('o:tracking', 'no');
+
+  const auth = Buffer.from(`api:${env.mailgunApiKey}`).toString('base64');
+  const res = await fetch(`${env.mailgunApiBase}/v3/${env.mailDomain}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${auth}` },
+    body: form,
+  });
+  if (!res.ok) {
+    // The body names the actual reason — an unverified domain, a
+    // compliance hold — and the person pressing "send reply" is the
+    // one who needs to see it.
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Mailgun refused the message (${res.status}) ${detail.slice(0, 200)}`.trim());
+  }
 }
 
 /**
@@ -214,17 +232,7 @@ export async function sendServiceEmail(to: string, subject: string, text: string
   form.set('to', to);
   form.set('subject', subject);
   form.set('text', text);
-
-  const auth = Buffer.from(`api:${env.mailgunApiKey}`).toString('base64');
-  const res = await fetch(`${env.mailgunApiBase}/v3/${env.mailDomain}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Basic ${auth}` },
-    body: form,
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`Mailgun refused the message (${res.status}) ${detail.slice(0, 200)}`.trim());
-  }
+  await postToMailgun(form);
 }
 
 /**

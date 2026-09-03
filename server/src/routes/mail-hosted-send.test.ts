@@ -138,6 +138,9 @@ describe('hosted reply', () => {
     // angle-bracketed the way the header is stored
     expect(fields['h:In-Reply-To']).toBe('<consent-9@school.example>');
     expect(fields['h:References']).toBe('<consent-9@school.example>');
+    // The privacy policy promises no open or click tracking. Plain text
+    // makes that true by accident; the flag makes it true on purpose (#158)
+    expect(fields['o:tracking']).toBe('no');
   });
 
   it('encodes the display name, which is never plain ASCII', async () => {

@@ -23,6 +23,7 @@ interface Sent {
   to: string;
   subject: string;
   text: string;
+  tracking: string;
 }
 const sent: Sent[] = [];
 
@@ -30,7 +31,7 @@ vi.stubGlobal(
   'fetch',
   vi.fn(async (_url: string, init: { body: FormData }) => {
     const f = (k: string) => String(init.body.get(k) ?? '');
-    sent.push({ from: f('from'), to: f('to'), subject: f('subject'), text: f('text') });
+    sent.push({ from: f('from'), to: f('to'), subject: f('subject'), text: f('text'), tracking: f('o:tracking') });
     return { ok: true, status: 200, json: async () => ({ id: '<sent@mail.neiliro.test>' }) };
   }),
 );
@@ -128,6 +129,9 @@ describe('password reset', () => {
     expect(mail.from).toContain('<no-reply@mail.neiliro.test>');
     expect(mail.to).toBe(EMAIL);
     expect(mail.text).toContain(`https://${SLUG}.neiliro.test/reset?token=`);
+    // Service mail rides the same Mailgun call as family replies, so the
+    // no-tracking promise has to hold here too (#158)
+    expect(mail.tracking).toBe('no');
 
     const done = await app.inject({
       method: 'POST',
