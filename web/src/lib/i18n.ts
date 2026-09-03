@@ -11,7 +11,9 @@ import { ru, ruPlurals } from './i18n.ru';
     but breaks nothing;
   — server errors are translated by the same t() in one place (lib/api.ts):
     the server sends English text, the client shows it in the UI language;
-  — a new language is one dictionary file away (see i18n.ru.ts).
+  — a new language is one dictionary file away (see i18n.ru.ts) — plus
+    a column in server/src/lib/demo.strings.ts, because the demo family's
+    content is seeded per language, not translated on read.
 
   Language is a device setting (localStorage), not an account one: a
   phone and a shared kiosk may speak different languages. A device that
