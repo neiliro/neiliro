@@ -178,10 +178,23 @@ nothing will tell you that you forgot. Server-side strings are answered
 in English and translated on the client by exact match, so rewording a
 server message means updating the dictionary too.
 
-**A new language.** Copy `i18n.ru.ts`, translate the values, add a plural
-table if the language needs more forms than English, and wire it into
-`i18n.ts`. That is the whole job — the design goal was one file per
-language.
+**A new language** is two files, and the compiler tells you when you
+have forgotten the second one.
+
+1. *The interface.* Copy `web/src/lib/i18n.ru.ts`, translate the values,
+   add a plural table if the language needs more forms than English, and
+   add the code to `LANGS` in `i18n.ts`. Nothing else in the picker needs
+   wiring: a device that has never chosen a language takes the browser's
+   own preference, so a new dictionary is discovered on its own.
+2. *The demo family.* Add a column to `server/src/lib/demo.strings.ts`.
+   The sample family's content is seeded per language rather than
+   translated on read, so the table is typed (`DemoStrings`) and a missing
+   string is a compile error. `demo.strings.test.ts` also catches a value
+   copied across instead of translated — the few strings that are
+   deliberately identical in every language are listed in `SHARED`.
+
+The design goal was one file per language; the demo made it two, and the
+second one is guarded so that it cannot be half-done.
 
 **A migration.** Next number, descriptive name, and a comment at the top
 saying *why* the change is needed — the migration files are the closest
