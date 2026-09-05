@@ -162,7 +162,7 @@ describe('suspension and deletion', () => {
           method: 'POST',
           url: '/api/auth/setup',
           headers: onHost('paused-p1q2.neiliro.test'),
-          payload: { name: 'Squatter', email: 'squatter@example.test', password: 'correct horse battery' },
+          payload: { accept_terms: true, name: 'Squatter', email: 'squatter@example.test', password: 'correct horse battery' },
         });
         // The ghost's decoy database may never grow an admin — whoever
         // "set it up" would own every unknown subdomain at once
@@ -200,7 +200,7 @@ describe('host routing', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('smiths-a1b2.neiliro.test'),
-      payload: { name: 'Sam', email: 'sam@smiths.test', password: 'correct horse battery' },
+      payload: { accept_terms: true, name: 'Sam', email: 'sam@smiths.test', password: 'correct horse battery' },
     });
     expect(created.statusCode).toBe(201);
 
@@ -266,7 +266,7 @@ describe('host routing', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('nosuch-x9y8.neiliro.test'),
-      payload: { name: 'Eve', email: 'eve@evil.test', password: 'longenoughpass' },
+      payload: { accept_terms: true, name: 'Eve', email: 'eve@evil.test', password: 'longenoughpass' },
     });
     expect(setup.statusCode).toBe(403);
   });

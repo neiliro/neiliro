@@ -87,7 +87,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/auth/setup',
     headers: { host: FAMILY },
-    payload: { name: 'Sam', email: 'sam@smiths.test', password: 'correct horse battery' },
+    payload: { accept_terms: true, name: 'Sam', email: 'sam@smiths.test', password: 'correct horse battery' },
   });
   expect(created.statusCode).toBe(201);
 
@@ -97,7 +97,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/auth/setup',
     headers: { host: OTHER },
-    payload: { name: 'Dana', email: 'dana@jones.test', password: 'correct horse battery' },
+    payload: { accept_terms: true, name: 'Dana', email: 'dana@jones.test', password: 'correct horse battery' },
   });
   expect(dana.statusCode).toBe(201);
 
