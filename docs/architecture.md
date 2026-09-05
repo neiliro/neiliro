@@ -4,6 +4,10 @@ The technical decisions and the reasoning behind them. For user-facing
 behaviour, see [features.md](features.md); for the conventions to follow
 when changing any of this, see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
+Decisions large enough to deserve their own record live in [adr/](adr/):
+
+- [ADR 0001 — Client-side encryption of what people write](adr/0001-client-side-encryption.md): the words are encrypted in the browser with a key the server never holds; dates, amounts and links stay computable. Read it before adding any server-side handling of text a person wrote.
+
 ## Layout
 
 ```
