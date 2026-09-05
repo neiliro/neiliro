@@ -15,6 +15,7 @@ server/               Fastify + SQLite
   src/db/migrations/  Schema. The single source of truth
   src/routes/         API
 web/                  React + Vite + Tailwind
+  src/lib/crypto/     Client-side encryption (ADR 0001): key derivation, envelopes, key store
 scripts/              Certificates, backups, export/import, admin reset
 ```
 
