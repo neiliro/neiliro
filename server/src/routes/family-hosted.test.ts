@@ -48,7 +48,7 @@ async function bringUpFamily(slug: string, name: string): Promise<Family> {
     method: 'POST',
     url: '/api/auth/setup',
     headers: { host: `${slug}.neiliro.test` },
-    payload: { name, email, password: 'correct horse battery' },
+    payload: { accept_terms: true, name, email, password: 'correct horse battery' },
   });
   expect(setup.statusCode).toBe(201);
   const login = await app.inject({

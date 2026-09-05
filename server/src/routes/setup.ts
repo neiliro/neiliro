@@ -7,6 +7,7 @@ import { createSession, setSessionCookie } from '../lib/auth.js';
 import { hashPassword } from '../lib/password.js';
 import { sendVerificationEmail } from './email-verify.js';
 import { log } from '../lib/log.js';
+import { env } from '../env.js';
 
 /*
  * Distinct colors for joining members. Every visual identity in the hub
@@ -65,6 +66,22 @@ const ALREADY_SET_UP = 'The hub is already set up';
 const nameField = z.string().trim().min(1, 'The name cannot be empty').max(80);
 const emailField = z.string().trim().toLowerCase().email('Invalid login address').max(120);
 const passwordField = z.string().min(10, 'Password must be at least 10 characters').max(200);
+/*
+  Consent to the terms and the privacy policy (migration 031). On the hosted
+  service both account-creating routes refuse without it: a family that
+  never saw the documents cannot have agreed to them, whatever the terms say
+  about continued use. Self-hosted has no contract with the service, so the
+  field is ignored there and the column stays NULL. The error text is a
+  dictionary key on the client (i18n.ru.ts) — change both together.
+*/
+const acceptTermsField = z.boolean().optional();
+const TERMS_REQUIRED = 'Please accept the Terms of Service and Privacy Policy to continue';
+function termsRefused(accepted: boolean | undefined): boolean {
+  return env.hostedMode && accepted !== true;
+}
+function termsStamp(accepted: boolean | undefined): string | null {
+  return env.hostedMode && accepted === true ? now() : null;
+}
 
 export function hashInviteToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -153,14 +170,19 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         // not the place for a 400-entry dropdown, and the browser already
         // knows the answer. Correctable later in Settings.
         timezone: z.string().max(64).optional(),
+        accept_terms: acceptTermsField,
       })
       .safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
     }
+    if (termsRefused(parsed.data.accept_terms)) {
+      return reply.code(400).send({ error: TERMS_REQUIRED });
+    }
 
     const passwordHash = await hashPassword(parsed.data.password);
     const userId = id();
+    const termsAcceptedAt = termsStamp(parsed.data.accept_terms);
 
     const created = db.transaction(() => {
       const n = (db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n;
@@ -170,9 +192,9 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       // invited members distinct colors never covered the admin, so a
       // two-person household still ended up with two look-alike avatars.
       db.prepare(
-        `INSERT INTO users (id, email, name, role, password_hash, color, must_change_password, created_at)
-         VALUES (?, ?, ?, 'admin', ?, ?, 0, ?)`,
-      ).run(userId, parsed.data.email, parsed.data.name, passwordHash, nextColor(), now());
+        `INSERT INTO users (id, email, name, role, password_hash, color, must_change_password, created_at, terms_accepted_at)
+         VALUES (?, ?, ?, 'admin', ?, ?, 0, ?, ?)`,
+      ).run(userId, parsed.data.email, parsed.data.name, passwordHash, nextColor(), now(), termsAcceptedAt);
       stampTimezone(parsed.data.timezone);
       return true;
     })();
@@ -276,10 +298,16 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         // Sent by the browser for the founder, exactly as the open first
         // run does: the hub's clock is set by whoever sets the hub up
         timezone: z.string().max(64).optional(),
+        accept_terms: acceptTermsField,
       })
       .safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
+    }
+    // Checked before the token is looked at: a refusal here must not burn
+    // a single-use invitation.
+    if (termsRefused(parsed.data.accept_terms)) {
+      return reply.code(400).send({ error: TERMS_REQUIRED });
     }
 
     const invite = liveInvite(parsed.data.token);
@@ -296,6 +324,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
 
     const passwordHash = await hashPassword(parsed.data.password);
     const userId = id();
+    const termsAcceptedAt = termsStamp(parsed.data.accept_terms);
     // The address the invitation was mailed to is proven by the arrival of
     // the link. Any other login the person types is unproven and gets the
     // ordinary confirmation ask.
@@ -312,8 +341,8 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       // first: checked inside the transaction like the open first run is
       if (invite.role === 'admin' && userCount() > 0) return false;
       db.prepare(
-        `INSERT INTO users (id, email, name, role, password_hash, color, must_change_password, created_at, email_verified_at)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+        `INSERT INTO users (id, email, name, role, password_hash, color, must_change_password, created_at, email_verified_at, terms_accepted_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
       ).run(
         userId,
         parsed.data.email,
@@ -323,6 +352,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         nextColor(),
         now(),
         proven ? now() : null,
+        termsAcceptedAt,
       );
       db.prepare('UPDATE invites SET used_by = ?, used_at = ? WHERE id = ?').run(
         userId,

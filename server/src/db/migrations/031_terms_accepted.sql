@@ -1,0 +1,12 @@
+-- Consent to the Terms of Service and Privacy Policy, on the hosted service.
+--
+-- Both legal pages promise that continued use is acceptance, but nothing
+-- recorded the moment a person actually agreed. On the hosted service every
+-- account is now created behind a checkbox naming both documents, and this
+-- column keeps when it was ticked. The documents are dated, so the
+-- timestamp says which version was on the table.
+--
+-- NULL on a self-hosted hub, by design: a family running its own server has
+-- no contract with the service, so the checkbox is not shown and there is
+-- nothing to record.
+ALTER TABLE users ADD COLUMN terms_accepted_at TEXT;

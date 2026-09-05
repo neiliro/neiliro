@@ -73,7 +73,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/auth/setup',
     headers: { host: HOST },
-    payload: { name: 'Sam', email: 'sam@smiths.test', password: 'correct horse battery' },
+    payload: { accept_terms: true, name: 'Sam', email: 'sam@smiths.test', password: 'correct horse battery' },
   });
   expect(created.statusCode).toBe(201);
   cookie = `hub_session=${created.cookies.find((c) => c.name === 'hub_session')?.value ?? ''}`;

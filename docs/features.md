@@ -10,6 +10,8 @@ A hub with an empty database offers to create the first account right in the bro
 
 Family members are added with invitations: the administrator creates a single-use link (valid for a week, shown once, stored as a hash), the person opens it and fills in their own name, login and password. This is the only way in — for a kid without their own device, the parent simply opens the link themselves. Each joining member automatically gets a distinct account color (the avatar is the first letter of the name, so color is what tells people apart).
 
+On the hosted service every account — the founder's and each invited member's — is created behind one checkbox naming the Terms of Service and the Privacy Policy, which open on the service's own domain; the moment of consent is recorded with the account. A self-hosted hub has no contract with anyone and never shows it.
+
 Day-to-day work happens under personal accounts. The administrator role manages the system; it has **no access to other people's private notes** — private queries filter by owner, and there is no "if admin, show everything" branch in the code.
 
 ### Lost password

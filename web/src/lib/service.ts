@@ -15,6 +15,8 @@ export interface ServiceState {
   demo: boolean;
   hosted: boolean;
   password_reset: boolean;
+  /** The hosted service's apex domain (terms and privacy live there); null when self-hosted. */
+  apex: string | null;
 }
 
 let pending: Promise<ServiceState> | null = null;

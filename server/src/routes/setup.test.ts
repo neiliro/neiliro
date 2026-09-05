@@ -36,4 +36,28 @@ describe('POST /api/auth/setup', () => {
     expect(USER_COLORS).toContain(row.color);
     expect(row.color).toBe(USER_COLORS[0]);
   });
+
+  it('asks for no consent on a self-hosted hub and records none, even if sent', async () => {
+    // No contract with the service: the checkbox is not shown, the field
+    // is ignored, the column stays NULL (migration 031).
+    const hub = await buildTestApp();
+    const state = await hub.app.inject({ url: '/api/auth/state' });
+    expect(state.json()).toMatchObject({ hosted: false, apex: null });
+
+    const res = await hub.app.inject({
+      method: 'POST',
+      url: '/api/auth/setup',
+      payload: {
+        name: 'Alex',
+        email: 'alex@hub.local',
+        password: 'correct horse battery staple',
+        accept_terms: true,
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const row = hub.db.prepare('SELECT terms_accepted_at FROM users').get() as {
+      terms_accepted_at: string | null;
+    };
+    expect(row.terms_accepted_at).toBeNull();
+  });
 });

@@ -108,7 +108,7 @@ beforeAll(async () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: { host: `${slug}.neiliro.test` },
-      payload: { name, email: `${name.toLowerCase()}@${slug}.test`, password: 'correct horse battery' },
+      payload: { accept_terms: true, name, email: `${name.toLowerCase()}@${slug}.test`, password: 'correct horse battery' },
     });
     expect(res.statusCode).toBe(201);
     const cookie = res.cookies.find((c) => c.name === 'hub_session');

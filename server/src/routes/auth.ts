@@ -113,7 +113,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     // happens in sandboxes), but the initial setup screen must not be
     // shown, and there is one way in — the "Try the demo" button.
     if (env.demoMode) {
-      return { initialized: true, google: false, demo: true, hosted: false, password_reset: false };
+      return { initialized: true, google: false, demo: true, hosted: false, password_reset: false, apex: null };
     }
     // A hosted subdomain that doesn't exist claims to be set up: showing
     // the first-run screen only on real families would let anyone map
@@ -134,6 +134,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         // "forgot password?" that appeared only on real subdomains would
         // enumerate families all by itself.
         password_reset: passwordResetAvailable(),
+        apex: env.hostedDomain,
       };
     }
     const n = (db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n;
@@ -150,6 +151,11 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       hosted: env.hostedMode,
       // Whether the login screen should offer "forgot password?"
       password_reset: passwordResetAvailable(),
+      // The service's apex, where the terms and privacy policy live — the
+      // account-creation forms link to them and ask for consent (migration
+      // 031). A property of the process, so the ghost states it too. Null
+      // on a self-hosted hub: there are no documents to agree to.
+      apex: env.hostedMode ? env.hostedDomain : null,
     };
   });
 

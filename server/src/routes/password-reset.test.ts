@@ -93,7 +93,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/auth/setup',
     headers: { host: HOST },
-    payload: { name: 'Sam', email: EMAIL, password: OLD_PASSWORD },
+    payload: { accept_terms: true, name: 'Sam', email: EMAIL, password: OLD_PASSWORD },
   });
   expect(created.statusCode).toBe(201);
 

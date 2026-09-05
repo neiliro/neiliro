@@ -352,7 +352,56 @@ export function Login() {
  * First-run setup: the DB is empty, the first account being created is
  * the admin. Passwords are no longer printed in the server logs.
  */
+/**
+ * Consent to the terms and the privacy policy — hosted only (migration 031).
+ *
+ * Not a wall of legal text and not a modal: one checkbox naming both
+ * documents, which open in a new tab on the service's apex. The server
+ * refuses account creation without it, so the button below stays disabled
+ * until the box is ticked rather than round-tripping for the refusal.
+ * A self-hosted hub has no contract with the service: `apex` is null there,
+ * nothing renders, and the server ignores the field.
+ */
+function TermsConsent({
+  apex,
+  checked,
+  onChange,
+}: {
+  apex: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const doc = (path: string, label: string) => (
+    <a
+      href={`https://${apex}/${path}`}
+      target="_blank"
+      rel="noopener"
+      className="underline decoration-[var(--c-border)] underline-offset-2 hover:text-accent"
+    >
+      {label}
+    </a>
+  );
+  return (
+    <label className="flex items-start gap-2.5 text-sm text-ink">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 size-4 shrink-0 accent-[var(--c-accent)]"
+      />
+      <span>
+        {t('I agree to the')} {doc('terms', t('Terms of Service'))} {t('and the')}{' '}
+        {doc('privacy', t('Privacy Policy'))}
+      </span>
+    </label>
+  );
+}
+
 function Setup() {
+  const { state: service } = useServiceState();
+  // Null when there is nothing to agree to (self-hosted)
+  const apex = service?.hosted ? service.apex : null;
+  const [agreed, setAgreed] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -372,6 +421,7 @@ function Setup() {
         // sets up from Chicago should not have to discover later why "today"
         // was flipping in the afternoon. Changeable in Settings.
         timezone: browserTimezone(),
+        ...(apex ? { accept_terms: agreed } : {}),
       });
       window.location.href = '/';
     } catch (err) {
@@ -405,8 +455,9 @@ function Setup() {
           />
           <span className="mt-1 block text-xs text-muted">{t('At least 10 characters')}</span>
         </label>
+        {apex && <TermsConsent apex={apex} checked={agreed} onChange={setAgreed} />}
         {error && <p className="text-sm text-urgent">{error}</p>}
-        <button type="submit" disabled={busy} className={buttonClass}>
+        <button type="submit" disabled={busy || (apex !== null && !agreed)} className={buttonClass}>
           {busy ? t('Creating') : t('Create and sign in')}
         </button>
       </form>
@@ -557,6 +608,9 @@ interface InviteCheck {
  */
 function Join() {
   const token = new URLSearchParams(window.location.search).get('token') ?? '';
+  const { state: service } = useServiceState();
+  const apex = service?.hosted ? service.apex : null;
+  const [agreed, setAgreed] = useState(false);
   // null — validating the link; then either the form or an explanation
   const [invite, setInvite] = useState<InviteCheck | false | null>(null);
   const [name, setName] = useState('');
@@ -593,6 +647,7 @@ function Join() {
         email,
         password,
         ...(founder ? { timezone: browserTimezone() } : {}),
+        ...(apex ? { accept_terms: agreed } : {}),
       });
       window.location.href = '/';
     } catch (err) {
@@ -646,8 +701,9 @@ function Join() {
           />
           <span className="mt-1 block text-xs text-muted">{t('At least 10 characters')}</span>
         </label>
+        {apex && <TermsConsent apex={apex} checked={agreed} onChange={setAgreed} />}
         {error && <p className="text-sm text-urgent">{error}</p>}
-        <button type="submit" disabled={busy} className={buttonClass}>
+        <button type="submit" disabled={busy || (apex !== null && !agreed)} className={buttonClass}>
           {busy ? t('Creating') : founder ? t('Create and sign in') : t('Join')}
         </button>
       </form>
