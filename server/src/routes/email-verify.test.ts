@@ -83,7 +83,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/auth/setup',
     headers: { host: HOST },
-    payload: { name: 'Sam', email: ADMIN, password: 'correct horse battery' },
+    payload: { accept_terms: true, name: 'Sam', email: ADMIN, password: 'correct horse battery' },
   });
   expect(created.statusCode).toBe(201);
   adminCookie = `hub_session=${created.cookies.find((c) => c.name === 'hub_session')?.value}`;
@@ -100,7 +100,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/auth/join',
     headers: { host: HOST },
-    payload: { token, name: 'Dana', email: MEMBER, password: 'correct horse battery' },
+    payload: { accept_terms: true, token, name: 'Dana', email: MEMBER, password: 'correct horse battery' },
   });
   expect(joined.statusCode).toBe(201);
 

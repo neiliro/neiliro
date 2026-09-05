@@ -83,7 +83,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('founders-f1a1'),
-      payload: { name: 'Squatter', email: 'squatter@example.test', password: PASSWORD },
+      payload: { accept_terms: true, name: 'Squatter', email: 'squatter@example.test', password: PASSWORD },
     });
     expect(bare.statusCode).toBe(403);
     // Word-for-word what a ghost says — see the enumeration test below
@@ -103,7 +103,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('others-f1a2'),
-      payload: { token, name: 'Sam', email: 'sam@example.test', password: PASSWORD },
+      payload: { accept_terms: true, token, name: 'Sam', email: 'sam@example.test', password: PASSWORD },
     });
     expect(elsewhere.statusCode).toBe(404);
     expect(familyDb(otherId).prepare('SELECT count(*) AS n FROM users').get()).toEqual({ n: 0 });
@@ -114,6 +114,7 @@ describe('the founder invitation', () => {
       url: '/api/auth/join',
       headers: onHost('founders-f1a1'),
       payload: {
+        accept_terms: true,
         token,
         name: 'Sam',
         email: 'sam@example.test',
@@ -146,7 +147,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('founders-f1a1'),
-      payload: { token, name: 'Sam II', email: 'sam2@example.test', password: PASSWORD },
+      payload: { accept_terms: true, token, name: 'Sam II', email: 'sam2@example.test', password: PASSWORD },
     });
     expect(again.statusCode).toBe(404);
 
@@ -172,7 +173,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('movers-f2b1'),
-      payload: { token, name: 'Mo', email: 'other@example.test', password: PASSWORD },
+      payload: { accept_terms: true, token, name: 'Mo', email: 'other@example.test', password: PASSWORD },
     });
     expect(joined.statusCode).toBe(201);
     await new Promise((r) => setTimeout(r, 60));
@@ -204,7 +205,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('latecomers-f3c1'),
-      payload: { token: second, name: 'Lee', email: 'second@example.test', password: PASSWORD },
+      payload: { accept_terms: true, token: second, name: 'Lee', email: 'second@example.test', password: PASSWORD },
     });
     expect(joined.statusCode).toBe(201);
 
@@ -227,7 +228,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('sleepers-f4d1'),
-      payload: { token, name: 'Zed', email: 'zed@example.test', password: PASSWORD },
+      payload: { accept_terms: true, token, name: 'Zed', email: 'zed@example.test', password: PASSWORD },
     });
     expect(expired.statusCode).toBe(404);
     // And the open first run stays closed — an expired invitation is
@@ -236,7 +237,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('sleepers-f4d1'),
-      payload: { name: 'Zed', email: 'zed@example.test', password: PASSWORD },
+      payload: { accept_terms: true, name: 'Zed', email: 'zed@example.test', password: PASSWORD },
     });
     expect(bare.statusCode).toBe(403);
 
@@ -248,7 +249,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('sleepers-f4d1'),
-      payload: { token: fresh, name: 'Zed', email: 'zed@example.test', password: PASSWORD },
+      payload: { accept_terms: true, token: fresh, name: 'Zed', email: 'zed@example.test', password: PASSWORD },
     });
     expect(joined.statusCode).toBe(201);
     const cookie = joined.cookies.find((c) => c.name === 'hub_session')!.value;
@@ -280,7 +281,7 @@ describe('the founder invitation', () => {
         method: 'POST',
         url: '/api/auth/setup',
         headers: onHost(slug),
-        payload: { name: 'Squatter', email: 'squatter@example.test', password: PASSWORD },
+        payload: { accept_terms: true, name: 'Squatter', email: 'squatter@example.test', password: PASSWORD },
       });
 
     // 1. A family provisioned with an invitation, founder not yet arrived
@@ -299,7 +300,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('parity-f5e1'),
-      payload: { token, name: 'Parity', email: 'parity@example.test', password: PASSWORD },
+      payload: { accept_terms: true, token, name: 'Parity', email: 'parity@example.test', password: PASSWORD },
     });
     expect(joined.statusCode).toBe(201);
     const claimed = await setup('parity-f5e1');

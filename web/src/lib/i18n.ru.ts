@@ -100,6 +100,14 @@ export const ru: Record<string, string> = {
   'A transfer needs a destination account and the amount received': 'У перевода нужны счёт получателя и сумма зачисления',
   'A transfer to the same account makes no sense': 'Перевод на тот же счёт лишён смысла',
   'A user with this address already exists': 'Пользователь с таким адресом уже есть',
+  // Consent at account creation (hosted): the sentence is assembled around
+  // two links, so the parts must read as one line in this order.
+  'I agree to the': 'Я принимаю',
+  'Terms of Service': 'Условия использования',
+  'and the': 'и',
+  'Privacy Policy': 'Политику конфиденциальности',
+  'Please accept the Terms of Service and Privacy Policy to continue':
+    'Чтобы продолжить, примите Условия использования и Политику конфиденциальности',
   'A week before': 'За неделю',
   'About': 'О программе',
   'Account': 'Счёт',
