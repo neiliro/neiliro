@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { onEnter } from '../lib/keys';
 import { browserTimezone } from '../lib/timezone';
+import { deriveWith, newCredentials, passwordProblem, prelogin } from '../lib/credentials';
 
 /*
   The sign-in screen is the one page a stranger can reach, so its footer
@@ -410,13 +411,18 @@ function Setup() {
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
+    const problem = passwordProblem(password);
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       await api.post('/auth/setup', {
         name,
         email,
-        password,
+        ...(await newCredentials(password)),
         // Not a question on the form: the browser knows, and a family that
         // sets up from Chicago should not have to discover later why "today"
         // was flipping in the afternoon. Changeable in Settings.
@@ -535,13 +541,31 @@ function ResetPassword() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The account's salt: the auth key is derived from the password *and*
+  // the salt, and the page only knows the token. A dead token is learnt
+  // here rather than after the person typed a password.
+  const [salt, setSalt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    void api
+      .get<{ salt: string }>(`/auth/password-reset/check?token=${encodeURIComponent(token)}`)
+      .then((r) => setSalt(r.salt))
+      .catch((err) => setError(err instanceof Error ? err.message : t('Something went wrong')));
+  }, [token]);
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
+    if (!salt) return;
+    const problem = passwordProblem(password);
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await api.post('/auth/password-reset/confirm', { token, password });
+      await api.post('/auth/password-reset/confirm', { token, auth_key: await deriveWith(password, salt) });
       // Every session was closed by the reset, this one included — the
       // sign-in screen is the honest place to land
       window.location.href = '/';
@@ -638,6 +662,11 @@ function Join() {
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
+    const problem = passwordProblem(password);
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -645,7 +674,7 @@ function Join() {
         token,
         name,
         email,
-        password,
+        ...(await newCredentials(password)),
         ...(founder ? { timezone: browserTimezone() } : {}),
         ...(apex ? { accept_terms: agreed } : {}),
       });
@@ -712,7 +741,7 @@ function Join() {
 }
 
 export function ChangePassword() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [repeat, setRepeat] = useState('');
@@ -722,14 +751,28 @@ export function ChangePassword() {
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
+    if (!user) return;
     if (next !== repeat) {
       setError(t('Passwords do not match'));
+      return;
+    }
+    const problem = passwordProblem(next);
+    if (problem) {
+      setError(problem);
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await api.post('/auth/change-password', { current_password: current, new_password: next });
+      // Both passwords travel as derived keys. A session from before the
+      // split still holds a hash of the password itself, and proves it the
+      // old way this one last time (routes/auth.ts, change-password).
+      const { kdf, salt } = await prelogin(user.email);
+      await api.post('/auth/change-password', {
+        current_auth_key: await deriveWith(current, salt),
+        new_auth_key: await deriveWith(next, salt),
+        ...(kdf === 'legacy' ? { current_password: current } : {}),
+      });
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('Could not change the password'));

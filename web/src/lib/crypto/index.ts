@@ -19,3 +19,4 @@ export * from './envelope';
 export * from './files';
 export * from './recovery';
 export * from './keystore';
+export * from './session';

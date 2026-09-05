@@ -170,6 +170,8 @@ export const ru: Record<string, string> = {
   'Check that the hub server is running, then reload the page.': 'Проверьте, что сервер хаба запущен, и обновите страницу.',
   'Check the entered passwords': 'Проверьте введённые пароли',
   'Check the fields': 'Проверьте поля',
+  'Enter a login': 'Введите логин',
+  'Invalid credentials': 'Неверные учётные данные',
   'Checking': 'Проверяю',
   'Checklist': 'Чеклист',
   'Choose a destination account': 'Выберите счёт получателя',

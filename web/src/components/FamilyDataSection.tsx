@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
+import { deriveWith, prelogin } from '../lib/credentials';
 import { useAuth } from '../lib/auth';
 import { useServiceState } from '../lib/service';
 import { familyUrl, useFamilyAddress } from '../lib/family-address';
@@ -185,11 +186,14 @@ function DangerZone() {
     confirm.trim().toLowerCase() === slug;
 
   async function destroy() {
+    if (!user) return;
     setBusy(true);
     setError(null);
     try {
       await api.post('/family/delete', {
-        password,
+        // Proven as the derived key, like at sign-in — the password itself
+        // never travels (ADR 0001)
+        auth_key: await deriveWith(password, (await prelogin(user.email)).salt),
         code: needsCode ? code.trim() : undefined,
         confirm: confirm.trim(),
       });

@@ -3,6 +3,11 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
+// Not test-harness: that would import app.js before the hosted flags below are set
+import { deriveAuthKey } from '../lib/kdf.js';
+// One salt for every test account: what a browser would mint, minus the randomness
+const SALT = '00112233445566778899aabbccddeeff';
+const authKey = (password: string) => deriveAuthKey(password, SALT);
 
 /*
   Hosted mode: family = subdomain = one database file (lib/tenants.ts).
@@ -162,7 +167,7 @@ describe('suspension and deletion', () => {
           method: 'POST',
           url: '/api/auth/setup',
           headers: onHost('paused-p1q2.neiliro.test'),
-          payload: { accept_terms: true, name: 'Squatter', email: 'squatter@example.test', password: 'correct horse battery' },
+          payload: { accept_terms: true, kdf_salt: SALT, name: 'Squatter', email: 'squatter@example.test', auth_key: await authKey('correct horse battery') },
         });
         // The ghost's decoy database may never grow an admin — whoever
         // "set it up" would own every unknown subdomain at once
@@ -200,7 +205,7 @@ describe('host routing', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('smiths-a1b2.neiliro.test'),
-      payload: { accept_terms: true, name: 'Sam', email: 'sam@smiths.test', password: 'correct horse battery' },
+      payload: { accept_terms: true, kdf_salt: SALT, name: 'Sam', email: 'sam@smiths.test', auth_key: await authKey('correct horse battery') },
     });
     expect(created.statusCode).toBe(201);
 
@@ -219,12 +224,12 @@ describe('host routing', () => {
   });
 
   it('lets a family sign in on its own subdomain only', async () => {
-    const login = (host: string) =>
+    const login = async (host: string) =>
       app.inject({
         method: 'POST',
         url: '/api/auth/login',
         headers: onHost(host),
-        payload: { email: 'sam@smiths.test', password: 'correct horse battery' },
+        payload: { email: 'sam@smiths.test', auth_key: await authKey('correct horse battery') },
       });
 
     expect((await login('smiths-a1b2.neiliro.test')).statusCode).toBe(200);
@@ -256,7 +261,7 @@ describe('host routing', () => {
       method: 'POST',
       url: '/api/auth/login',
       headers: onHost('nosuch-x9y8.neiliro.test'),
-      payload: { email: 'admin@example.com', password: 'whatever else' },
+      payload: { email: 'admin@example.com', auth_key: await authKey('whatever else') },
     });
     expect(login.statusCode).toBe(401);
     expect(login.json().error).toBe('Wrong login or password');
@@ -266,7 +271,7 @@ describe('host routing', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('nosuch-x9y8.neiliro.test'),
-      payload: { accept_terms: true, name: 'Eve', email: 'eve@evil.test', password: 'longenoughpass' },
+      payload: { accept_terms: true, kdf_salt: SALT, name: 'Eve', email: 'eve@evil.test', auth_key: await authKey('longenoughpass') },
     });
     expect(setup.statusCode).toBe(403);
   });
@@ -276,7 +281,7 @@ describe('host routing', () => {
       method: 'POST',
       url: '/api/auth/login',
       headers: onHost('smiths-a1b2.neiliro.test'),
-      payload: { email: 'sam@smiths.test', password: 'correct horse battery' },
+      payload: { email: 'sam@smiths.test', auth_key: await authKey('correct horse battery') },
     });
     const session = login.cookies.find((c) => c.name === 'hub_session')!;
     const asSam = { ...onHost('smiths-a1b2.neiliro.test'), cookie: `hub_session=${session.value}` };
@@ -309,7 +314,7 @@ describe('host routing', () => {
       method: 'POST',
       url: '/api/auth/login',
       headers: onHost('smiths-a1b2.neiliro.test'),
-      payload: { email: 'sam@smiths.test', password: 'correct horse battery' },
+      payload: { email: 'sam@smiths.test', auth_key: await authKey('correct horse battery') },
     });
     const session = login.cookies.find((c) => c.name === 'hub_session')!;
 

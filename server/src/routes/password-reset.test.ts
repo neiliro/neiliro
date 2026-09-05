@@ -2,6 +2,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
+// Not test-harness: that would import app.js before the hosted flags below are set
+import { deriveAuthKey } from '../lib/kdf.js';
+// One salt for every test account: what a browser would mint, minus the randomness
+const SALT = '00112233445566778899aabbccddeeff';
+const authKey = (password: string) => deriveAuthKey(password, SALT);
 
 /*
   Password reset by email — hosted only (routes/password-reset.ts).
@@ -76,12 +81,12 @@ async function requestReset(email = EMAIL): Promise<string | null> {
   return new URL(sent[sent.length - 1]!.text.match(/https:\/\/\S+/)![0]).searchParams.get('token');
 }
 
-function signIn(password: string) {
+async function signIn(password: string) {
   return app.inject({
     method: 'POST',
     url: '/api/auth/login',
     headers: { host: HOST },
-    payload: { email: EMAIL, password },
+    payload: { email: EMAIL, auth_key: await authKey(password) },
   });
 }
 
@@ -93,7 +98,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/auth/setup',
     headers: { host: HOST },
-    payload: { accept_terms: true, name: 'Sam', email: EMAIL, password: OLD_PASSWORD },
+    payload: { accept_terms: true, kdf_salt: SALT, name: 'Sam', email: EMAIL, auth_key: await authKey(OLD_PASSWORD) },
   });
   expect(created.statusCode).toBe(201);
 
@@ -123,6 +128,17 @@ describe('password reset', () => {
     const token = await requestReset();
     expect(token).toBeTruthy();
 
+    // The reset page learns the address from the token — the browser
+    // derives the new key from both (#211)
+    const check = await app.inject({
+      url: `/api/auth/password-reset/check?token=${encodeURIComponent(token!)}`,
+      headers: { host: HOST },
+    });
+    expect(check.statusCode).toBe(200);
+    expect(check.json()).toEqual({ salt: SALT });
+    const bogus = await app.inject({ url: '/api/auth/password-reset/check?token=nope', headers: { host: HOST } });
+    expect(bogus.statusCode).toBe(400);
+
     const mail = sent[sent.length - 1]!;
     // A service sender, not the family's own address: a reset notice in the
     // shared family inbox would tell everyone that someone is recovering
@@ -137,7 +153,7 @@ describe('password reset', () => {
       method: 'POST',
       url: '/api/auth/password-reset/confirm',
       headers: { host: HOST },
-      payload: { token, password: 'a whole new passphrase' },
+      payload: { token, auth_key: await authKey('a whole new passphrase') },
     });
     expect(done.statusCode).toBe(204);
 
@@ -149,7 +165,7 @@ describe('password reset', () => {
       method: 'POST',
       url: '/api/auth/password-reset/confirm',
       headers: { host: HOST },
-      payload: { token, password: 'yet another passphrase' },
+      payload: { token, auth_key: await authKey('yet another passphrase') },
     });
     expect(again.statusCode).toBe(400);
   });
@@ -171,7 +187,7 @@ describe('password reset', () => {
       method: 'POST',
       url: '/api/auth/password-reset/confirm',
       headers: { host: HOST },
-      payload: { token, password: 'third passphrase entirely' },
+      payload: { token, auth_key: await authKey('third passphrase entirely') },
     });
 
     // A reset is also how someone evicts an intruder
@@ -189,7 +205,7 @@ describe('password reset', () => {
       method: 'POST',
       url: '/api/auth/password-reset/confirm',
       headers: { host: HOST },
-      payload: { token, password: 'fourth passphrase here' },
+      payload: { token, auth_key: await authKey('fourth passphrase here') },
     });
     expect(done.statusCode).toBe(204);
 
@@ -212,7 +228,7 @@ describe('password reset', () => {
       method: 'POST',
       url: '/api/auth/password-reset/confirm',
       headers: { host: HOST },
-      payload: { token, password: 'expired attempt passphrase' },
+      payload: { token, auth_key: await authKey('expired attempt passphrase') },
     });
     expect(res.statusCode).toBe(400);
   });

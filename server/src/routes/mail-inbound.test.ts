@@ -4,6 +4,11 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
+// Not test-harness: that would import app.js before the hosted flags below are set
+import { deriveAuthKey } from '../lib/kdf.js';
+// One salt for every test account: what a browser would mint, minus the randomness
+const SALT = '00112233445566778899aabbccddeeff';
+const authKey = (password: string) => deriveAuthKey(password, SALT);
 
 /*
   Inbound family mail over the Mailgun webhook (routes/mail-inbound.ts).
@@ -108,7 +113,7 @@ beforeAll(async () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: { host: `${slug}.neiliro.test` },
-      payload: { accept_terms: true, name, email: `${name.toLowerCase()}@${slug}.test`, password: 'correct horse battery' },
+      payload: { accept_terms: true, kdf_salt: SALT, name, email: `${name.toLowerCase()}@${slug}.test`, auth_key: await authKey('correct horse battery') },
     });
     expect(res.statusCode).toBe(201);
     const cookie = res.cookies.find((c) => c.name === 'hub_session');

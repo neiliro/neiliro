@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+// Not test-harness: that would import app.js before the hosted flags below are set
+import { deriveAuthKey } from '../lib/kdf.js';
+// One salt for every test account: what a browser would mint, minus the randomness
+const SALT = '00112233445566778899aabbccddeeff';
+const authKey = (password: string) => deriveAuthKey(password, SALT);
 
 /*
   The GDPR pair in hosted mode: the settings export must contain exactly
@@ -48,14 +53,14 @@ async function bringUpFamily(slug: string, name: string): Promise<Family> {
     method: 'POST',
     url: '/api/auth/setup',
     headers: { host: `${slug}.neiliro.test` },
-    payload: { accept_terms: true, name, email, password: 'correct horse battery' },
+    payload: { accept_terms: true, kdf_salt: SALT, name, email, auth_key: await authKey('correct horse battery') },
   });
   expect(setup.statusCode).toBe(201);
   const login = await app.inject({
     method: 'POST',
     url: '/api/auth/login',
     headers: { host: `${slug}.neiliro.test` },
-    payload: { email, password: 'correct horse battery' },
+    payload: { email, auth_key: await authKey('correct horse battery') },
   });
   expect(login.statusCode).toBe(200);
   const cookie = login.cookies.find((c) => c.name === 'hub_session')!.value;
@@ -143,7 +148,7 @@ describe('family self-deletion', () => {
       method: 'POST',
       url: '/api/family/delete',
       headers: onFamily(doomed),
-      payload: { password: 'not the password', confirm: doomed.slug },
+      payload: { auth_key: await authKey('not the password'), confirm: doomed.slug },
     });
     expect(wrongPassword.statusCode).toBe(400);
     expect(wrongPassword.json().error).toBe('The current password is incorrect');
@@ -152,7 +157,7 @@ describe('family self-deletion', () => {
       method: 'POST',
       url: '/api/family/delete',
       headers: onFamily(doomed),
-      payload: { password: 'correct horse battery', confirm: 'someone-else' },
+      payload: { auth_key: await authKey('correct horse battery'), confirm: 'someone-else' },
     });
     expect(wrongPhrase.statusCode).toBe(400);
     expect(wrongPhrase.json().error).toBe('The confirmation phrase does not match the family address');
@@ -173,7 +178,7 @@ describe('family self-deletion', () => {
       method: 'POST',
       url: '/api/family/delete',
       headers: onFamily(doomed),
-      payload: { password: 'correct horse battery', confirm: doomed.slug },
+      payload: { auth_key: await authKey('correct horse battery'), confirm: doomed.slug },
     });
     expect(withoutCode.statusCode).toBe(400);
     expect(withoutCode.json().error).toBe('Enter the code');
@@ -190,7 +195,7 @@ describe('family self-deletion', () => {
       method: 'POST',
       url: '/api/family/delete',
       headers: onFamily(doomed),
-      payload: { password: 'correct horse battery', confirm: doomed.slug },
+      payload: { auth_key: await authKey('correct horse battery'), confirm: doomed.slug },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
@@ -221,7 +226,7 @@ describe('family self-deletion', () => {
       method: 'POST',
       url: '/api/auth/login',
       headers: { host: `${doomed.slug}.neiliro.test` },
-      payload: { email: doomed.email, password: 'correct horse battery' },
+      payload: { email: doomed.email, auth_key: await authKey('correct horse battery') },
     });
     expect(login.statusCode).toBe(401);
 

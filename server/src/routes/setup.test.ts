@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTestApp } from '../test-harness.js';
+import { buildTestApp, authKey, SALT } from '../test-harness.js';
 import { USER_COLORS } from './setup.js';
 
 /*
@@ -26,7 +26,8 @@ describe('POST /api/auth/setup', () => {
       payload: {
         name: 'Alex',
         email: 'alex@hub.local',
-        password: 'correct horse battery staple',
+        auth_key: await authKey('correct horse battery staple'),
+        kdf_salt: SALT,
       },
     });
     expect(res.statusCode).toBe(201);
@@ -50,7 +51,8 @@ describe('POST /api/auth/setup', () => {
       payload: {
         name: 'Alex',
         email: 'alex@hub.local',
-        password: 'correct horse battery staple',
+        auth_key: await authKey('correct horse battery staple'),
+        kdf_salt: SALT,
         accept_terms: true,
       },
     });

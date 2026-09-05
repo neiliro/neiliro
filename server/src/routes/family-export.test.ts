@@ -107,7 +107,7 @@ describe('family deletion, single-family mode', () => {
     // Self-hosted: one family per server, so this button would mean
     // "erase the instance" — that stays a host-level operation
     const res = await h.as(admin.cookie, 'POST', '/api/family/delete', {
-      password: 'whatever',
+      auth_key: 'whatever',
       confirm: 'whatever',
     });
     expect(res.statusCode).toBe(403);

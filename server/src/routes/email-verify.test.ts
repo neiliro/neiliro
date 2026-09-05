@@ -1,5 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+// Not test-harness: that would import app.js before the hosted flags below are set
+import { deriveAuthKey } from '../lib/kdf.js';
+// One salt for every test account: what a browser would mint, minus the randomness
+const SALT = '00112233445566778899aabbccddeeff';
+const authKey = (password: string) => deriveAuthKey(password, SALT);
 
 /*
   Confirming the login address (routes/email-verify.ts).
@@ -83,7 +88,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/auth/setup',
     headers: { host: HOST },
-    payload: { accept_terms: true, name: 'Sam', email: ADMIN, password: 'correct horse battery' },
+    payload: { accept_terms: true, kdf_salt: SALT, name: 'Sam', email: ADMIN, auth_key: await authKey('correct horse battery') },
   });
   expect(created.statusCode).toBe(201);
   adminCookie = `hub_session=${created.cookies.find((c) => c.name === 'hub_session')?.value}`;
@@ -100,7 +105,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/auth/join',
     headers: { host: HOST },
-    payload: { accept_terms: true, token, name: 'Dana', email: MEMBER, password: 'correct horse battery' },
+    payload: { accept_terms: true, kdf_salt: SALT, token, name: 'Dana', email: MEMBER, auth_key: await authKey('correct horse battery') },
   });
   expect(joined.statusCode).toBe(201);
 
@@ -264,7 +269,7 @@ describe('address confirmation', () => {
       method: 'POST',
       url: '/api/auth/login',
       headers: { host: HOST },
-      payload: { email: 'dana.final@smiths-v1w2.test', password: 'correct horse battery' },
+      payload: { email: 'dana.final@smiths-v1w2.test', auth_key: await authKey('correct horse battery') },
     });
     const cookie = `hub_session=${memberLogin.cookies.find((c) => c.name === 'hub_session')?.value}`;
 

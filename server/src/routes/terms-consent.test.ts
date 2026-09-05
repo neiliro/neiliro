@@ -2,6 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
+// Not test-harness: that would import app.js before the hosted flags below are set
+import { deriveAuthKey } from '../lib/kdf.js';
+// One salt for every test account: what a browser would mint, minus the randomness
+const SALT = '00112233445566778899aabbccddeeff';
+const authKey = (password: string) => deriveAuthKey(password, SALT);
 
 /*
   Consent to the terms and the privacy policy (migration 031). On the hosted
@@ -51,7 +56,7 @@ describe('terms consent on the hosted service', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('consent-setup'),
-      payload: { name: 'Sam', email: 'sam@example.test', password: PASSWORD },
+      payload: { kdf_salt: SALT, name: 'Sam', email: 'sam@example.test', auth_key: await authKey(PASSWORD) },
     });
     expect(refused.statusCode).toBe(400);
     expect(refused.json().error).toMatch(/Terms of Service and Privacy Policy/);
@@ -60,7 +65,7 @@ describe('terms consent on the hosted service', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('consent-setup'),
-      payload: { name: 'Sam', email: 'sam@example.test', password: PASSWORD, accept_terms: false },
+      payload: { kdf_salt: SALT, name: 'Sam', email: 'sam@example.test', auth_key: await authKey(PASSWORD), accept_terms: false },
     });
     expect(unticked.statusCode).toBe(400);
     const db = familyDb(familyId);
@@ -70,7 +75,7 @@ describe('terms consent on the hosted service', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('consent-setup'),
-      payload: { name: 'Sam', email: 'sam@example.test', password: PASSWORD, accept_terms: true },
+      payload: { kdf_salt: SALT, name: 'Sam', email: 'sam@example.test', auth_key: await authKey(PASSWORD), accept_terms: true },
     });
     expect(ok.statusCode).toBe(201);
     const row = db.prepare('SELECT terms_accepted_at FROM users').get() as { terms_accepted_at: string | null };
@@ -84,7 +89,7 @@ describe('terms consent on the hosted service', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('consent-join'),
-      payload: { name: 'Sam', email: 'sam@example.test', password: PASSWORD, accept_terms: true },
+      payload: { kdf_salt: SALT, name: 'Sam', email: 'sam@example.test', auth_key: await authKey(PASSWORD), accept_terms: true },
     });
     const cookie = admin.cookies.find((c) => c.name === 'hub_session')!;
     const invite = await app.inject({
@@ -100,7 +105,7 @@ describe('terms consent on the hosted service', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('consent-join'),
-      payload: { token, name: 'Dana', email: 'dana@example.test', password: PASSWORD },
+      payload: { kdf_salt: SALT, token, name: 'Dana', email: 'dana@example.test', auth_key: await authKey(PASSWORD) },
     });
     expect(refused.statusCode).toBe(400);
     expect(refused.json().error).toMatch(/Terms of Service and Privacy Policy/);
@@ -110,7 +115,7 @@ describe('terms consent on the hosted service', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('consent-join'),
-      payload: { token, name: 'Dana', email: 'dana@example.test', password: PASSWORD, accept_terms: true },
+      payload: { kdf_salt: SALT, token, name: 'Dana', email: 'dana@example.test', auth_key: await authKey(PASSWORD), accept_terms: true },
     });
     expect(joined.statusCode).toBe(201);
     const db = familyDb(familyId);

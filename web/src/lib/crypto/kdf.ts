@@ -1,4 +1,4 @@
-import { concat, fromBase64url, toBase64url, utf8, type Bytes } from './encoding';
+import { fromBase64url, randomBytes, toBase64url, utf8, type Bytes } from './encoding';
 
 /*
   From one password, two keys that cannot be turned into each other
@@ -9,7 +9,7 @@ import { concat, fromBase64url, toBase64url, utf8, type Bytes } from './encoding
   at login time to read everything. So the browser stretches the password
   once, then splits the result with HKDF:
 
-    master  = PBKDF2-SHA256(password, salt(email), 600 000)
+    master  = PBKDF2-SHA256(password, salt, 600 000)
     authKey = HKDF(master, info "neiliro/auth/v1")   → sent instead of the password
     wrapKey = HKDF(master, info "neiliro/wrap/v1")   → never leaves the browser
 
@@ -24,31 +24,33 @@ import { concat, fromBase64url, toBase64url, utf8, type Bytes } from './encoding
     audit. PBKDF2-SHA256 at OWASP's 600 000 iterations is native WebCrypto,
     zero bytes of bundle, and what Bitwarden ships by default. The version
     tag below exists so this can change without guessing later.
-  - The salt is derived from the login address, not handed out by the
-    server. A per-user salt fetched before login is a pre-login endpoint,
-    and a pre-login endpoint that answers differently for existing and
-    unknown addresses is an account oracle — the thing the password reset
-    goes to lengths to avoid. The address is unique per hub and the domain
-    string keeps the result specific to Neiliro; with 600 000 iterations a
-    precomputed table per address is not a realistic attack.
-  - The address is normalised the way the server normalises it (trim +
-    lowercase, see emailField in routes/setup.ts). A change on one side
-    silently locks everyone out — the test vectors are there to catch it.
+  - The salt is a random value per account, chosen by the browser that
+    creates the account and stored on the server, which hands it back at
+    sign-in (/api/auth/prelogin). Not the login address: an administrator
+    can change a member's address, and a key derived from the address
+    would die with it — the member could never sign in again. A salt is
+    public by definition; the server answering with one is not a leak. For
+    an address it does not know, the server answers a salt derived from a
+    per-family secret and the address, so an unknown account and a real
+    one look exactly the same from outside.
 */
 
 export const KDF_VERSION = 1;
 export const PBKDF2_ITERATIONS = 600_000;
-const SALT_DOMAIN = 'neiliro/kdf-salt/v1';
 const AUTH_INFO = 'neiliro/auth/v1';
 const WRAP_INFO = 'neiliro/wrap/v1';
+const SALT_BYTES = 16;
 
-export function normalizeLogin(email: string): string {
-  return email.trim().toLowerCase();
+/** A salt for a new account: 16 random bytes as 32 hex characters. */
+export function newKdfSalt(): string {
+  return Array.from(randomBytes(SALT_BYTES), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function saltFor(email: string): Promise<Bytes> {
-  const digest = await crypto.subtle.digest('SHA-256', concat(utf8(SALT_DOMAIN), utf8(normalizeLogin(email))));
-  return new Uint8Array(digest);
+export function saltFromHex(hex: string): Bytes {
+  if (!/^[0-9a-f]{32}$/.test(hex)) throw new Error('Not a KDF salt');
+  const out = new Uint8Array(SALT_BYTES);
+  for (let i = 0; i < SALT_BYTES; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return out;
 }
 
 async function hkdfBits(master: Bytes, info: string): Promise<Bytes> {
@@ -76,11 +78,14 @@ export interface CredentialKeys {
  */
 export async function deriveCredentialKeys(
   password: string,
-  email: string,
+  salt: Bytes,
   iterations: number = PBKDF2_ITERATIONS,
 ): Promise<CredentialKeys> {
-  const salt = await saltFor(email);
-  const pw = await crypto.subtle.importKey('raw', utf8(password), 'PBKDF2', false, ['deriveBits']);
+  // NFKC like the server's legacy scrypt path: a password typed through
+  // two keyboards must be one password
+  const pw = await crypto.subtle.importKey('raw', utf8(password.normalize('NFKC')), 'PBKDF2', false, [
+    'deriveBits',
+  ]);
   const master = new Uint8Array(
     await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, pw, 256),
   );
