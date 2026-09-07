@@ -55,6 +55,17 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
+      - name: Make room on the server
+        # Every deploy loads a new family-hub:prod and the image it replaces
+        # stays behind untagged. Nothing ever removed those: by 2026-09-06
+        # the demo machine held 147 images, 53 GB of dangling layers, the
+        # load itself died with "no space left on device" and the running
+        # demo answered 500 to every login. Dangling AND unused is all this
+        # removes — every tagged image and anything a container still runs
+        # from stays. Before the load rather than after, so a deploy that
+        # keeps failing still cleans up instead of filling the disk.
+        run: ssh "$DEPLOY" 'docker image prune -f'
+
       - name: Ship the image
         run: |
           docker save family-hub:prod | gzip | \

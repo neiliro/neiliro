@@ -386,6 +386,12 @@ Docker image on its own runner** and delivers it to the server ready-made
 SSH dropped. Push to `master` = production deploy; unfinished work lives
 in branches.
 
+Each deploy also runs `docker image prune -f` on the server before the
+load: the image a deploy replaces stays behind untagged, and left alone
+those layers fill the disk (they once did — 53 GB of them, and the
+deploy died with "no space left on device"). Only dangling, unused
+images go; tagged ones and anything a container runs from stay.
+
 The workflow is a no-op by default so that forks of this repository
 never try to deploy anywhere: it only runs when the repository variable
 `DEPLOY_ENABLED` equals `true`.
