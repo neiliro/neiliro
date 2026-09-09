@@ -71,13 +71,20 @@ export async function issueFounderInvite(familyId: string, email: string): Promi
     log.notice(`founder invitation issued for ${slug} (not mailed: service mail is off)`);
     return { url, mailed: false };
   }
+  // The letter is the onboarding — there is no separate welcome document
+  // (decided 2026-09-09). It says what the family should do first, what a
+  // beta means, and repeats the one promise made to beta families, which
+  // the terms of service state authoritatively: the letter must never say
+  // more than /terms does. The beta paragraph is service policy, not
+  // product behaviour — rewrite it at the public launch.
+  const apex = env.hostedDomain;
   await sendServiceEmail(
     address,
     'Your Neiliro family is ready',
     [
       'Hello.',
       '',
-      `Your family's hub is waiting at https://${slug}.${env.hostedDomain}/ — this link`,
+      `Your family's hub is waiting at https://${slug}.${apex}/ — this link`,
       'sets up the first account, which becomes the administrator:',
       '',
       url,
@@ -86,8 +93,29 @@ export async function issueFounderInvite(familyId: string, email: string): Promi
       'already confirmed for password recovery; you can pick another, and',
       'we will ask you to confirm that one instead.',
       '',
-      'Within the first day you can also change the address of the hub itself,',
-      'once — the hub will offer that when you sign in.',
+      'First steps, in the order they pay off:',
+      '',
+      `  1. Choose the hub's address. Within the first day you can change`,
+      `     ${slug}.${apex} once — the hub offers this when you sign in. After`,
+      '     that it is final, so pick something you can say aloud.',
+      '  2. Invite the household: Settings → Users → invitation link. Each',
+      '     person joins with their own name and password; for a child without',
+      '     a device, open their link yourself.',
+      '  3. Put it on the phone: open the hub in the phone browser and choose',
+      '     "Add to Home Screen". It keeps working read-only without a signal.',
+      `  4. Your family mailbox is ${slug}@${env.mailDomain}. Send the school`,
+      '     and the bills there — a letter becomes a task in one click.',
+      '',
+      'What the beta means. Neiliro is in closed beta: it runs with monitoring',
+      'and nightly encrypted backups, but the honest word is best effort —',
+      'something may break, and when it does we want to hear about it.',
+      'Everything you put in stays yours: the complete archive is one click',
+      'away in Settings, on any plan, always. Families who join during the',
+      'beta get the paid plan free for a year from the public launch; that',
+      `promise is written into the terms, not only this letter: https://${apex}/terms`,
+      '',
+      `Questions, or something broke: https://support.${apex} — the form there`,
+      `reaches a person — or write to hello@${apex}.`,
     ].join('\n'),
   );
   log.notice(`founder invitation mailed for ${slug}`);
