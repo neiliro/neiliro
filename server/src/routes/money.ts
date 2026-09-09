@@ -526,15 +526,24 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
     const visible = visibleAccountIds(userId);
 
     // A transfer to someone else's personal account shows its amount but
-    // not the account name: money leaving a shared account can't be
-    // hidden, or the balance would be wrong
+    // not the account: money leaving a shared account can't be hidden, or
+    // the balance would be wrong. "Not the account" means not its name and
+    // not its ids either (#245) — the id, the owner and the shared flag are
+    // details the other member has no use for and no route to follow, and
+    // a future endpoint that takes an account id must not inherit them.
+    // The currency stays: the amount line needs it.
     return rows.map((row) => {
       const masked = { ...row };
       if (row['to_account_id'] && !visible.has(row['to_account_id'] as string)) {
         masked['to_account_name'] = 'Personal account';
+        masked['to_account_id'] = null;
+        masked['to_owner'] = null;
+        masked['to_shared'] = null;
       }
       if (!visible.has(row['account_id'] as string)) {
         masked['account_name'] = 'Personal account';
+        masked['account_owner'] = null;
+        masked['account_color'] = null;
         masked['note'] = null;
         masked['place'] = null;
         masked['category_name'] = null;

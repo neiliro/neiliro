@@ -412,3 +412,55 @@ describe('the outlook says what is left until the next money arrives', () => {
     expect(nok.left).toBe(70_000);
   });
 });
+
+describe('a transfer into a personal account shows the other member an amount and nothing else', () => {
+  it('masks the destination — name, id, owner, shared flag — for the member who cannot see it', async () => {
+    const bob = hub.join('bob').cookie;
+    const joint = await account('Joint for transfers', 100_000);
+    const wallet = (
+      await hub.as(bob, 'POST', '/api/accounts', { name: 'Bob wallet', currency: 'EUR', shared: false })
+    ).json<{ id: string }>().id;
+    const moved = await hub.as(bob, 'POST', '/api/transactions', {
+      kind: 'transfer',
+      occurred_on: '2026-09-09',
+      account_id: joint,
+      to_account_id: wallet,
+      amount: 2_000,
+      to_amount: 2_000,
+    });
+    expect(moved.statusCode).toBe(201);
+
+    type Row = Record<string, unknown> & { kind: string };
+    const rows = (cookieValue: string) =>
+      hub.as(cookieValue, 'GET', `/api/transactions?account_id=${joint}`).then((r) =>
+        r.json<Row[]>().filter((t) => t.kind === 'transfer'),
+      );
+
+    // Alice, who does not own the wallet: the amount, and a wall
+    const [alicesView] = await rows(cookie);
+    expect(alicesView).toMatchObject({
+      amount: 2_000,
+      to_amount: 2_000,
+      to_currency: 'EUR',
+      to_account_name: 'Personal account',
+      to_account_id: null,
+      to_owner: null,
+      to_shared: null,
+    });
+    // Bob, the owner: the real thing
+    const [bobsView] = await rows(bob);
+    expect(bobsView).toMatchObject({ to_account_id: wallet, to_account_name: 'Bob wallet', to_shared: 0 });
+
+    // The mirror case: money arriving on the shared account from Bob's wallet
+    await hub.as(bob, 'POST', '/api/transactions', {
+      kind: 'transfer',
+      occurred_on: '2026-09-09',
+      account_id: wallet,
+      to_account_id: joint,
+      amount: 500,
+      to_amount: 500,
+    });
+    const incoming = (await rows(cookie)).find((t) => t.amount === 500)!;
+    expect(incoming).toMatchObject({ account_name: 'Personal account', account_owner: null, note: null });
+  });
+});
