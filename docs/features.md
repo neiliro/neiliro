@@ -35,6 +35,8 @@ Two ways in: password and Google. An account is **never** created via Google: th
 
 Once linked, password sign-in can be disabled per account in Settings: Google with its protections (prompts, passkeys) guards the entrance better than any password. The mode is invisible from outside — a disabled password answers the same "Wrong login or password" as a merely wrong one, with the same response time.
 
+An account without a password has no wrap key at sign-in, so the family key lives only on the devices that hold it: turning the password off retires the member's key envelope, waits until this device holds the key, and says where a new device will get it — another member's re-admission link or the recovery code. The administrator's password can never be turned off, which keeps at least one password-derived envelope in every family.
+
 On the hosted service Google sign-in works the same way from the outside, through one shared return address; the mechanics are in [architecture.md](architecture.md#hosted-mode).
 
 One invariant always holds: **the administrator's password sign-in cannot be disabled**. It is the emergency door — if a Google account is hijacked, blocked, or Google itself is down, the administrator signs in with the password and restores access by resetting passwords (a reset also re-enables password sign-in). A hub whose only way in runs through an external service is a hub that will one day refuse to open.

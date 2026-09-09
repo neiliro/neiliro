@@ -277,3 +277,23 @@ describe('an invitation carrying the key (#212)', () => {
     expect((await h.as(sam.cookie, 'PUT', `/api/invites/${plain}/envelope`, { envelope: envelope('W') })).statusCode).toBe(404);
   });
 });
+
+describe('an account without a password (#213)', () => {
+  it('turning password sign-in off retires the envelope; turning it on writes nothing back', async () => {
+    const h = await buildTestApp();
+    const sam = await member(h, 'Sam', 'admin');
+    const ann = await member(h, 'Ann');
+    await createKey(h, sam.cookie);
+    await h.as(ann.cookie, 'PUT', '/api/keys/envelope', { envelope: envelope('E') });
+    // Google has to be linked before the password may go — the existing invariant
+    runWithDb(h.db, () => h.db.prepare("UPDATE users SET google_sub = 'g-ann' WHERE id = ?").run(ann.userId));
+
+    expect((await h.as(ann.cookie, 'POST', '/api/auth/password-login', { enabled: false })).statusCode).toBe(200);
+    expect((await h.as(ann.cookie, 'GET', '/api/keys')).json<{ password_envelope: null }>().password_envelope).toBeNull();
+
+    expect((await h.as(ann.cookie, 'POST', '/api/auth/password-login', { enabled: true })).statusCode).toBe(200);
+    expect((await h.as(ann.cookie, 'GET', '/api/keys')).json<{ password_envelope: null }>().password_envelope).toBeNull();
+    // The device that holds the key writes the envelope itself at the next password sign-in
+    expect((await h.as(ann.cookie, 'PUT', '/api/keys/envelope', { envelope: envelope('F') })).statusCode).toBe(200);
+  });
+});

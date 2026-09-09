@@ -610,10 +610,18 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    db.prepare('UPDATE users SET password_login_disabled = ? WHERE id = ?').run(
-      parsed.data.enabled ? 0 : 1,
-      user.id,
-    );
+    db.transaction(() => {
+      db.prepare('UPDATE users SET password_login_disabled = ? WHERE id = ?').run(
+        parsed.data.enabled ? 0 : 1,
+        user.id,
+      );
+      // A password that cannot sign in must not stay a door to the key
+      // (ADR 0001, #213): the member holds the key on their devices, and a
+      // new device is admitted by another member's link or the recovery
+      // code. Re-enabling writes nothing back — the browser re-wraps at
+      // the next password sign-in, if the device still holds the key.
+      if (!parsed.data.enabled) retirePasswordEnvelope(user.id);
+    })();
     log.info(`password login ${parsed.data.enabled ? 'enabled' : 'disabled'}: ${user.email}`);
     return { ok: true };
   });

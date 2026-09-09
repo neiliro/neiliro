@@ -13,6 +13,7 @@ import { PALETTE, addToPalette, loadCustomPalette, removeFromPalette } from '../
 import { COMMON_CURRENCIES, formatAmountInput, parseAmount } from '../lib/money';
 import { PeopleSection } from '../components/PeopleSection';
 import { KeysSection } from '../components/KeysSection';
+import { useKeys } from '../lib/family-key';
 import { MailSection } from '../components/MailSection';
 import { TotpSection } from '../components/TotpSection';
 import { CalendarFeedSection } from '../components/CalendarFeedSection';
@@ -228,7 +229,13 @@ const LINK_MESSAGES: Record<string, string> = {
  */
 function SignInSection() {
   const { user, refresh } = useAuth();
+  const keys = useKeys();
   const dialogs = useDialogs();
+  // Without a password there is no wrap key at sign-in: the family key lives
+  // only on the devices that hold it (#213). Turning the password off from a
+  // device that does not hold the key would leave the member with no door
+  // but another member's link — so the switch waits for the key first.
+  const keyMissingHere = keys.status === 'locked';
   const [status, setStatus] = useState<string | null>(null);
   // Shared with the rest of the page, so asking here costs no extra request
   const googleAvailable = useServiceState().state?.google ?? false;
@@ -319,13 +326,18 @@ function SignInSection() {
         {user.role !== 'admin' && (passwordOff || linked) && (
           <button
             type="button"
-            className={rowButton}
+            className={`${rowButton} disabled:opacity-50`}
+            disabled={!passwordOff && keyMissingHere}
+            title={!passwordOff && keyMissingHere ? t('Get the family key onto this device first') : undefined}
             onClick={() =>
               void run(async () => {
                 if (!passwordOff) {
                   const sure = await dialogs.confirm({
                     title: t('Disable password sign-in?'),
-                    message: t('You will only be able to sign in with Google. If the Google account becomes unavailable, the administrator can restore access by resetting your password.'),
+                    message:
+                      keys.status === 'unlocked'
+                        ? t('You will only be able to sign in with Google. If the Google account becomes unavailable, the administrator can restore access by resetting your password. The family key stays on the devices that hold it now; a new device gets it from another member’s re-admission link or the recovery code, because without a password nothing on the server can open it for you.')
+                        : t('You will only be able to sign in with Google. If the Google account becomes unavailable, the administrator can restore access by resetting your password.'),
                     confirmLabel: t('Disable'),
                   });
                   if (!sure) return;

@@ -935,6 +935,10 @@ export const ru: Record<string, string> = {
     'На этом устройстве нет ключа семьи, поэтому ссылка отсюда будет без него: новому участнику потом понадобится ссылка на возврат ключа.',
   'This link is the key to the house: it carries the family key. Send it over a channel you trust, to one person, whole — the part after # is what opens it.':
     'Эта ссылка — ключ от дома: в ней ключ семьи. Передайте её по каналу, которому доверяете, одному человеку и целиком — открывает её часть после #.',
+  // Accounts without a password (#213)
+  'Get the family key onto this device first': 'Сначала получите ключ семьи на это устройство',
+  'You will only be able to sign in with Google. If the Google account becomes unavailable, the administrator can restore access by resetting your password. The family key stays on the devices that hold it now; a new device gets it from another member’s re-admission link or the recovery code, because without a password nothing on the server can open it for you.':
+    'Вход будет возможен только через Google. Если Google-аккаунт станет недоступен, администратор вернёт доступ сбросом пароля. Ключ семьи остаётся на устройствах, где он есть сейчас; новое устройство получит его по ссылке на возврат от другого участника или по коду восстановления — без пароля на сервере нет ничего, что открыло бы его для вас.',
   // Door errors thrown in lib/family-key.tsx
   'The family has no recovery code': 'У семьи нет кода восстановления',
   'That is not the recovery code': 'Это не код восстановления',
