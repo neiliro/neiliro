@@ -12,6 +12,7 @@ import { onEnter } from '../lib/keys';
 import { PALETTE, addToPalette, loadCustomPalette, removeFromPalette } from '../lib/palette';
 import { COMMON_CURRENCIES, formatAmountInput, parseAmount } from '../lib/money';
 import { PeopleSection } from '../components/PeopleSection';
+import { KeysSection } from '../components/KeysSection';
 import { MailSection } from '../components/MailSection';
 import { TotpSection } from '../components/TotpSection';
 import { CalendarFeedSection } from '../components/CalendarFeedSection';
@@ -745,6 +746,7 @@ export function Settings() {
 
       <div className="mb-5 break-inside-avoid">
         <SignInSection />
+          <KeysSection />
       </div>
 
       <div className="mb-5 break-inside-avoid">

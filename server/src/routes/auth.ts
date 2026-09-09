@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { currentTenant, db, now } from '../db/index.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { AUTH_KEY_PATTERN, decoySalt } from '../lib/kdf.js';
+import { ENVELOPE_PATTERN, retirePasswordEnvelope, storeEnvelope } from '../lib/keys.js';
 import { env } from '../env.js';
 import { googleSignInAvailable } from './google.js';
 import { serviceMailAvailable } from '../lib/mail.js';
@@ -110,6 +111,13 @@ const changeInput = z.object({
   current_auth_key: authKeyField,
   new_auth_key: authKeyField,
   current_password: z.string().min(1).max(500).optional(),
+  // The key envelope re-wrapped under the new password (ADR 0001, #210),
+  // in the same request as the password itself: an envelope under a
+  // password that is not yet set, or a password whose envelope is not yet
+  // rewritten, would both be a window in which the member cannot get in.
+  // A browser that does not hold the key sends none, and the old envelope
+  // is retired — the new password cannot open it anyway.
+  envelope: z.string().regex(ENVELOPE_PATTERN, 'Not a key envelope').optional(),
 });
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
@@ -655,10 +663,15 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'The current password is incorrect' });
     }
 
-    db.prepare(
-      `UPDATE users SET password_hash = ?, kdf_version = 1, must_change_password = 0, password_changed_at = ?
-        WHERE id = ?`,
-    ).run(await hashPassword(parsed.data.new_auth_key), now(), session.id);
+    const newHash = await hashPassword(parsed.data.new_auth_key);
+    db.transaction(() => {
+      db.prepare(
+        `UPDATE users SET password_hash = ?, kdf_version = 1, must_change_password = 0, password_changed_at = ?
+          WHERE id = ?`,
+      ).run(newHash, now(), session.id);
+      retirePasswordEnvelope(session.id);
+      if (parsed.data.envelope) storeEnvelope(session.id, 'password', parsed.data.envelope, session.id);
+    })();
 
     // A password change signs out every device, the current one included
     destroyAllSessions(session.id);
