@@ -65,6 +65,7 @@ const PROFILE_ENTRIES = new RegExp(`^/profiles/(${UUID})/entries$`);
 const PROFILE_ENTRY = new RegExp(`^/profiles/(${UUID})/entries/(${UUID})$`);
 const TRANSACTION_ATTACHMENTS = new RegExp(`^/transactions/(${UUID})/attachments$`);
 const MAIL_MESSAGE = new RegExp(`^/mail/(${UUID})$`);
+const MAIL_LIST = /^\/mail$/;
 
 const F = ENCRYPTED_FIELDS;
 
@@ -294,6 +295,9 @@ export async function encodeRequest(method: string, path: string, body: unknown)
   if (method === 'POST' && LIST_SECTIONS.test(path)) return sealCreate('list_sections', b);
   if (method === 'PATCH' && (m = path.match(LIST_SECTION))) return sealFields('list_sections', m[1]!, b, F['list_sections']!);
 
+  // Mail (#223): only the one-time job writes words here
+  if (method === 'PATCH' && (m = path.match(MAIL_MESSAGE))) return sealFields('mail_messages', m[1]!, b, F['mail_messages']!);
+
   // Profile entries (#221)
   if (method === 'POST' && PROFILE_ENTRIES.test(path)) return sealCreate('profile_entries', b);
   if (method === 'PATCH' && (m = path.match(PROFILE_ENTRY))) return sealFields('profile_entries', m[2]!, b, F['profile_entries']!);
@@ -433,9 +437,16 @@ export async function decodeResponse(
   if (method === 'GET' && TRANSACTION_ATTACHMENTS.test(path) && Array.isArray(data)) {
     return openList('attachments', data as Row[]);
   }
-  if (method === 'GET' && MAIL_MESSAGE.test(path)) {
+  // Mail (#223): sealed by the server on ingest, opened here with the private half of the family key
+  if (method === 'GET' && MAIL_LIST.test(path)) {
     const d = data as Row;
+    if (Array.isArray(d['messages'])) d['messages'] = await openList('mail_messages', d['messages'] as Row[]);
+    return d;
+  }
+  if ((method === 'GET' || method === 'PATCH') && MAIL_MESSAGE.test(path)) {
+    const d = await openRow('mail_messages', data as Row);
     if (Array.isArray(d['attachments'])) d['attachments'] = await openList('attachments', d['attachments'] as Row[]);
+    if (Array.isArray(d['replies'])) d['replies'] = await openList('mail_messages', d['replies'] as Row[]);
     return d;
   }
 

@@ -1,5 +1,5 @@
 import { t } from './i18n';
-import { decryptFile, encryptFile } from './crypto';
+import { decryptFile, encryptFile, openSealedFile } from './crypto';
 import { hasFamilyKey, openFields, sealFields, vaultKey, VaultLockedError } from './vault';
 
 /*
@@ -80,8 +80,10 @@ export function attachmentUrl(id: string, mime?: string): Promise<string> {
     if (kind === 0) return `/api/attachments/${id}`;
     const key = vaultKey();
     if (!key) throw new VaultLockedError();
-    if (kind !== 1) throw new Error(t('This file is sealed for the family and cannot be opened here yet'));
-    const plain = await decryptFile(key, new Uint8Array(await res.arrayBuffer()), id);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    // 1: sealed in a browser with the family key; 2: sealed by the server
+    // on mail ingest to the family public key (#223) — same key opens both
+    const plain = kind === 2 ? await openSealedFile(key, bytes, id) : await decryptFile(key, bytes, id);
     return URL.createObjectURL(new Blob([plain], { type: mime ?? '' }));
   })();
   pending.catch(() => urls.delete(id));

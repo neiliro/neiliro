@@ -1,4 +1,5 @@
 import { decryptField, encryptField, isEncrypted, type FieldPlace } from './crypto/envelope';
+import { isSealed, openSealedField } from './crypto/seal';
 
 /*
   The family key as the codec sees it (ADR 0001, phase 2).
@@ -76,7 +77,10 @@ export async function openFields<T extends Row>(table: string, id: string, row: 
       continue;
     }
     try {
-      out[column] = await decryptField(familyKey, value, { table, column, id } satisfies FieldPlace);
+      const place = { table, column, id } satisfies FieldPlace;
+      // A value the server sealed to the family public key (#223) opens with
+      // the private half derived from the same family key
+      out[column] = isSealed(value) ? await openSealedField(familyKey, value, place) : await decryptField(familyKey, value, place);
     } catch {
       // A value this key does not open (moved between rows, another family's
       // export): placeholder, not a crash — the row's structure is still real

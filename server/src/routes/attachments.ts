@@ -138,12 +138,16 @@ interface UploadedInfo {
 */
 
 export interface StagedAttachment {
+  /** Minted by the caller: a sealed file is bound to it before it is written (#223) */
+  id: string;
   filename: string;
   mime: string;
   size: number;
   /** Relative to the family's attachments directory, as stored in the row. */
   storagePath: string;
   absPath: string;
+  /** 0 plaintext, 2 sealed to the family public key */
+  encryption: number;
 }
 
 /** Bytes already on this family's tab — the budget is cumulative across parts. */
@@ -160,13 +164,14 @@ export function attachmentBytesUsed(): number {
  * message without re-reading the table per part.
  */
 export async function stageMailAttachment(
-  file: { filename: string; mime: string; content: Buffer },
+  file: { id: string; filename: string; mime: string; content: Buffer; encryption: number },
   usedBytes: number,
 ): Promise<StagedAttachment | null> {
   if (file.content.length === 0 || file.content.length > MAX_FILE_BYTES) return null;
   if (usedBytes + file.content.length > BUDGET_BYTES) return null;
 
-  const storageName = storageNameFor(file.filename);
+  // A sealed file's extension is nobody's business; the stored name is an id
+  const storageName = storageNameFor(file.encryption ? '' : file.filename);
   const month = today().slice(0, 7);
   const folder = join(currentTenant().attachmentsDir, month);
   await mkdir(folder, { recursive: true });
@@ -174,20 +179,22 @@ export async function stageMailAttachment(
   await writeFile(absPath, file.content);
 
   return {
-    filename: file.filename.slice(0, 300),
+    id: file.id,
+    filename: file.filename.slice(0, FILENAME_MAX),
     mime: safeMime(file.mime),
     size: file.content.length,
     storagePath: join(month, storageName),
     absPath,
+    encryption: file.encryption,
   };
 }
 
 /** The row for a staged part — synchronous, meant for the caller's transaction. */
 export function insertStagedAttachment(mailMessageId: string, staged: StagedAttachment): void {
   db.prepare(
-    `INSERT INTO attachments (id, filename, mime, size_bytes, storage_path, mail_message_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id(), staged.filename, staged.mime, staged.size, staged.storagePath, mailMessageId, now());
+    `INSERT INTO attachments (id, filename, mime, size_bytes, storage_path, mail_message_id, created_at, encryption)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(staged.id, staged.filename, staged.mime, staged.size, staged.storagePath, mailMessageId, now(), staged.encryption);
 }
 
 /** Undo staging when the message did not land. Best effort: a file that is already gone is fine. */

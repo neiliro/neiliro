@@ -46,6 +46,10 @@ export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   // #222 — the file itself is a file envelope (lib/crypto/files.ts), tracked by
   // attachments.encryption; the filename is words
   attachments: ['filename'],
+  // #223 — sealed by the server on ingest to the family public key (`s1:`),
+  // or by the browser (`e1:`) when the job rewrites old plaintext; the codec
+  // opens both. Every header a person reads is here.
+  mail_messages: ['from_address', 'from_name', 'to_address', 'subject', 'body_text'],
 };
 
 /** Text columns of the tables above that stay readable, and why. */
@@ -196,5 +200,16 @@ export const CLEAR_FIELDS: Record<string, Record<string, string>> = {
     mail_message_id: 'identifier',
     uploaded_by: 'identifier',
     created_at: 'a timestamp',
+  },
+  mail_messages: {
+    id: 'identifier',
+    message_id: 'the RFC 5322 Message-ID — idempotent ingest and In-Reply-To need it; disclosed',
+    kind: 'an enum — in or out',
+    sent_at: 'a timestamp',
+    received_at: 'a timestamp the list is ordered by',
+    read_at: 'a timestamp',
+    task_id: 'identifier',
+    in_reply_to: 'identifier',
+    sent_by: 'identifier',
   },
 };

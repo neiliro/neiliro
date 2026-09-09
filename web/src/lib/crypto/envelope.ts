@@ -36,8 +36,9 @@ export function fieldAad(place: FieldPlace): Bytes {
   return utf8(`${place.table}/${place.column}/${place.id}`);
 }
 
+/** An envelope of either kind: sealed in the browser (`e1:`) or to the family public key (`s1:`, #223). */
 export function isEncrypted(value: string | null | undefined): boolean {
-  return typeof value === 'string' && value.startsWith(FIELD_PREFIX);
+  return typeof value === 'string' && (value.startsWith(FIELD_PREFIX) || value.startsWith('s1:'));
 }
 
 export async function encryptField(key: CryptoKey, plaintext: string, place: FieldPlace): Promise<string> {

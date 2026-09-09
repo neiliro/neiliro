@@ -178,6 +178,23 @@ const MODULES: Module[] = [
     rewrite: (id, row) => encryptExistingAttachment(id, String(row['filename']), String(row['mime'] ?? '')),
   },
   {
+    // Letters from before the key: incoming ones and the kept copies of replies.
+    // Since the key, the server seals both on arrival; these are the leftovers.
+    table: 'mail_messages',
+    collect: async () => {
+      const out = new Map<string, Row>();
+      const { messages } = await api.get<{ messages: Row[] }>('/mail');
+      for (const stub of messages) {
+        const full = await api.get<Row & { replies: Row[] }>(`/mail/${String(stub['id'])}`);
+        out.set(String(full['id']), full);
+        for (const reply of full.replies) out.set(String(reply['id']), reply);
+      }
+      return out;
+    },
+    rewrite: (id, row) =>
+      api.patch(`/mail/${id}`, pick(row, ['from_address', 'from_name', 'to_address', 'subject', 'body_text'].filter((f) => row[f] !== undefined))),
+  },
+  {
     table: 'transactions',
     collect: allTransactions,
     rewrite: (id, row) => {

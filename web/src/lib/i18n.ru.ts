@@ -986,7 +986,10 @@ export const ru: Record<string, string> = {
   'An entry with this id already exists': 'Запись с таким id уже есть',
   'An attachment with this id already exists': 'Вложение с таким id уже есть',
   'The file name is too long': 'Слишком длинное имя файла',
-  'This file is sealed for the family and cannot be opened here yet': 'Файл запечатан для семьи, и здесь его пока не открыть',
+  'The browser creates the task for an encrypted letter': 'Задачу из зашифрованного письма создаёт браузер',
+  'The browser names the recipient and the subject for an encrypted letter': 'Получателя и тему зашифрованного письма называет браузер',
+  'A reply is sent by the server, so the server sees what you write here — it is the one sending it. Letters you receive are sealed for the family the moment they arrive.':
+    'Ответ отправляет сервер, поэтому он видит написанное здесь — это он его посылает. Входящие письма запечатываются для семьи в момент прибытия.',
   'The link carries the family key for this one list: the server opens it for whoever follows the link.':
     'В ссылке едет ключ семьи для этого одного списка: сервер открывает его тому, кто перейдёт по ссылке.',
   'Wishes are meant for guests, so they are the one thing here the server keeps readable — the family’s public face, not its diary.':

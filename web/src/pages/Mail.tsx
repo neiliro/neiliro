@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AttachmentLink } from '../components/AttachmentMedia';
 import { api } from '../lib/api';
+import { INBOX_ID } from '../lib/tasks';
 import { useAuth } from '../lib/auth';
 import { formatStamp } from '../lib/format';
 import { clearBlankOnBlur } from '../lib/forms';
@@ -97,7 +98,14 @@ export function Mail() {
     setBusy(true);
     setError(null);
     try {
-      const task = await api.post<{ id: string }>(`/mail/${message.id}/task`, {});
+      // The task is made here, not on the server: only this side can read a
+      // sealed letter's subject (#223). The server links it to the message.
+      const created = await api.post<{ id: string }>('/tasks', {
+        project_id: INBOX_ID,
+        title: (message.subject || t('(no subject)')).slice(0, 300),
+        description: message.body_text.slice(0, 1000).trim() || null,
+      });
+      const task = await api.post<{ id: string }>(`/mail/${message.id}/task`, { task_id: created.id });
       setMessage({ ...message, task_id: task.id });
       setList((prev) =>
         prev
@@ -121,7 +129,12 @@ export function Mail() {
     setBusy(true);
     setError(null);
     try {
-      await api.post(`/mail/${message.id}/reply`, { text: replyText.trim() });
+      // Recipient and subject come from here — the server cannot read a sealed letter's
+      await api.post(`/mail/${message.id}/reply`, {
+        text: replyText.trim(),
+        to: message.from_address,
+        subject: /^re:/i.test(message.subject) ? message.subject : `Re: ${message.subject}`,
+      });
       setReplyText('');
       setNotice(t('Reply sent from the family address'));
       await open(message.id);
@@ -324,6 +337,9 @@ export function Mail() {
                 onBlur={clearBlankOnBlur(() => setReplyText(''))}
                 className="w-full rounded-lg border border-line bg-surface-2 px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
               />
+              <p className="mt-1 text-xs text-muted">
+                {t('A reply is sent by the server, so the server sees what you write here — it is the one sending it. Letters you receive are sealed for the family the moment they arrive.')}
+              </p>
               <div className="mt-2 flex justify-end">
                 <button
                   type="button"

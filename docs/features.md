@@ -232,6 +232,10 @@ v1 renders the plain-text part of a message; HTML rendering, ICS invites
 into the calendar and invoice-to-transaction are tracked in the
 [family mail epic](https://github.com/neiliro/neiliro/issues/30).
 
+### Mail and the family key
+
+Mail is the one place the server sees words, once. A letter arrives as plaintext — that is how e-mail works, whether it comes through the Mailgun webhook or an IMAP poll — and the server has no family key. What it has is the family's public key, so before anything is written it seals what a person would read (sender, subject, body, attachments and their names) to that key; only a browser holding the family key can open it, and plaintext exists in the server's memory for milliseconds. Arrival time, size and the Message-ID stay readable, the last because idempotent ingest and reply threading need it. A reply is written in the browser and sent by the server, which therefore sees the outgoing text — it is the one sending it — and the reply box says so; the copy it keeps is sealed like an incoming letter. «Make it a task» happens in the browser, since only the browser can read the subject. Letters from before the key are brought under it by the one-time job in Settings. The self-hosted mailbox password stays readable to the server, which has to log in with it; the ADR explains why those two decisions are a pair.
+
 ## Money
 
 ![Money: accounts per currency, spending by category, budgets and reconciliation](screenshots/money.png)

@@ -7,6 +7,8 @@
   leave it to the browser.
 */
 const FIELD_PREFIX = 'e1:';
+/** Sealed by the server itself to the family public key (#223, lib/envelope.ts). */
+const SEALED_PREFIX = 's1:';
 
 export const isCiphertext = (value: string | null | undefined): boolean =>
-  typeof value === 'string' && value.startsWith(FIELD_PREFIX);
+  typeof value === 'string' && (value.startsWith(FIELD_PREFIX) || value.startsWith(SEALED_PREFIX));

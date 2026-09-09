@@ -310,3 +310,32 @@ describe('attachments (#222)', () => {
     expect((mail['attachments'] as Row[])[0]!['filename']).toBe('receipt.jpg');
   });
 });
+
+describe('mail (#223)', () => {
+  const MESSAGE_ID = '13131313-1313-4131-8131-131313131313';
+
+  it('opens what the server sealed to the family public key, and re-seals the job’s rewrites with the family key', async () => {
+    const family = await generateFamilyKey();
+    setVault({ key: family, familyHasKey: true });
+    const { familyPublicKey, sealField } = await import('./crypto');
+    const pub = await familyPublicKey(family);
+    const sealed = {
+      id: MESSAGE_ID,
+      from_address: await sealField(pub, 'office@school.example', { table: 'mail_messages', column: 'from_address', id: MESSAGE_ID }),
+      subject: await sealField(pub, 'Swimming on Friday', { table: 'mail_messages', column: 'subject', id: MESSAGE_ID }),
+      body_text: await sealField(pub, 'Bring a towel.', { table: 'mail_messages', column: 'body_text', id: MESSAGE_ID }),
+      received_at: '2026-09-09 10:00:00',
+    };
+    const list = (await decodeResponse('GET', '/mail', { messages: [sealed], configured: true })) as Row;
+    expect((list['messages'] as Row[])[0]).toMatchObject({ from_address: 'office@school.example', subject: 'Swimming on Friday' });
+
+    const full = (await decodeResponse('GET', `/mail/${MESSAGE_ID}`, { ...sealed, attachments: [], replies: [] })) as Row;
+    expect(full['body_text']).toBe('Bring a towel.');
+    // Sealed rows are encrypted rows: nothing for the one-time job to do
+    expect(pendingPlaintext('mail_messages')).not.toContain(MESSAGE_ID);
+
+    const rewritten = (await encodeRequest('PATCH', `/mail/${MESSAGE_ID}`, { subject: 'Old letter', body_text: 'plain' })) as Row;
+    expect(isEncrypted(rewritten['subject'] as string)).toBe(true);
+    expect((rewritten['subject'] as string).startsWith('e1:')).toBe(true);
+  });
+});
