@@ -40,6 +40,9 @@ export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   lists: ['title'],
   list_items: ['title'],
   list_sections: ['title'],
+  // #221 — small, but medical. Birthday and role live in `profiles` and
+  // stay clear: the dashboard's reminder needs the date.
+  profile_entries: ['label', 'value'],
 };
 
 /** Text columns of the tables above that stay readable, and why. */
@@ -175,5 +178,10 @@ export const CLEAR_FIELDS: Record<string, Record<string, string>> = {
     id: 'identifier',
     list_id: 'identifier',
     created_at: 'a timestamp',
+  },
+  profile_entries: {
+    id: 'identifier',
+    user_id: 'identifier',
+    kind: 'an enum — allergy or preference — the list filters by',
   },
 };

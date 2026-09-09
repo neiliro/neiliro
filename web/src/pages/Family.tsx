@@ -50,7 +50,7 @@ interface Member {
   color: string;
   birthday: string | null;
   family_role: FamilyRole | null;
-  allergies: string[];
+  allergies: { id: string; label: string }[];
 }
 
 interface Entry {
@@ -133,7 +133,7 @@ function MemberCard({ member, active }: { member: Member; active: boolean }) {
           not a click away */}
       {member.allergies.length > 0 && (
         <p className="mt-2 rounded-lg border border-urgent/40 bg-urgent/10 px-2.5 py-1.5 text-xs text-ink">
-          ⚠ {t('Allergies')}: {member.allergies.join(', ')}
+          ⚠ {t('Allergies')}: {member.allergies.map((a) => a.label).join(', ')}
         </p>
       )}
     </Link>

@@ -983,6 +983,7 @@ export const ru: Record<string, string> = {
   'A list with this id already exists': 'Список с таким id уже есть',
   'An item with this id already exists': 'Пункт с таким id уже есть',
   'A section with this id already exists': 'Раздел с таким id уже есть',
+  'An entry with this id already exists': 'Запись с таким id уже есть',
   'The link carries the family key for this one list: the server opens it for whoever follows the link.':
     'В ссылке едет ключ семьи для этого одного списка: сервер открывает его тому, кто перейдёт по ссылке.',
   'Wishes are meant for guests, so they are the one thing here the server keeps readable — the family’s public face, not its diary.':

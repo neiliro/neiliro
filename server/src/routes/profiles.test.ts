@@ -228,7 +228,7 @@ describe('entries', () => {
     });
     expect(created.statusCode).toBe(201);
     const list = await hub.as(bobCookie, 'GET', '/api/profiles');
-    const kate = list.json<{ id: string; allergies: string[] }[]>().find((u) => u.id === kateId)!;
-    expect(kate.allergies).toContain('nuts');
+    const kate = list.json<{ id: string; allergies: { id: string; label: string }[] }[]>().find((u) => u.id === kateId)!;
+    expect(kate.allergies.map((a) => a.label)).toContain('nuts');
   });
 });

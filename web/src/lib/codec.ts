@@ -59,6 +59,10 @@ const LIST_SECTIONS = new RegExp(`^/lists/(${UUID})/sections$`);
 const LIST_ITEM = new RegExp(`^/list-items/(${UUID})$`);
 const LIST_ITEM_ANY = new RegExp(`^/list-items/(${UUID})(?:/toggle|/section)?$`);
 const LIST_SECTION = new RegExp(`^/list-sections/(${UUID})$`);
+const PROFILES_LIST = /^\/profiles$/;
+const PROFILE = new RegExp(`^/profiles/(${UUID})$`);
+const PROFILE_ENTRIES = new RegExp(`^/profiles/(${UUID})/entries$`);
+const PROFILE_ENTRY = new RegExp(`^/profiles/(${UUID})/entries/(${UUID})$`);
 
 const F = ENCRYPTED_FIELDS;
 
@@ -285,6 +289,10 @@ export async function encodeRequest(method: string, path: string, body: unknown)
   if (method === 'POST' && LIST_SECTIONS.test(path)) return sealCreate('list_sections', b);
   if (method === 'PATCH' && (m = path.match(LIST_SECTION))) return sealFields('list_sections', m[1]!, b, F['list_sections']!);
 
+  // Profile entries (#221)
+  if (method === 'POST' && PROFILE_ENTRIES.test(path)) return sealCreate('profile_entries', b);
+  if (method === 'PATCH' && (m = path.match(PROFILE_ENTRY))) return sealFields('profile_entries', m[2]!, b, F['profile_entries']!);
+
   return body;
 }
 
@@ -414,6 +422,25 @@ export async function decodeResponse(
   }
   if ((method === 'POST' && LIST_SECTIONS.test(path)) || (method === 'PATCH' && LIST_SECTION.test(path))) {
     return openRow('list_sections', data as Row);
+  }
+
+  // Profiles
+  if (method === 'GET' && PROFILES_LIST.test(path) && Array.isArray(data)) {
+    return Promise.all(
+      (data as Row[]).map(async (member) =>
+        Array.isArray(member['allergies'])
+          ? { ...member, allergies: await openList('profile_entries', member['allergies'] as Row[]) }
+          : member,
+      ),
+    );
+  }
+  if (method === 'GET' && PROFILE.test(path)) {
+    const d = data as Row;
+    if (Array.isArray(d['entries'])) d['entries'] = await openList('profile_entries', d['entries'] as Row[]);
+    return d;
+  }
+  if ((method === 'POST' && PROFILE_ENTRIES.test(path)) || (method === 'PATCH' && PROFILE_ENTRY.test(path))) {
+    return openRow('profile_entries', data as Row);
   }
 
   if (method === 'GET' && path.startsWith('/budgets') && Array.isArray(data)) {

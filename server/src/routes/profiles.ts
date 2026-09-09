@@ -113,12 +113,13 @@ export async function registerProfileRoutes(app: FastifyInstance): Promise<void>
           ORDER BY u.name`,
       )
       .all() as { id: string }[];
+    // Rows, not bare labels: an encrypted label opens under its entry id (#221)
     const allergiesOf = db.prepare(
-      `SELECT label FROM profile_entries WHERE user_id = ? AND kind = 'allergy' ORDER BY position, label`,
+      `SELECT id, label FROM profile_entries WHERE user_id = ? AND kind = 'allergy' ORDER BY position`,
     );
     return users.map((u) => ({
       ...u,
-      allergies: (allergiesOf.all(u.id) as { label: string }[]).map((r) => r.label),
+      allergies: allergiesOf.all(u.id) as { id: string; label: string }[],
     }));
   });
 
@@ -133,7 +134,7 @@ export async function registerProfileRoutes(app: FastifyInstance): Promise<void>
 
     const profile = profileOf(userId);
     const entries = db
-      .prepare('SELECT id, kind, label, value FROM profile_entries WHERE user_id = ? ORDER BY position, label')
+      .prepare('SELECT id, kind, label, value FROM profile_entries WHERE user_id = ? ORDER BY position')
       .all(userId);
     const wishes = db
       .prepare('SELECT * FROM wishes WHERE user_id = ? ORDER BY position, created_at')
@@ -206,23 +207,49 @@ export async function registerProfileRoutes(app: FastifyInstance): Promise<void>
   app.post('/api/profiles/:userId/entries', (req, reply) => {
     const { userId } = z.object({ userId: z.string().uuid() }).parse(req.params);
     if (!canEdit(req, userId)) return forbid(reply);
+    // Ceilings sized for envelopes (#221); the browser mints the id when it encrypts
     const parsed = z
       .object({
+        id: z.string().uuid().optional(),
         kind: z.enum(['preference', 'allergy']),
-        label: z.string().min(1, 'Enter a label').max(100),
-        value: z.string().max(300).nullable().optional(),
+        label: z.string().min(1, 'Enter a label').max(4_000),
+        value: z.string().max(4_000).nullable().optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
     }
     ensureProfile(userId);
-    const entryId = id();
+    if (parsed.data.id && db.prepare('SELECT 1 FROM profile_entries WHERE id = ?').get(parsed.data.id)) {
+      return reply.code(409).send({ error: 'An entry with this id already exists' });
+    }
+    const entryId = parsed.data.id ?? id();
     db.prepare(
       `INSERT INTO profile_entries (id, user_id, kind, label, value, position)
        VALUES (?, ?, ?, ?, ?, (SELECT coalesce(max(position), 0) + 1 FROM profile_entries WHERE user_id = ?))`,
     ).run(entryId, userId, parsed.data.kind, parsed.data.label.trim(), parsed.data.value?.trim() || null, userId);
     return reply.code(201).send(db.prepare('SELECT id, kind, label, value FROM profile_entries WHERE id = ?').get(entryId));
+  });
+
+  /** Rewriting an entry — for the one-time job that brings old plaintext under the key (#221). */
+  app.patch('/api/profiles/:userId/entries/:entryId', (req, reply) => {
+    const { userId, entryId } = z
+      .object({ userId: z.string().uuid(), entryId: z.string().uuid() })
+      .parse(req.params);
+    if (!canEdit(req, userId)) return forbid(reply);
+    const parsed = z
+      .object({ label: z.string().min(1).max(4_000).optional(), value: z.string().max(4_000).nullable().optional() })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Check the fields' });
+    const fields: [string, unknown][] = [];
+    if (parsed.data.label !== undefined) fields.push(['label', parsed.data.label.trim()]);
+    if (parsed.data.value !== undefined) fields.push(['value', parsed.data.value?.trim() || null]);
+    if (fields.length === 0) return reply.code(400).send({ error: 'Nothing to change' });
+    const result = db
+      .prepare(`UPDATE profile_entries SET ${fields.map(([k]) => `${k} = ?`).join(', ')} WHERE id = ? AND user_id = ?`)
+      .run(...fields.map(([, v]) => v as string | null), entryId, userId);
+    if (result.changes === 0) return reply.code(404).send({ error: 'Entry not found' });
+    return db.prepare('SELECT id, kind, label, value FROM profile_entries WHERE id = ?').get(entryId);
   });
 
   app.delete('/api/profiles/:userId/entries/:entryId', (req, reply) => {

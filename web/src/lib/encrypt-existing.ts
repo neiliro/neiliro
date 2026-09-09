@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, ApiError } from './api';
 import { pendingPlaintext } from './codec';
 import { invalidateSearchCorpus } from './search';
 
@@ -148,6 +148,26 @@ const MODULES: Module[] = [
       return out;
     },
     rewrite: (id, row) => api.patch(`/list-sections/${id}`, pick(row, ['title'])),
+  },
+  {
+    // Every member's entries are readable to the family, editable by the
+    // member or the admin; a 403 on someone else's is a skip, not a failure
+    table: 'profile_entries',
+    collect: async () => {
+      const out = new Map<string, Row>();
+      for (const member of await api.get<Row[]>('/profiles')) {
+        const profile = await api.get<{ entries: Row[] }>(`/profiles/${String(member['id'])}`);
+        for (const entry of profile.entries) out.set(String(entry['id']), { ...entry, user_id: member['id'] });
+      }
+      return out;
+    },
+    rewrite: async (id, row) => {
+      try {
+        await api.patch(`/profiles/${String(row['user_id'])}/entries/${id}`, pick(row, ['label', 'value']));
+      } catch (err) {
+        if (!(err instanceof ApiError && err.status === 403)) throw err;
+      }
+    },
   },
   {
     table: 'transactions',

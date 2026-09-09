@@ -264,3 +264,22 @@ describe('lists (#220)', () => {
     expect(toggled['title']).toBe('Milk');
   });
 });
+
+describe('profile entries (#221)', () => {
+  const USER_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const ENTRY_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+
+  beforeEach(async () => setVault({ key: await generateFamilyKey(), familyHasKey: true }));
+
+  it('seals label and value, and opens them on the profile and on the family list', async () => {
+    const entry = (await encodeRequest('POST', `/profiles/${USER_ID}/entries`, { id: ENTRY_ID, kind: 'allergy', label: 'nuts', value: 'severe' })) as Row;
+    expect(isEncrypted(entry['label'] as string)).toBe(true);
+    expect(entry['kind']).toBe('allergy');
+
+    const profile = (await decodeResponse('GET', `/profiles/${USER_ID}`, { id: USER_ID, entries: [{ id: ENTRY_ID, kind: 'allergy', label: entry['label'], value: entry['value'] }] })) as Row;
+    expect((profile['entries'] as Row[])[0]).toMatchObject({ label: 'nuts', value: 'severe' });
+
+    const family = (await decodeResponse('GET', '/profiles', [{ id: USER_ID, allergies: [{ id: ENTRY_ID, label: entry['label'] }] }])) as Row[];
+    expect((family[0]!['allergies'] as Row[])[0]!['label']).toBe('nuts');
+  });
+});

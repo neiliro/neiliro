@@ -136,7 +136,7 @@ The things a household knows about each other and otherwise keeps in someone's h
 
 The household stands in a column down the left and the chosen profile opens beside it, so checking a second person — the other child's allergies, who else has a birthday this month — is one click rather than a return trip through a list. A phone has room for one pane and shows whichever the address asks for.
 
-**Allergies are on the family list itself**, not behind a click: they exist to be findable in a hurry by whoever is cooking. **Preferences** are label–value pairs ("Shoes — 38"), scannable in a shop. The **birthday** saved on a profile derives a yearly event in the shared calendar, age included — the profile owns the date, the calendar entry follows it.
+With a family key, allergies and preferences — label and value — are encrypted in the browser; the birthday and the family role stay readable because the dashboard's reminder needs the date. **Allergies are on the family list itself**, not behind a click: they exist to be findable in a hurry by whoever is cooking. **Preferences** are label–value pairs ("Shoes — 38"), scannable in a shop. The **birthday** saved on a profile derives a yearly event in the shared calendar, age included — the profile owns the date, the calendar entry follows it.
 
 The **wishlist** keeps its surprise on the server: the owner is never sent what is reserved — not a flag, not a name — the same way a personal account's transfers are masked. Other family members see who reserved what and can reserve with one click.
 
