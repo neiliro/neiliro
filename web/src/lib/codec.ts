@@ -42,6 +42,16 @@ const EVENTS_LIST = /^\/events(?:\?.*)?$/;
 const EVENT = new RegExp(`^/events/(${UUID})$`);
 const CALENDARS_LIST = /^\/calendars(?:\?.*)?$/;
 const CALENDAR = new RegExp(`^/calendars/(${UUID})$`);
+const ACCOUNTS_LIST = /^\/accounts(?:\?.*)?$/;
+const ACCOUNT = new RegExp(`^/accounts/(${UUID})$`);
+const RECONCILE = new RegExp(`^/accounts/(${UUID})/reconcile$`);
+const CATEGORIES_LIST = /^\/categories(?:\?.*)?$/;
+const CATEGORY = new RegExp(`^/categories/(${UUID})$`);
+const TRANSACTIONS_LIST = /^\/transactions(?:\?.*)?$/;
+const TRANSACTION = new RegExp(`^/transactions/(${UUID})$`);
+const RECURRING_LIST = /^\/recurring$/;
+const RECURRING = new RegExp(`^/recurring/(${UUID})$`);
+const RECURRING_CONFIRM = new RegExp(`^/recurring/(${UUID})/confirm$`);
 
 const F = ENCRYPTED_FIELDS;
 
@@ -142,6 +152,28 @@ interface Join {
 
 const PROJECT_TITLE: Join = { field: 'project_title', table: 'projects', column: 'title', idField: 'project_id' };
 const CALENDAR_NAME: Join = { field: 'calendar_name', table: 'calendars', column: 'name', idField: 'calendar_id' };
+const ACCOUNT_NAME: Join = { field: 'account_name', table: 'accounts', column: 'name', idField: 'account_id' };
+const TO_ACCOUNT_NAME: Join = { field: 'to_account_name', table: 'accounts', column: 'name', idField: 'to_account_id' };
+const CATEGORY_NAME: Join = { field: 'category_name', table: 'categories', column: 'name', idField: 'category_id' };
+const RULE_WORDS: Join[] = ['title', 'note', 'place'].map((column) => ({
+  field: `recurring_${column}`,
+  table: 'recurring_transactions',
+  column,
+  idField: 'recurring_id',
+}));
+const TRANSACTION_JOINS = [ACCOUNT_NAME, TO_ACCOUNT_NAME, CATEGORY_NAME, ...RULE_WORDS];
+
+/*
+  A transaction made from an encrypted rule carries no words of its own —
+  the rule's ciphertext is bound to the rule's id — so the server joins
+  the rule's fields and the browser reads them as the transaction's (#219).
+*/
+async function openTransaction(row: Row): Promise<Row> {
+  const out = await openRow('transactions', row, TRANSACTION_JOINS);
+  if (out['note'] == null && typeof out['recurring_note'] === 'string') out['note'] = out['recurring_note'];
+  if (out['place'] == null && typeof out['recurring_place'] === 'string') out['place'] = out['recurring_place'];
+  return out;
+}
 
 /** Open a row's own sealed columns and the joined ones, and note plaintext for the job. */
 async function openRow(table: string, row: Row, joins: Join[] = [], idField = 'id'): Promise<Row> {
@@ -164,6 +196,22 @@ const openList = (table: string, rows: Row[], joins: Join[] = [], idField = 'id'
 // An occurrence is one date of an event: its id is `<event>#<date>`, its
 // ciphertext is the event's, bound to event_id
 const openOccurrences = (rows: Row[]) => openList('events', rows, [CALENDAR_NAME, PROJECT_TITLE], 'event_id');
+
+/** Rows of a table with no sealed columns of its own, carrying joined sealed names. */
+async function openJoined(rows: Row[], joins: Join[]): Promise<Row[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      let out = row;
+      for (const join of joins) {
+        const joinedId = out[join.idField];
+        if (typeof out[join.field] !== 'string' || typeof joinedId !== 'string') continue;
+        const opened = await openFields(join.table, joinedId, { [join.column]: out[join.field] }, [join.column]);
+        out = { ...out, [join.field]: opened[join.column] };
+      }
+      return out;
+    }),
+  );
+}
 
 /** Seal a create body: mint the id, seal the table's columns under it. */
 async function sealCreate(table: string, b: Body): Promise<Body> {
@@ -205,6 +253,22 @@ export async function encodeRequest(method: string, path: string, body: unknown)
   if (method === 'PATCH' && (m = path.match(EVENT))) return sealFields('events', m[1]!, b, F['events']!);
   if (method === 'POST' && CALENDARS_LIST.test(path)) return sealCreate('calendars', b);
   if (method === 'PATCH' && (m = path.match(CALENDAR))) return sealFields('calendars', m[1]!, b, F['calendars']!);
+
+  // Money (#219)
+  if (method === 'POST' && ACCOUNTS_LIST.test(path)) return sealCreate('accounts', b);
+  if (method === 'PATCH' && (m = path.match(ACCOUNT))) return sealFields('accounts', m[1]!, b, F['accounts']!);
+  if (method === 'POST' && (m = path.match(RECONCILE))) {
+    // Never read back; bound to the row's natural key all the same
+    return sealFields('reconciliations', `${m[1]!}@${String(b['checked_on'])}`, b, F['reconciliations']!);
+  }
+  if (method === 'POST' && CATEGORIES_LIST.test(path)) return sealCreate('categories', b);
+  if (method === 'PATCH' && (m = path.match(CATEGORY))) return sealFields('categories', m[1]!, b, F['categories']!);
+  if (method === 'POST' && TRANSACTIONS_LIST.test(path)) return sealCreate('transactions', b);
+  if (method === 'PATCH' && (m = path.match(TRANSACTION))) return sealFields('transactions', m[1]!, b, F['transactions']!);
+  if (method === 'POST' && RECURRING_LIST.test(path)) return sealCreate('recurring_transactions', b);
+  if (method === 'PATCH' && (m = path.match(RECURRING))) {
+    return sealFields('recurring_transactions', m[1]!, b, F['recurring_transactions']!);
+  }
 
   return body;
 }
@@ -288,6 +352,53 @@ export async function decodeResponse(
   if (method === 'GET' && CALENDARS_LIST.test(path) && Array.isArray(data)) return openList('calendars', data as Row[]);
   if ((method === 'POST' && CALENDARS_LIST.test(path)) || (method === 'PATCH' && CALENDAR.test(path))) {
     return openRow('calendars', data as Row);
+  }
+
+  // Money
+  if (method === 'GET' && ACCOUNTS_LIST.test(path) && Array.isArray(data)) return openList('accounts', data as Row[]);
+  if ((method === 'POST' && ACCOUNTS_LIST.test(path)) || (method === 'PATCH' && ACCOUNT.test(path))) {
+    return openRow('accounts', data as Row);
+  }
+  if (method === 'GET' && CATEGORIES_LIST.test(path) && Array.isArray(data)) return openList('categories', data as Row[]);
+  if ((method === 'POST' && CATEGORIES_LIST.test(path)) || (method === 'PATCH' && CATEGORY.test(path))) {
+    return openRow('categories', data as Row);
+  }
+  if (method === 'GET' && TRANSACTIONS_LIST.test(path) && Array.isArray(data)) {
+    return Promise.all((data as Row[]).map(openTransaction));
+  }
+  if (
+    (method === 'POST' && TRANSACTIONS_LIST.test(path)) ||
+    (method === 'PATCH' && TRANSACTION.test(path)) ||
+    (method === 'POST' && RECURRING_CONFIRM.test(path))
+  ) {
+    return openRow('transactions', data as Row);
+  }
+  if (method === 'GET' && RECURRING_LIST.test(path) && Array.isArray(data)) {
+    return openList('recurring_transactions', data as Row[], [ACCOUNT_NAME, CATEGORY_NAME]);
+  }
+  if ((method === 'POST' && RECURRING_LIST.test(path)) || (method === 'PATCH' && RECURRING.test(path))) {
+    return openRow('recurring_transactions', data as Row);
+  }
+  if (method === 'GET' && path === '/recurring/due' && Array.isArray(data)) {
+    // A due item is one date of a rule: its title is the rule's, bound to recurring_id
+    return openList('recurring_transactions', data as Row[], [ACCOUNT_NAME, CATEGORY_NAME], 'recurring_id');
+  }
+  if (method === 'GET' && path.startsWith('/budgets') && Array.isArray(data)) {
+    return openJoined(data as Row[], [CATEGORY_NAME]);
+  }
+  if (method === 'GET' && path.startsWith('/money/summary')) {
+    const d = data as Row;
+    if (Array.isArray(d['byCategory'])) d['byCategory'] = await openJoined(d['byCategory'] as Row[], [CATEGORY_NAME]);
+    return d;
+  }
+  if (method === 'GET' && path.startsWith('/money/outlook')) {
+    const d = data as Row;
+    const ruleTitle: Join = { field: 'title', table: 'recurring_transactions', column: 'title', idField: 'recurring_id' };
+    for (const currency of (d['currencies'] as Row[]) ?? []) {
+      if (Array.isArray(currency['bills'])) currency['bills'] = await openJoined(currency['bills'] as Row[], [ruleTitle]);
+      if (currency['next_income']) currency['next_income'] = (await openJoined([currency['next_income'] as Row], [ruleTitle]))[0];
+    }
+    return d;
   }
 
   // Aggregates

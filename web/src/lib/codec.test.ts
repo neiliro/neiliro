@@ -183,3 +183,58 @@ describe('events and calendars (#218)', () => {
     expect(pendingPlaintext('events')).not.toContain(EVENT_ID);
   });
 });
+
+describe('money (#219)', () => {
+  const ACCOUNT_ID = '77777777-7777-4777-8777-777777777777';
+  const CATEGORY_ID = '88888888-8888-4888-8888-888888888888';
+  const RULE_ID = '99999999-9999-4999-8999-999999999999';
+  const TX_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+  beforeEach(async () => setVault({ key: await generateFamilyKey(), familyHasKey: true }));
+
+  it('seals the words and leaves every amount in the clear', async () => {
+    const tx = (await encodeRequest('POST', '/transactions', {
+      id: TX_ID, kind: 'expense', occurred_on: '2026-09-01', account_id: ACCOUNT_ID, amount: 1250, note: 'Bread', place: 'Bakery',
+    })) as Row;
+    expect(isEncrypted(tx['note'] as string)).toBe(true);
+    expect(isEncrypted(tx['place'] as string)).toBe(true);
+    expect(tx['amount']).toBe(1250);
+    expect(tx['occurred_on']).toBe('2026-09-01');
+  });
+
+  it('opens joined names under their own ids and inherits a rule’s words', async () => {
+    const account = (await encodeRequest('POST', '/accounts', { id: ACCOUNT_ID, name: 'Wallet', currency: 'EUR' })) as Row;
+    const category = (await encodeRequest('POST', '/categories', { id: CATEGORY_ID, name: 'Food', kind: 'expense' })) as Row;
+    const rule = (await encodeRequest('POST', '/recurring', { id: RULE_ID, title: 'Rent', note: 'Flat', place: 'Landlord', kind: 'expense', amount: 5 })) as Row;
+
+    const rows = (await decodeResponse('GET', '/transactions?limit=500', [
+      {
+        id: TX_ID, kind: 'expense', amount: 50000, note: null, place: null,
+        account_id: ACCOUNT_ID, account_name: account['name'], category_id: CATEGORY_ID, category_name: category['name'],
+        to_account_id: null, to_account_name: 'Personal account',
+        recurring_id: RULE_ID, recurring_title: rule['title'], recurring_note: rule['note'], recurring_place: rule['place'],
+      },
+    ])) as Row[];
+    expect(rows[0]).toMatchObject({ account_name: 'Wallet', category_name: 'Food', note: 'Flat', place: 'Landlord', recurring_title: 'Rent', to_account_name: 'Personal account' });
+  });
+
+  it('binds a reconciliation note to the account and the day', async () => {
+    const out = (await encodeRequest('POST', `/accounts/${ACCOUNT_ID}/reconcile`, { checked_on: '2026-09-01', actual_balance: 100, note: 'Bank says so' })) as Row;
+    expect(isEncrypted(out['note'] as string)).toBe(true);
+    expect(out['actual_balance']).toBe(100);
+  });
+
+  it('opens the outlook and the due list under the rule id', async () => {
+    const rule = (await encodeRequest('PATCH', `/recurring/${RULE_ID}`, { title: 'Salary' })) as Row;
+    const outlook = (await decodeResponse('GET', '/money/outlook', {
+      today: '2026-09-09',
+      currencies: [{ currency: 'EUR', bills: [{ recurring_id: RULE_ID, title: rule['title'], amount: 1 }], next_income: { recurring_id: RULE_ID, title: rule['title'] } }],
+    })) as Row;
+    const eur = (outlook['currencies'] as Row[])[0]!;
+    expect((eur['bills'] as Row[])[0]!['title']).toBe('Salary');
+    expect((eur['next_income'] as Row)['title']).toBe('Salary');
+
+    const due = (await decodeResponse('GET', '/recurring/due', [{ recurring_id: RULE_ID, occurred_on: '2026-09-10', title: rule['title'], account_id: ACCOUNT_ID, account_name: 'plain' }])) as Row[];
+    expect(due[0]!['title']).toBe('Salary');
+  });
+});

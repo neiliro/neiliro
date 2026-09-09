@@ -234,6 +234,8 @@ into the calendar and invoice-to-transaction are tracked in the
 
 Amounts are stored as integers in minor units: 1234.56 → 123456. Floating point in money produces rounding errors that accumulate in sums and eventually disagree with the bank.
 
+This is the module where the encryption boundary ([ADR 0001](adr/0001-client-side-encryption.md)) is sharpest. What people write — account and category names, a transaction's note and place, a recurring rule's title and words, a reconciliation note — is encrypted in the browser. Every amount, date, currency, kind and id stays readable, because balances, budgets, the outlook and reconciliation are the server's arithmetic and never needed a name; nothing in those calculations changes. Two visible consequences: the server no longer orders accounts and categories by name (the order is the one you arranged), and a transaction created from an encrypted recurring rule carries no words of its own — it shows the rule's, which the server joins by id and the browser opens. Reconciliation notes are written and never read back, so old ones are not rewritten by the one-time job.
+
 Currency lives on the account, and currencies are unrelated: no exchange rate, no grand total, summing happens strictly within one currency. A transfer between accounts in different currencies records two amounts — what left and what arrived.
 
 Common currencies (EUR, RSD, USD, GBP, CHF, PLN, CZK, SEK, HUF) are one click when creating an account; any other ISO 4217 code can be typed in — the server accepts any, Intl formats it. The default currency for new accounts is a hub setting.

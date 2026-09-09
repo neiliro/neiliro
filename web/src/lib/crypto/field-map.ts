@@ -25,6 +25,15 @@ export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   // name in plaintext, as the users table does
   events: ['title', 'description', 'location'],
   calendars: ['name'],
+  // #219 — every amount, date, currency, kind and id stays clear: balances,
+  // budgets and reconciliation are the server's arithmetic and never needed
+  // a name. A reconciliation note is written and never read back; it is
+  // bound to `<account_id>@<checked_on>`, the row's natural key.
+  accounts: ['name'],
+  categories: ['name'],
+  transactions: ['note', 'place'],
+  recurring_transactions: ['title', 'note', 'place'],
+  reconciliations: ['note'],
 };
 
 /** Text columns of the tables above that stay readable, and why. */
@@ -90,5 +99,56 @@ export const CLEAR_FIELDS: Record<string, Record<string, string>> = {
     id: 'identifier',
     color: 'a hex colour',
     owner_id: 'identifier — privacy is enforced server-side on this value',
+  },
+  accounts: {
+    id: 'identifier',
+    currency: 'an ISO code the totals group by',
+    kind: 'an enum — the outlook excludes savings',
+    owner_id: 'identifier — privacy is enforced server-side on this value',
+    color: 'a hex colour',
+    archived_at: 'a timestamp',
+    created_by: 'identifier',
+    created_at: 'a timestamp',
+    updated_at: 'a timestamp',
+  },
+  categories: {
+    id: 'identifier',
+    kind: 'an enum — expense or income',
+    color: 'a hex colour',
+    archived_at: 'a timestamp',
+    created_at: 'a timestamp',
+    parent_id: 'identifier — the one-level tree the budget subquery walks',
+  },
+  transactions: {
+    id: 'identifier',
+    kind: 'an enum the balance arithmetic branches on',
+    occurred_on: 'a date — periods, balances as of a day',
+    account_id: 'identifier',
+    to_account_id: 'identifier',
+    category_id: 'identifier',
+    created_by: 'identifier',
+    created_at: 'a timestamp — same-day ordering for reconciliation',
+    updated_at: 'a timestamp',
+    recurring_id: 'identifier — the words of a rule-made transaction are read through it',
+    recurring_on: 'a date — the series instance, for idempotency',
+  },
+  recurring_transactions: {
+    id: 'identifier',
+    kind: 'an enum',
+    start_on: 'a date the series expands from',
+    recurrence_rule: 'a machine rule (RRULE subset) the server expands',
+    account_id: 'identifier',
+    to_account_id: 'identifier',
+    category_id: 'identifier',
+    created_by: 'identifier',
+    created_at: 'a timestamp — the list is ordered by it',
+    updated_at: 'a timestamp',
+  },
+  reconciliations: {
+    id: 'identifier',
+    account_id: 'identifier',
+    checked_on: 'a date the discrepancy is computed as of',
+    created_by: 'identifier',
+    created_at: 'a timestamp — same-day ordering against transactions',
   },
 };
