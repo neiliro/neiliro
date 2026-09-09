@@ -8,6 +8,7 @@ import { log } from '../lib/log.js';
 import { sendServiceEmail, serviceMailAvailable } from '../lib/mail.js';
 import { hashPassword } from '../lib/password.js';
 import { AUTH_KEY_PATTERN } from '../lib/kdf.js';
+import { retirePasswordEnvelope } from '../lib/keys.js';
 import { familySlug } from '../lib/tenants.js';
 
 /*
@@ -110,6 +111,10 @@ export async function registerPasswordResetRoutes(app: FastifyInstance): Promise
         'UPDATE users SET password_hash = ?, kdf_version = 1, must_change_password = 0 WHERE id = ?',
       ).run(passwordHash, row.user_id);
       db.prepare('UPDATE password_resets SET used_at = ? WHERE id = ?').run(now(), row.id);
+      // A password nobody's browser derived a wrap key from cannot open
+      // the envelope (ADR 0001): access comes back, the key comes back by
+      // re-admission or the recovery code — the reset page says so
+      retirePasswordEnvelope(row.user_id);
       // Every other unused link for this person dies with it
       db.prepare('DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL').run(row.user_id);
     })();

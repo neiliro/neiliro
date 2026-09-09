@@ -1,6 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { AuthProvider, useAuth } from './lib/auth';
+import { KeyProvider, useKeys } from './lib/family-key';
+import { RecoveryCodeScreen } from './components/RecoveryCode';
+import { Readmit } from './pages/Readmit';
 import { DialogProvider } from './components/Dialog';
 import { ChangePassword, Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -26,6 +29,21 @@ function Gate() {
   if (!user) return <Login />;
   if (mustChangePassword) return <ChangePassword />;
 
+  // The family key lives only behind a signed-in, settled account: the
+  // provider mounts here and forgets the key when it unmounts (sign-out)
+  return (
+    <KeyProvider>
+      <KeyGate />
+    </KeyProvider>
+  );
+}
+
+function KeyGate() {
+  const { freshRecoveryCode, acknowledgeRecoveryCode } = useKeys();
+  // The one blocking screen of the whole feature: a recovery code nobody
+  // acknowledged is a code nobody wrote down (ADR 0001)
+  if (freshRecoveryCode) return <RecoveryCodeScreen code={freshRecoveryCode} onDone={acknowledgeRecoveryCode} />;
+
   return (
     <Routes>
       <Route element={<AppShell />}>
@@ -39,6 +57,8 @@ function Gate() {
         <Route path="family" element={<Family />} />
         <Route path="family/:userId" element={<Family />} />
         <Route path="settings" element={<Settings />} />
+        {/* The other end of a re-admission link (#210): signed in, inside the shell */}
+        <Route path="readmit" element={<Readmit />} />
         {/* People management moved into Settings; old bookmarks land there */}
         <Route path="users" element={<Navigate to="/settings" replace />} />
       </Route>

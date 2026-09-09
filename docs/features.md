@@ -140,6 +140,14 @@ Everything the household owns leaves in one file whenever it wants: Settings →
 
 On the hosted service the same section holds **Delete everything**: the administrator confirms with the password, a two-factor code when one is set, and by typing the family's own address, after which the database and the attachments are gone and the encrypted nightly backups expire on their own within a fortnight. A self-hosted install gets the export but no such button — there, deleting the only family means erasing the instance, and that belongs to whoever owns the machine.
 
+### The family key
+
+Encryption of what the family writes ([ADR 0001](adr/0001-client-side-encryption.md)) starts with a key that belongs to the family and never reaches the server unprotected. It is created in the browser of the first adult who signs in after the hub learns about it, and from then on each member's browser opens it with their own password — the server keeps only sealed envelopes it cannot open. Settings → **Family key** shows whether this device holds it; **Lock this device** forgets it until the next sign-in.
+
+The moment the key is created, the hub shows a **recovery code** once and waits for an explicit acknowledgement, because it is the family's last door: a password reset — by the administrator, by e-mail, or from the server's console — restores access to the account but not to the key, since the new password cannot open an envelope the old one sealed. A member who lost theirs gets it back either from another member (**Re-admit** in Settings → People produces a one-time link; the secret that opens it rides only in the link, never through the server) or by typing the recovery code. A new code can be minted at any time by a member who holds the key; the old one stops working at once.
+
+Nothing is encrypted with the key yet: a device without it sees the hub as before, plus a quiet line offering the two ways back in. The doors are built before the first byte goes through them, on purpose.
+
 ### Sharing one event
 
 Any event can get a public link — "the party is on Saturday at three, here is where" — for people who have no account here and never will. The guest page shows the event and a button that adds it to their own calendar as a file.

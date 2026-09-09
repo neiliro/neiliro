@@ -16,6 +16,7 @@ server/               Fastify + SQLite
   src/routes/         API
 web/                  React + Vite + Tailwind
   src/lib/crypto/     Client-side encryption (ADR 0001): key derivation, envelopes, key store
+  src/lib/family-key.tsx  The family key's life in the browser: create, open, hand on, lock
 scripts/              Certificates, backups, export/import, admin reset
 ```
 
@@ -34,6 +35,8 @@ Search uses FTS5 with the `trigram` tokenizer. It matches substrings, so morphol
 SQLite's built-in `lower()` and `LIKE` are case-insensitive only for Latin, so task-name search registers a custom `ci_contains` function — it folds case in JavaScript and knows every alphabet.
 
 Passwords never reach the server. The browser stretches the password (PBKDF2-SHA256, 600 000 iterations, a random per-account salt the server hands out before sign-in) and splits the result with HKDF into an *auth key*, which is sent in place of the password and scrypt-hashed server-side, and a *wrap key*, which stays in the browser and opens the member's key envelope ([ADR 0001](adr/0001-client-side-encryption.md)). Neither half derives from the other, so a server that sees every sign-in still cannot reproduce the key that protects the family's content. Accounts from before the split cross over at their next sign-in, sending the password one last time; `users.kdf_version` says which kind a hash is. The sessions table stores a sha256 of the token, not the token itself: someone who reads the database cannot impersonate anyone.
+
+**The family key** (migration 033, `routes/keys.ts`, `web/src/lib/family-key.tsx`) is one random 256-bit key per family, generated in the browser of the first adult who signs in with a wrap key in hand, and stored on the server only *wrapped*: `key_envelopes` holds one envelope per door. A `password` envelope per member, opened by the wrap key sign-in derives; one `recovery` envelope for the family, opened by a code shown exactly once at creation and acknowledged on a screen that says what losing it means; and `handoff` envelopes — the key wrapped under a random secret that travels in the fragment of a link, which browsers never send — by which a member who holds the key re-admits one who does not. Every password the browser did not derive a wrap key from (an administrator's reset, the e-mailed reset, `admin-reset.mjs`) retires the member's password envelope rather than leaving one that silently fails to open; a password change carries the re-wrapped envelope in the same request, so there is no moment when the password and the envelope disagree. The X25519 pair the server will seal incoming mail to is derived from the family key by HKDF, so its public half sits in `family_key` and its private half is never stored anywhere. The server cannot verify who holds the key; its proxy is a live password envelope, and that is what gates handing the key on. Nothing is encrypted with it yet — phase 1 of the ADR builds the doors before the first byte goes through them.
 
 ## Time
 

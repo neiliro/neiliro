@@ -4,11 +4,14 @@ import { useServiceState } from '../lib/service';
 import { supportLink } from '../lib/support';
 import { useHomeName } from '../lib/home-name';
 import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { onEnter } from '../lib/keys';
 import { browserTimezone } from '../lib/timezone';
 import { deriveWith, newCredentials, passwordProblem, prelogin } from '../lib/credentials';
+import { currentWrapKey, defaultKeyStore, wrapFamilyKey } from '../lib/crypto';
+import { passwordPlace } from '../lib/family-key';
 
 /*
   The sign-in screen is the one page a stranger can reach, so its footer
@@ -399,6 +402,7 @@ function TermsConsent({
 }
 
 function Setup() {
+  const { refresh } = useAuth();
   const { state: service } = useServiceState();
   // Null when there is nothing to agree to (self-hosted)
   const apex = service?.hosted ? service.apex : null;
@@ -429,7 +433,9 @@ function Setup() {
         timezone: browserTimezone(),
         ...(apex ? { accept_terms: agreed } : {}),
       });
-      window.location.href = '/';
+      // Not a reload: the wrap key derived a moment ago lives in this tab's
+      // memory, and the family key is about to be created with it (ADR 0001)
+      await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('Something went wrong'));
       setBusy(false);
@@ -631,6 +637,8 @@ interface InviteCheck {
  * exactly as it does on the open first run.
  */
 function Join() {
+  const { refresh } = useAuth();
+  const navigate = useNavigate();
   const token = new URLSearchParams(window.location.search).get('token') ?? '';
   const { state: service } = useServiceState();
   const apex = service?.hosted ? service.apex : null;
@@ -678,7 +686,11 @@ function Join() {
         ...(founder ? { timezone: browserTimezone() } : {}),
         ...(apex ? { accept_terms: agreed } : {}),
       });
-      window.location.href = '/';
+      // Same as the first run: stay in the tab so the wrap key survives.
+      // /join is not a route inside the app, so the router goes home first —
+      // through the router, not history.replaceState, which it would not notice.
+      navigate('/', { replace: true });
+      await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('Something went wrong'));
       setBusy(false);
@@ -768,10 +780,21 @@ export function ChangePassword() {
       // split still holds a hash of the password itself, and proves it the
       // old way this one last time (routes/auth.ts, change-password).
       const { kdf, salt } = await prelogin(user.email);
+      const current_auth_key = await deriveWith(current, salt);
+      // deriveWith leaves the wrap key of the *new* password in memory:
+      // if this device still holds the family key, it is re-wrapped under
+      // that key and travels with the change (ADR 0001, #210) — otherwise
+      // the server retires the old envelope, which the new password could
+      // not have opened anyway
+      const new_auth_key = await deriveWith(next, salt);
+      const held = await defaultKeyStore().load();
+      const wrap = currentWrapKey();
+      const envelope = held && wrap ? await wrapFamilyKey(held, wrap, passwordPlace(user.id)) : undefined;
       await api.post('/auth/change-password', {
-        current_auth_key: await deriveWith(current, salt),
-        new_auth_key: await deriveWith(next, salt),
+        current_auth_key,
+        new_auth_key,
         ...(kdf === 'legacy' ? { current_password: current } : {}),
+        ...(envelope ? { envelope } : {}),
       });
       setDone(true);
     } catch (err) {

@@ -885,6 +885,68 @@ export const ru: Record<string, string> = {
   // ── Founder invitation: the hosted first run behind a mailed token (#157) ──
   'The address the invitation came to — already confirmed for password recovery.': 'Адрес, на который пришло приглашение — уже подтверждён для восстановления пароля.',
   'A different address than the invitation came to: we will ask you to confirm it.': 'Адрес отличается от того, куда пришло приглашение: мы попросим его подтвердить.',
+  // ── Family key (ADR 0001, #210) ──────────────────────────────────────────
+  'A re-admission link from {name} is waiting — open it on this device.':
+    'Вас ждёт ссылка на возврат ключа от {name} — откройте её на этом устройстве.',
+  'a family member': 'члена семьи',
+  'This device does not hold the family key. Ask a family member for a re-admission link, or enter the recovery code.':
+    'На этом устройстве нет ключа семьи. Попросите у члена семьи ссылку на возврат ключа или введите код восстановления.',
+  'Enter recovery code': 'Ввести код восстановления',
+  'This device holds the family key.': 'Ключ семьи на этом устройстве есть.',
+  'The family has no key yet. It is created when an adult member signs in with a password.':
+    'У семьи пока нет ключа. Он создаётся, когда взрослый участник входит с паролем.',
+  'Family key': 'Ключ семьи',
+  'The key that will encrypt what the family writes, so that only the family can read it. It lives in your browsers; the server holds it only wrapped under each member’s password.':
+    'Ключ, которым будет шифроваться всё, что пишет семья, — чтобы прочитать это могла только семья. Он живёт в ваших браузерах; сервер хранит его только запечатанным под пароль каждого участника.',
+  'Lock this device': 'Запереть это устройство',
+  'Recovery code': 'Код восстановления',
+  'Lost the paper? Make a new one — the old code stops working the moment this one is shown.':
+    'Потеряли бумажку? Сделайте новый — старый код перестаёт работать в момент показа нового.',
+  'New recovery code': 'Новый код восстановления',
+  'Re-admission link for {name}': 'Ссылка на возврат ключа для {name}',
+  'This link is the family key itself: send it over a channel you trust, and only to {name}. They open it signed in, on the device that should hold the key. It works for a week; a newer link replaces it.':
+    'Эта ссылка — сам ключ семьи: передайте её по каналу, которому доверяете, и только {name}. Открыть её нужно войдя в хаб, на том устройстве, где ключ должен быть. Работает неделю; новая ссылка заменяет прежнюю.',
+  'The family key did not survive the reset — once they have signed in with the new password, send them a re-admission link from this list.':
+    'Ключ семьи сброс не пережил: когда участник войдёт с новым паролем, отправьте ему ссылку на возврат ключа из этого списка.',
+  'no key': 'без ключа',
+  'Hand this member the family key through a one-time link': 'Передать участнику ключ семьи одноразовой ссылкой',
+  'Re-admit': 'Вернуть ключ',
+  'This is your family’s recovery code. It opens the family key when a password no longer can — after a reset, or on a new device with nobody around to let you in.':
+    'Это код восстановления вашей семьи. Он открывает ключ семьи, когда пароль больше не может — после сброса или на новом устройстве, когда рядом некому вас впустить.',
+  'Case and dashes do not matter when typing it back.': 'При вводе регистр и дефисы не важны.',
+  'I have written it down somewhere safe. I understand that without my password and without this code, what the family encrypts is gone for good — nobody can recover it, including the people who run Neiliro.':
+    'Я записал(а) его в надёжном месте. Я понимаю: без моего пароля и без этого кода то, что семья зашифрует, пропадёт навсегда — восстановить его не сможет никто, включая тех, кто держит Neiliro.',
+  'Continue': 'Продолжить',
+  'Your family now has a key': 'У вашей семьи теперь есть ключ',
+  'Encryption of what the family writes starts with this key. It was created in this browser and never leaves it unprotected: the server only holds it wrapped under your password.':
+    'С этого ключа начинается шифрование того, что пишет семья. Он создан в этом браузере и не покидает его незащищённым: сервер хранит его только запечатанным под ваш пароль.',
+  'Unlock': 'Открыть',
+  'The code shown when the family key was created. It opens the key on this device and wraps it under your current password, so you will not need it here again.':
+    'Код, показанный при создании ключа семьи. Он откроет ключ на этом устройстве и запечатает его под ваш текущий пароль — здесь он больше не понадобится.',
+  'This is not a re-admission link.': 'Это не ссылка на возврат ключа.',
+  'This link lost the part after the # — some messengers cut it off. Ask for a new one and paste it whole.':
+    'Ссылка потеряла часть после # — некоторые мессенджеры её обрезают. Попросите новую и вставьте целиком.',
+  'Opening the key…': 'Открываем ключ…',
+  'You hold the family key again on this device. It is also wrapped under your current password, so the next sign-in will not need a link.':
+    'Ключ семьи снова на этом устройстве. Он также запечатан под ваш текущий пароль, так что при следующем входе ссылка не понадобится.',
+  'This device already holds the family key.': 'На этом устройстве ключ семьи уже есть.',
+  // Door errors thrown in lib/family-key.tsx
+  'The family has no recovery code': 'У семьи нет кода восстановления',
+  'That is not the recovery code': 'Это не код восстановления',
+  'Sign in first': 'Сначала войдите',
+  'This link has been used or revoked — ask for a new one': 'Ссылка уже использована или отозвана — попросите новую',
+  'This link does not open the key — ask for a new one': 'Эта ссылка ключ не открывает — попросите новую',
+  'This device does not hold the key': 'На этом устройстве нет ключа',
+  // Server answers, routes/keys.ts
+  'A family member sets up the key, not a kid account': 'Ключ создаёт взрослый участник, а не детский аккаунт',
+  'Not a key envelope': 'Это не конверт ключа',
+  'The family already has a key': 'У семьи уже есть ключ',
+  'The family has no key yet': 'У семьи пока нет ключа',
+  'A family member does this, not a kid account': 'Это делает взрослый участник, а не детский аккаунт',
+  'Only a member who holds the key can issue a new recovery code': 'Новый код восстановления может выдать только участник, у которого есть ключ',
+  'Only a member who holds the key can hand it on': 'Передать ключ может только участник, у которого он есть',
+  'You already hold the key': 'У вас уже есть ключ',
+  'Handoff not found': 'Ссылка на возврат ключа не найдена',
 };
 
 /** one / few / many, keyed by the English singular used in plural() calls. */

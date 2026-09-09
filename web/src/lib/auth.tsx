@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { loginBody } from './credentials';
+import { defaultKeyStore, forgetWrapKey } from './crypto';
 import { ApiError, api } from './api';
 import { lang } from './i18n';
 
@@ -91,6 +92,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api.post('/auth/logout', {}).catch(() => {});
     } finally {
       setUser(null);
+      // The family key leaves with the session (ADR 0001): a shared device
+      // handed to the next person must not still hold it. The next sign-in
+      // derives the wrap key again and opens the envelope.
+      forgetWrapKey();
+      await defaultKeyStore().lock();
       // The service worker's offline caches hold family data and the
       // last session answer — signing out must not leave them behind
       if ('caches' in window) {

@@ -9,6 +9,8 @@ import { useFamilyAddress, familyUrl } from '../lib/family-address';
 import { loadLocal, saveLocal } from '../lib/storage';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { useKeys } from '../lib/family-key';
+import { RecoveryCodeDialog } from './RecoveryCode';
 import { applyUpdate, setupPwa } from '../lib/pwa';
 import { clearFailure, useFailure } from '../lib/failures';
 import { QuickAdd } from './QuickAdd';
@@ -401,6 +403,7 @@ export function AppShell() {
       {/* Content */}
       <main className="flex-1 pb-20 md:pb-0">
         <ConfirmAddressNotice />
+        <LockedKeyNotice />
         <Outlet key={refreshKey} />
       </main>
 
@@ -548,6 +551,45 @@ function ConfirmAddressNotice() {
       >
         ×
       </button>
+    </div>
+  );
+}
+
+/*
+  One quiet line when this device does not hold the family key (ADR 0001,
+  #210). Nothing is encrypted yet, so nothing is broken — but the doors
+  back in should be one click away rather than a support ticket: a
+  waiting re-admission link, or the recovery code. Dismissable for the tab.
+*/
+function LockedKeyNotice() {
+  const { status, pendingHandoffs } = useKeys();
+  const [dismissed, setDismissed] = useState(false);
+  const [entering, setEntering] = useState(false);
+
+  if (status !== 'locked' || dismissed) return null;
+  const waiting = pendingHandoffs[0];
+
+  return (
+    <div className="mx-4 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-line bg-surface-2 px-4 py-2.5 text-sm md:mx-6">
+      <span className="text-ink">
+        {waiting
+          ? t('A re-admission link from {name} is waiting — open it on this device.', {
+              name: waiting.created_by_name ?? t('a family member'),
+            })
+          : t('This device does not hold the family key. Ask a family member for a re-admission link, or enter the recovery code.')}
+      </span>
+      <button type="button" onClick={() => setEntering(true)} className="font-medium text-accent underline">
+        {t('Enter recovery code')}
+      </button>
+      <button
+        type="button"
+        onClick={() => setDismissed(true)}
+        className="ml-auto text-muted hover:text-ink"
+        aria-label={t('Hide')}
+      >
+        ×
+      </button>
+      {entering && <RecoveryCodeDialog onClose={() => setEntering(false)} />}
     </div>
   );
 }

@@ -68,6 +68,23 @@ db.prepare(
     WHERE id = ?`,
 ).run(hash, salt, user.id);
 
+// The key envelope wrapped under the old password is dead to the new one
+// (ADR 0001, #210): this script restores access, not the family key. The
+// member gets the key back from another member (re-admission link in
+// Settings → People) or with the recovery code. Older databases have no
+// such table yet — migrations run when the app starts.
+let keyLost = false;
+try {
+  keyLost =
+    db
+      .prepare(
+        `UPDATE key_envelopes SET retired_at = ? WHERE user_id = ? AND kind = 'password' AND retired_at IS NULL`,
+      )
+      .run(new Date().toISOString(), user.id).changes > 0;
+} catch {
+  // no key_envelopes table: a database from before the family key existed
+}
+
 // Close previous sessions: if the password is being reset, they can't be trusted
 const closed = db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id).changes;
 db.close();
@@ -85,6 +102,15 @@ const out = [
 ];
 if (closed > 0) {
   out.push(`  Previous sessions closed: ${closed} — you will have to sign in again everywhere.`);
+}
+if (keyLost) {
+  out.push(
+    '',
+    '  This restores access, not the family key: the new password cannot open',
+    '  the key envelope the old one protected. After signing in, get the key',
+    '  back from another member (Settings → People → Re-admit) or enter the',
+    "  family's recovery code. Encrypted content stays unreadable until then.",
+  );
 }
 out.push(line, '');
 console.log(out.join('\n'));

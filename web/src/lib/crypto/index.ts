@@ -8,6 +8,8 @@
     files.ts     the chunked file format for attachments
     recovery.ts  the recovery code and its wrap key
     keystore.ts  the family key between page loads (IndexedDB), and "Lock"
+    x25519.ts    the family's key pair, derived from the family key (#223 seals mail to it)
+    handoff.ts   passing the key to another browser through a link's fragment (#210, #212)
 
   The server never holds a wrapKey, the family key, or a recovery code.
   It stores envelopes it cannot open and ciphertext it cannot read, and
@@ -19,4 +21,6 @@ export * from './envelope';
 export * from './files';
 export * from './recovery';
 export * from './keystore';
+export * from './x25519';
+export * from './handoff';
 export * from './session';

@@ -6,6 +6,7 @@ import { EntityDialog } from './EntityDialog';
 import { dialogField, dialogLabel, inlineDanger, useDialogs } from './Dialog';
 import { reportFailure } from '../lib/failures';
 import { useAuth } from '../lib/auth';
+import { useKeys } from '../lib/family-key';
 
 interface ManagedUser {
   id: string;
@@ -18,6 +19,8 @@ interface ManagedUser {
   must_change_password: number;
   /** null where confirming an address means nothing — a self-hosted hub. */
   email_verified: boolean | null;
+  /** Whether the member still has a live key envelope — a password reset kills it (#210). */
+  key_envelope: number;
 }
 
 const ROLE_LABEL: Record<ManagedUser['role'], string> = {
@@ -26,14 +29,53 @@ const ROLE_LABEL: Record<ManagedUser['role'], string> = {
   kid: t('Kid'),
 };
 
+/**
+ * A re-admission link is shown exactly once too — and it is the key to the
+ * house: the secret that opens it travels only inside the link (#210).
+ */
+function HandoffOnce({ name, link, onClose }: { name: string; link: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+    } catch {
+      // No clipboard — the link is on screen
+    }
+  }
+  return (
+    <div className="mb-5 rounded-card border border-accent bg-accent-soft p-4">
+      <p className="text-sm font-medium text-ink">{t('Re-admission link for {name}', { name })}</p>
+      <div className="my-3 flex items-center gap-2 rounded-lg border border-line bg-surface p-3">
+        <code className="min-w-0 flex-1 truncate font-mono text-xs text-ink">{link}</code>
+        <button type="button" onClick={() => void copy()} className="shrink-0 text-xs font-medium text-accent underline">
+          {copied ? t('Copied') : t('Copy')}
+        </button>
+      </div>
+      <p className="text-xs text-muted">
+        {t('This link is the family key itself: send it over a channel you trust, and only to {name}. They open it signed in, on the device that should hold the key. It works for a week; a newer link replaces it.', { name })}
+      </p>
+      <button type="button" onClick={onClose} className="mt-3 text-sm font-medium text-accent underline underline-offset-2">
+        {t('Recorded, hide')}
+      </button>
+    </div>
+  );
+}
+
 /** The password is shown exactly once — after that only the owner knows it. */
-function PasswordOnce({ password, onClose }: { password: string; onClose: () => void }) {
+function PasswordOnce({ password, keyLost, onClose }: { password: string; keyLost: boolean; onClose: () => void }) {
   return (
     <div className="mb-5 rounded-card border border-accent bg-accent-soft p-4">
       <p className="text-sm font-medium text-ink">{t('Password created. It is shown only once.')}</p>
       <p className="my-3 font-mono text-lg tracking-wide text-ink select-all">{password}</p>
       <p className="text-xs text-muted">
         {t('Hand it to the account owner. On first sign-in they will be asked to set their own password.')}
+        {keyLost && (
+          <>
+            {' '}
+            {t('The family key did not survive the reset — once they have signed in with the new password, send them a re-admission link from this list.')}
+          </>
+        )}
       </p>
       <button
         type="button"
@@ -170,6 +212,10 @@ export function PeopleSection() {
   const [address, setAddress] = useState('');
   const dialogs = useDialogs();
   const { user, refresh } = useAuth();
+  const keys = useKeys();
+  const [handoff, setHandoff] = useState<{ name: string; link: string } | null>(null);
+  // Whether a password reset also costs the member their key: only once the family has one
+  const familyHasKey = keys.status === 'unlocked' || keys.status === 'locked';
 
   const load = () => api.get<ManagedUser[]>('/users').then(setUsers).catch(() => setUsers([]));
   useEffect(() => {
@@ -192,6 +238,14 @@ export function PeopleSection() {
     }
   }
 
+  async function readmit(member: ManagedUser) {
+    try {
+      setHandoff({ name: member.name, link: await keys.handoffLinkFor(member.id) });
+    } catch (err) {
+      reportFailure(err instanceof Error ? err.message : t('Could not save'));
+    }
+  }
+
   async function toggle(user: ManagedUser) {
     try {
       await api.post(`/users/${user.id}/toggle`, {});
@@ -206,7 +260,8 @@ export function PeopleSection() {
       <h2 className="eyebrow mb-4">{t('People')}</h2>
       <InvitesBlock />
 
-      {password && <PasswordOnce password={password} onClose={() => setPassword(null)} />}
+      {password && <PasswordOnce password={password} keyLost={familyHasKey} onClose={() => setPassword(null)} />}
+      {handoff && <HandoffOnce name={handoff.name} link={handoff.link} onClose={() => setHandoff(null)} />}
 
       {users === null ? (
         <div className="h-32 animate-pulse rounded-card bg-surface-3" />
@@ -242,6 +297,13 @@ export function PeopleSection() {
                         {t('unconfirmed')}
                       </span>
                     )}
+                    {/* The family has a key and this member has no door of
+                        their own to it: a reset took it (#210) */}
+                    {familyHasKey && !u.key_envelope && !u.disabled_at && (
+                      <span className="shrink-0 rounded-full border border-line px-1.5 py-0.5">
+                        {t('no key')}
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -263,6 +325,16 @@ export function PeopleSection() {
               >
                 {t('Reset password')}
               </button>
+              {keys.status === 'unlocked' && u.id !== user?.id && !u.disabled_at && (
+                <button
+                  type="button"
+                  onClick={() => void readmit(u)}
+                  className="text-xs text-accent underline underline-offset-2"
+                  title={t('Hand this member the family key through a one-time link')}
+                >
+                  {t('Re-admit')}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => void toggle(u)}

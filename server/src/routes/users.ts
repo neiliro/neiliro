@@ -6,6 +6,7 @@ import { log } from '../lib/log.js';
 import { generatePassword, hashPassword } from '../lib/password.js';
 import { deriveAuthKey } from '../lib/kdf.js';
 import { emailVerificationAvailable, sendVerificationEmail } from './email-verify.js';
+import { retirePasswordEnvelope } from '../lib/keys.js';
 
 export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/users', (req, reply) => {
@@ -14,7 +15,10 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       .prepare(
         `SELECT id, email, name, role, color, created_at, last_login_at,
                 disabled_at, must_change_password,
-                (email_verified_at IS NOT NULL) AS email_verified
+                (email_verified_at IS NOT NULL) AS email_verified,
+                EXISTS (SELECT 1 FROM key_envelopes k
+                         WHERE k.user_id = users.id AND k.kind = 'password' AND k.retired_at IS NULL)
+                  AS key_envelope
            FROM users ORDER BY role, name`,
       )
       .all() as { email_verified: number }[];
@@ -137,10 +141,16 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     const authKey = await deriveAuthKey(password, ensureKdfSalt(user.id, user.kdf_salt));
     // A reset is also the recovery path for a dead Google account,
     // so password login gets switched back on
-    db.prepare(
-      `UPDATE users SET password_hash = ?, kdf_version = 1, must_change_password = 1,
-              password_login_disabled = 0 WHERE id = ?`,
-    ).run(await hashPassword(authKey), userId);
+    const hash = await hashPassword(authKey);
+    db.transaction(() => {
+      db.prepare(
+        `UPDATE users SET password_hash = ?, kdf_version = 1, must_change_password = 1,
+                password_login_disabled = 0 WHERE id = ?`,
+      ).run(hash, userId);
+      // The new password opens nothing the old one wrapped (ADR 0001):
+      // access is restored, the key is handed back by re-admission
+      retirePasswordEnvelope(userId);
+    })();
     // A password reset kicks the user off every device
     destroyAllSessions(userId);
 
