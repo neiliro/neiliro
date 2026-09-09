@@ -52,6 +52,13 @@ const TRANSACTION = new RegExp(`^/transactions/(${UUID})$`);
 const RECURRING_LIST = /^\/recurring$/;
 const RECURRING = new RegExp(`^/recurring/(${UUID})$`);
 const RECURRING_CONFIRM = new RegExp(`^/recurring/(${UUID})/confirm$`);
+const LISTS_LIST = /^\/lists$/;
+const LIST = new RegExp(`^/lists/(${UUID})$`);
+const LIST_ITEMS = new RegExp(`^/lists/(${UUID})/items$`);
+const LIST_SECTIONS = new RegExp(`^/lists/(${UUID})/sections$`);
+const LIST_ITEM = new RegExp(`^/list-items/(${UUID})$`);
+const LIST_ITEM_ANY = new RegExp(`^/list-items/(${UUID})(?:/toggle|/section)?$`);
+const LIST_SECTION = new RegExp(`^/list-sections/(${UUID})$`);
 
 const F = ENCRYPTED_FIELDS;
 
@@ -270,6 +277,14 @@ export async function encodeRequest(method: string, path: string, body: unknown)
     return sealFields('recurring_transactions', m[1]!, b, F['recurring_transactions']!);
   }
 
+  // Lists (#220)
+  if (method === 'POST' && LISTS_LIST.test(path)) return sealCreate('lists', b);
+  if (method === 'PATCH' && (m = path.match(LIST))) return sealFields('lists', m[1]!, b, F['lists']!);
+  if (method === 'POST' && LIST_ITEMS.test(path)) return sealCreate('list_items', b);
+  if (method === 'PATCH' && (m = path.match(LIST_ITEM))) return sealFields('list_items', m[1]!, b, F['list_items']!);
+  if (method === 'POST' && LIST_SECTIONS.test(path)) return sealCreate('list_sections', b);
+  if (method === 'PATCH' && (m = path.match(LIST_SECTION))) return sealFields('list_sections', m[1]!, b, F['list_sections']!);
+
   return body;
 }
 
@@ -383,6 +398,24 @@ export async function decodeResponse(
     // A due item is one date of a rule: its title is the rule's, bound to recurring_id
     return openList('recurring_transactions', data as Row[], [ACCOUNT_NAME, CATEGORY_NAME], 'recurring_id');
   }
+  // Lists
+  if (method === 'GET' && LISTS_LIST.test(path) && Array.isArray(data)) return openList('lists', data as Row[]);
+  if ((method === 'POST' && LISTS_LIST.test(path)) || (method === 'PATCH' && LIST.test(path))) {
+    return openRow('lists', data as Row);
+  }
+  if (method === 'GET' && LIST.test(path)) {
+    const d = await openRow('lists', data as Row);
+    if (Array.isArray(d['items'])) d['items'] = await openList('list_items', d['items'] as Row[]);
+    if (Array.isArray(d['sections'])) d['sections'] = await openList('list_sections', d['sections'] as Row[]);
+    return d;
+  }
+  if ((method === 'POST' && (LIST_ITEMS.test(path) || LIST_ITEM_ANY.test(path))) || (method === 'PATCH' && LIST_ITEM_ANY.test(path))) {
+    return openRow('list_items', data as Row);
+  }
+  if ((method === 'POST' && LIST_SECTIONS.test(path)) || (method === 'PATCH' && LIST_SECTION.test(path))) {
+    return openRow('list_sections', data as Row);
+  }
+
   if (method === 'GET' && path.startsWith('/budgets') && Array.isArray(data)) {
     return openJoined(data as Row[], [CATEGORY_NAME]);
   }

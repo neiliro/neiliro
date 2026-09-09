@@ -121,6 +121,35 @@ const MODULES: Module[] = [
     rewrite: (id, row) => api.patch(`/recurring/${id}`, pick(row, ['title', 'note', 'place'])),
   },
   {
+    table: 'lists',
+    collect: async () => byId(await api.get<Row[]>('/lists')),
+    rewrite: (id, row) => api.patch(`/lists/${id}`, pick(row, ['title'])),
+  },
+  {
+    // Items and sections come with their list; both registries fill as the lists are opened
+    table: 'list_items',
+    collect: async () => {
+      const out = new Map<string, Row>();
+      for (const list of await api.get<Row[]>('/lists')) {
+        const full = await api.get<{ items: Row[]; sections: Row[] }>(`/lists/${String(list['id'])}`);
+        byId(full.items, out);
+      }
+      return out;
+    },
+    rewrite: (id, row) => api.patch(`/list-items/${id}`, pick(row, ['title'])),
+  },
+  {
+    table: 'list_sections',
+    collect: async () => {
+      const out = new Map<string, Row>();
+      for (const list of await api.get<Row[]>('/lists')) {
+        byId((await api.get<{ sections: Row[] }>(`/lists/${String(list['id'])}`)).sections, out);
+      }
+      return out;
+    },
+    rewrite: (id, row) => api.patch(`/list-sections/${id}`, pick(row, ['title'])),
+  },
+  {
     table: 'transactions',
     collect: allTransactions,
     rewrite: (id, row) => {

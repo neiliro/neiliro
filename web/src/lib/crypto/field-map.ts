@@ -34,6 +34,12 @@ export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   transactions: ['note', 'place'],
   recurring_transactions: ['title', 'note', 'place'],
   reconciliations: ['note'],
+  // #220 — order, checked state and sections stay clear; the caps count
+  // rows, not characters. Wishes are NOT here: a wishlist is the family's
+  // public face, meant for guests, and stays readable by decision.
+  lists: ['title'],
+  list_items: ['title'],
+  list_sections: ['title'],
 };
 
 /** Text columns of the tables above that stay readable, and why. */
@@ -150,5 +156,24 @@ export const CLEAR_FIELDS: Record<string, Record<string, string>> = {
     checked_on: 'a date the discrepancy is computed as of',
     created_by: 'identifier',
     created_at: 'a timestamp — same-day ordering against transactions',
+  },
+  lists: {
+    id: 'identifier',
+    created_by: 'identifier',
+    created_at: 'a timestamp',
+    share_token: 'an unguessable token, stored in the clear by design (migration 028)',
+  },
+  list_items: {
+    id: 'identifier',
+    list_id: 'identifier',
+    checked_at: 'a timestamp — the checked pile is ordered by it',
+    created_by: 'identifier',
+    created_at: 'a timestamp',
+    section_id: 'identifier',
+  },
+  list_sections: {
+    id: 'identifier',
+    list_id: 'identifier',
+    created_at: 'a timestamp',
   },
 };

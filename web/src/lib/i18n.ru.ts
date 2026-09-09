@@ -980,6 +980,13 @@ export const ru: Record<string, string> = {
   'A category with this id already exists': 'Категория с таким id уже есть',
   'A transaction with this id already exists': 'Операция с таким id уже есть',
   'A rule with this id already exists': 'Правило с таким id уже есть',
+  'A list with this id already exists': 'Список с таким id уже есть',
+  'An item with this id already exists': 'Пункт с таким id уже есть',
+  'A section with this id already exists': 'Раздел с таким id уже есть',
+  'The link carries the family key for this one list: the server opens it for whoever follows the link.':
+    'В ссылке едет ключ семьи для этого одного списка: сервер открывает его тому, кто перейдёт по ссылке.',
+  'Wishes are meant for guests, so they are the one thing here the server keeps readable — the family’s public face, not its diary.':
+    'Желания — для гостей, поэтому это единственное здесь, что сервер хранит читаемым: публичное лицо семьи, а не её дневник.',
   'The link carries the family key after the address: your calendar app needs readable events, so the server opens them for that app alone, each time it asks. A subscription added before encryption shows dots instead of words — remove it and add this link again.':
     'После адреса в ссылке идёт ключ семьи: календарю нужны читаемые события, поэтому сервер открывает их только для этого приложения и только когда оно спрашивает. Подписка, добавленная до шифрования, покажет точки вместо слов — удалите её и добавьте эту ссылку заново.',
   'This device does not hold the family key, so the link shown here opens no encrypted events. Open the key on this device and come back for the full link.':

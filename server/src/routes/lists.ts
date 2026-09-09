@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db, id, now } from '../db/index.js';
 import { env } from '../env.js';
+import { FieldOpener, splitTokenKey } from '../lib/envelope.js';
 
 /*
   Shared lists (#11) — the shopping list and its friends.
@@ -19,7 +20,14 @@ import { env } from '../env.js';
 
 export const SHOPPING_LIST_ID = '00000000-0000-4000-8000-000000000301';
 
-const titleInput = z.object({ title: z.string().trim().min(1, 'Enter a name').max(200) });
+// Ceilings sized for envelopes (#220); the browser mints the id when it
+// encrypts, so a create may carry one and a duplicate is refused
+const titleInput = z.object({ title: z.string().trim().min(1, 'Enter a name').max(4_000) });
+const createInput = titleInput.extend({ id: z.string().uuid().optional() });
+
+function taken(table: 'lists' | 'list_items' | 'list_sections', rowId: string | undefined): boolean {
+  return Boolean(rowId && db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(rowId));
+}
 
 export async function registerListRoutes(app: FastifyInstance): Promise<void> {
   /** Every list with its open count — enough to render the sidebar badge. */
@@ -38,11 +46,12 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/lists', (req, reply) => {
-    const parsed = titleInput.safeParse(req.body);
+    const parsed = createInput.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
     }
-    const listId = id();
+    if (taken('lists', parsed.data.id)) return reply.code(409).send({ error: 'A list with this id already exists' });
+    const listId = parsed.data.id ?? id();
     db.prepare(
       `INSERT INTO lists (id, title, position, created_by, created_at)
        VALUES (?, ?, (SELECT coalesce(max(position), 0) + 1 FROM lists), ?, ?)`,
@@ -70,7 +79,7 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
       )
       .all(listId);
     const sections = db
-      .prepare('SELECT id, title, position FROM list_sections WHERE list_id = ? ORDER BY position, title')
+      .prepare('SELECT id, title, position FROM list_sections WHERE list_id = ? ORDER BY position')
       .all(listId);
     return { ...list, items, sections };
   });
@@ -98,7 +107,7 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
   /** One tap: add an item. Position goes to the end — a list reads in the order it was written. */
   app.post('/api/lists/:id/items', (req, reply) => {
     const { id: listId } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const parsed = titleInput
+    const parsed = createInput
       .extend({ section_id: z.string().uuid().nullable().optional() })
       .safeParse(req.body);
     if (!parsed.success) {
@@ -117,7 +126,8 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
 
     // Duplicates are allowed on purpose: "milk" twice means two bottles,
     // and a dedupe check would be a surprise mid-shop.
-    const itemId = id();
+    if (taken('list_items', parsed.data.id)) return reply.code(409).send({ error: 'An item with this id already exists' });
+    const itemId = parsed.data.id ?? id();
     db.prepare(
       `INSERT INTO list_items (id, list_id, title, section_id, position, created_by, created_at)
        VALUES (?, ?, ?, ?, (SELECT coalesce(max(position), 0) + 1 FROM list_items WHERE list_id = ?), ?, ?)`,
@@ -134,6 +144,18 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /** One tap: check or uncheck. Idempotent per state, so a double-tap in a shop is harmless. */
+  /** Renaming an item — for the one-time job that rewrites plaintext under the key (#220). */
+  app.patch('/api/list-items/:id', (req, reply) => {
+    const { id: itemId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const parsed = titleInput.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
+    }
+    const result = db.prepare('UPDATE list_items SET title = ? WHERE id = ?').run(parsed.data.title, itemId);
+    if (result.changes === 0) return reply.code(404).send({ error: 'Item not found' });
+    return db.prepare('SELECT * FROM list_items WHERE id = ?').get(itemId);
+  });
+
   app.post('/api/list-items/:id/toggle', (req, reply) => {
     const { id: itemId } = z.object({ id: z.string().uuid() }).parse(req.params);
     const item = db.prepare('SELECT id, checked_at FROM list_items WHERE id = ?').get(itemId) as
@@ -171,14 +193,15 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/lists/:id/sections', (req, reply) => {
     const { id: listId } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const parsed = titleInput.safeParse(req.body);
+    const parsed = createInput.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
     }
     const exists = db.prepare('SELECT 1 FROM lists WHERE id = ?').get(listId);
     if (!exists) return reply.code(404).send({ error: 'List not found' });
 
-    const sectionId = id();
+    if (taken('list_sections', parsed.data.id)) return reply.code(409).send({ error: 'A section with this id already exists' });
+    const sectionId = parsed.data.id ?? id();
     db.prepare(
       `INSERT INTO list_sections (id, list_id, title, position, created_at)
        VALUES (?, ?, ?, (SELECT coalesce(max(position), 0) + 1 FROM list_sections WHERE list_id = ?), ?)`,
@@ -268,20 +291,27 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
 
   const TOKEN = z.object({ token: z.string().min(10).max(200) });
 
-  const listByToken = (token: string) =>
-    db.prepare('SELECT id, title FROM lists WHERE share_token = ?').get(token) as
+  // The link may carry the family key after the token (#220, as the calendar
+  // feed does, #218): a neighbour needs words, so the server opens this one
+  // list for that request and keeps nothing — see lib/envelope.ts
+  const listByToken = (raw: string) => {
+    const { token, key } = splitTokenKey(raw);
+    const list = db.prepare('SELECT id, title FROM lists WHERE share_token = ?').get(token) as
       | { id: string; title: string }
       | undefined;
+    return list ? { list, opener: new FieldOpener(key) } : undefined;
+  };
 
   /*
     The guest view: this list and nothing else. No other lists, no family
     names, nothing about who added what — a list handed to a neighbour
     must not come with the household attached.
   */
-  app.get('/api/list/:token', shareRate, (req, reply) => {
+  app.get('/api/list/:token', shareRate, async (req, reply) => {
     const { token } = TOKEN.parse(req.params);
-    const list = listByToken(token);
-    if (!list) return reply.code(404).send({ error: 'This link is no longer valid' });
+    const found = listByToken(token);
+    if (!found) return reply.code(404).send({ error: 'This link is no longer valid' });
+    const { list, opener } = found;
 
     const items = db
       .prepare(
@@ -290,13 +320,18 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
           ORDER BY checked_at IS NOT NULL, CASE WHEN checked_at IS NULL THEN position END,
                    checked_at DESC`,
       )
-      .all(list.id);
+      .all(list.id) as { id: string; title: string; checked_at: string | null; section_id: string | null }[];
     // Sections travel with the guest view: reading by aisle is the reason
     // they exist, and the person in the shop is usually the guest
     const sections = db
-      .prepare('SELECT id, title FROM list_sections WHERE list_id = ? ORDER BY position, title')
-      .all(list.id);
-    return { id: list.id, title: list.title, items, sections };
+      .prepare('SELECT id, title FROM list_sections WHERE list_id = ? ORDER BY position')
+      .all(list.id) as { id: string; title: string }[];
+    return {
+      id: list.id,
+      title: await opener.open(list.title, { table: 'lists', column: 'title', id: list.id }),
+      items: await Promise.all(items.map((i) => opener.openRow('list_items', i, ['title']))),
+      sections: await Promise.all(sections.map((s) => opener.openRow('list_sections', s, ['title']))),
+    };
   });
 
   /*
@@ -305,11 +340,12 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
     write — and deliberately the only one: no adding, no renaming, no
     deleting, and the item must belong to the shared list.
   */
-  app.post('/api/list/:token/items/:itemId/toggle', shareRate, (req, reply) => {
+  app.post('/api/list/:token/items/:itemId/toggle', shareRate, async (req, reply) => {
     const { token } = TOKEN.parse(req.params);
     const { itemId } = z.object({ itemId: z.string().uuid() }).parse(req.params);
-    const list = listByToken(token);
-    if (!list) return reply.code(404).send({ error: 'This link is no longer valid' });
+    const found = listByToken(token);
+    if (!found) return reply.code(404).send({ error: 'This link is no longer valid' });
+    const { list, opener } = found;
 
     const item = db
       .prepare('SELECT id, checked_at FROM list_items WHERE id = ? AND list_id = ?')
@@ -322,6 +358,11 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
       item.checked_at ? null : now(),
       itemId,
     );
-    return db.prepare('SELECT id, title, checked_at FROM list_items WHERE id = ?').get(itemId);
+    const row = db.prepare('SELECT id, title, checked_at FROM list_items WHERE id = ?').get(itemId) as {
+      id: string;
+      title: string;
+      checked_at: string | null;
+    };
+    return opener.openRow('list_items', row, ['title']);
   });
 }

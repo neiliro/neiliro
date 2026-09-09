@@ -522,6 +522,9 @@ function MemberDetail({ userId, onChanged }: { userId: string; onChanged: () => 
         {/* The public link — the only thing here a guest ever sees */}
         {canEdit && (
           <div className="mt-4 border-t border-line pt-3 text-sm">
+            <p className="mb-2 text-xs text-muted">
+              {t('Wishes are meant for guests, so they are the one thing here the server keeps readable — the family’s public face, not its diary.')}
+            </p>
             {profile.wishlist_share_path ? (
               /* The link stays copyable for as long as it lives — it comes
                  with the profile, so a reload changes nothing (the token is

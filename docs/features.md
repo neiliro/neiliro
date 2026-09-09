@@ -190,6 +190,8 @@ Deleting a section keeps its items — they rise back to the top of the list. Th
 
 **A list can be handed to someone without an account** — typically whoever is going to the shop. Unlike the other share links in the hub, this one accepts a write: the guest can tick items off, because a shopping list nobody can tick off is a screenshot. That is the only thing they can do — no adding, no renaming, no deleting, and nothing beyond that single list is visible. Ticks land on the same list the family sees, since it is the same list and not a copy. The link is revocable, deleting the list revokes it too, and asking twice returns the same link so it can be re-sent.
 
+With a family key, list, section and item titles are encrypted in the browser; order, checked state, sections and the caps (which count rows, not characters) stay as they were. Shared lists remain the one place without an owner — encryption changes nothing about who in the family sees a list. A guest link carries the key after its token, exactly like a shared event, so the neighbour in the shop reads words and the server opens that one list for that request only. **Wishlists are the deliberate exception**: a wishlist exists to be shown to people outside the family, so wish titles stay readable on the server, and the profile page says so where the link is made.
+
 ## Mail
 
 ![Mail: the shared household inbox, one click from letter to task](screenshots/mail.png)

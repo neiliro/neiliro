@@ -238,3 +238,29 @@ describe('money (#219)', () => {
     expect(due[0]!['title']).toBe('Salary');
   });
 });
+
+describe('lists (#220)', () => {
+  const LIST_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const ITEM_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+  beforeEach(async () => setVault({ key: await generateFamilyKey(), familyHasKey: true }));
+
+  it('seals titles on the way out and opens a whole list on the way in', async () => {
+    const list = (await encodeRequest('POST', '/lists', { id: LIST_ID, title: 'Groceries' })) as Row;
+    const item = (await encodeRequest('POST', `/lists/${LIST_ID}/items`, { id: ITEM_ID, title: 'Milk', section_id: null })) as Row;
+    expect(isEncrypted(list['title'] as string)).toBe(true);
+    expect(isEncrypted(item['title'] as string)).toBe(true);
+    expect(item['section_id']).toBeNull();
+
+    const opened = (await decodeResponse('GET', `/lists/${LIST_ID}`, {
+      id: LIST_ID, title: list['title'], share_token: null,
+      items: [{ id: ITEM_ID, title: item['title'], checked_at: null }],
+      sections: [],
+    })) as Row;
+    expect(opened['title']).toBe('Groceries');
+    expect((opened['items'] as Row[])[0]!['title']).toBe('Milk');
+
+    const toggled = (await decodeResponse('POST', `/list-items/${ITEM_ID}/toggle`, { id: ITEM_ID, title: item['title'], checked_at: 'now' })) as Row;
+    expect(toggled['title']).toBe('Milk');
+  });
+});
