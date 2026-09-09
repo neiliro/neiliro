@@ -79,6 +79,8 @@ Templates are ordinary notes with a flag: any note can become a template and bac
 
 A private note is visible only to its owner — in lists, in search, and by direct link. The administrator is no exception. The daily note included: if a private note by someone else already exists for a date, the second person gets an honest refusal, not its content — a second note for the same date cannot exist, the daily date is unique.
 
+Once the family has a key ([ADR 0001](adr/0001-client-side-encryption.md)), a note's title, body and list preview are encrypted in the browser before they are sent; folders, dates, visibility and the links between notes stay readable to the server, which is why the list, the daily note and backlinks work as before. Everything the server used to do with the text — the preview line, extracting `[[links]]`, expanding template placeholders, matching a title — now happens in the browser. A device that does not hold the key shows `••••••` in place of the words and opens notes read-only: saving from there would overwrite ciphertext with plaintext. Notes written before the key existed stay readable until Settings → Family key → *Encrypt existing notes* rewrites them, versions included; each member runs it once for their own private notes, since nobody else can see those.
+
 ### Attachments
 
 Files go to the data directory under `attachments/YYYY-MM/` with generated names; the original name is kept in the database. A human-supplied name never becomes part of a disk path — otherwise `../../` in a name would write anywhere.
@@ -105,7 +107,7 @@ A calendar is either shared (visible to all) or personal (visible only to the ow
 
 `Cmd/Ctrl + Shift + F` — across tasks, notes, events, projects and file names. `Cmd + K` stays reserved for quick task adding.
 
-Notes, tasks and projects are searched via FTS5; events and attachments by direct scan with `ci_contains`. Keeping an index for an entity whose visibility depends on calendar settings would create a desynchronisation source; and there are hundreds of events, not tens of thousands.
+Matching happens in the browser: the server hands over the rows this person may see (`GET /api/search/corpus`, with the same owner and calendar filters the lists apply), the browser decrypts them and looks for the query as a case-insensitive substring, three characters minimum. That is what the old trigram index did, so morphology still comes for free — «переезд» finds «переезда» — and it is the only arrangement that works once titles are encrypted, since the server cannot look inside them. The corpus is a few thousand rows at most and is cached for half a minute in the tab.
 
 Private content never appears in someone else's results — not notes, not personal-calendar events, not files attached to them.
 

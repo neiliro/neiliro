@@ -2,22 +2,9 @@ import { t } from '../lib/i18n';
 import { clearBlankOnBlur } from '../lib/forms';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
 import { formatDate } from '../lib/format';
 import { projectTitle } from '../lib/tasks';
-
-interface Result {
-  kind: 'task' | 'note' | 'event' | 'project' | 'attachment';
-  id: string;
-  title: string;
-  subtitle: string;
-  /** For tasks — to translate the "Inbox" label by its well-known id. */
-  project_id?: string;
-  excerpt: string;
-  color: string | null;
-  badge: string | null;
-  url: string;
-}
+import { search, type SearchResult as Result } from '../lib/search';
 
 const KIND_LABEL: Record<Result['kind'], string> = {
   task: t('Task'),
@@ -104,7 +91,8 @@ export function GlobalSearch({
     if (open) setTimeout(() => inputRef.current?.focus(), 0);
   }, [open]);
 
-  // Debounced search: otherwise every keystroke hits the database
+  // Debounced, and in the browser (#216): the server hands over the rows
+  // this person may see, the matching runs on decrypted text here
   useEffect(() => {
     if (!open) return;
     const trimmed = query.trim();
@@ -114,12 +102,11 @@ export function GlobalSearch({
       return;
     }
     const timer = setTimeout(() => {
-      void api
-        .get<{ results: Result[] }>(`/search?q=${encodeURIComponent(trimmed)}`)
-        .then((res) => {
-          setResults(res.results);
+      void search(trimmed)
+        .then((found) => {
+          setResults(found);
           setCursor(0);
-          setHint(res.results.length === 0 ? t('Nothing found') : null);
+          setHint(found.length === 0 ? t('Nothing found') : null);
         })
         .catch((err: Error) => setHint(err.message));
     }, 250);

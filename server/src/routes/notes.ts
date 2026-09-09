@@ -77,6 +77,18 @@ function guard(
   return note;
 }
 
+/*
+  Encrypted content (ADR 0001, #215). A value the browser encrypted starts
+  with the field-envelope prefix; the server stores it, returns it, and
+  never derives anything from it. Everything below that used to read a
+  title or a body — links, excerpts, template placeholders — has a browser
+  side now, and the server keeps its old behaviour only for plaintext rows
+  from before the module was migrated.
+*/
+const FIELD_PREFIX = 'e1:';
+export const isCiphertext = (value: string | null | undefined): boolean =>
+  typeof value === 'string' && value.startsWith(FIELD_PREFIX);
+
 // ── [[Title]] links ───────────────────────────────────────────────────────
 
 const WIKI_LINK = /\[\[([^\][|]{1,200})\]\]/g;
@@ -112,6 +124,22 @@ function rebuildLinks(noteId: string, body: string): void {
      VALUES (?, (SELECT id FROM notes WHERE lower(title) = lower(?) LIMIT 1), ?)`,
   );
   for (const title of extractLinks(body)) insert.run(noteId, title, title);
+}
+
+/**
+ * Links as the browser computed them (#215): it is the only side that can
+ * read an encrypted body, so it extracts the [[titles]], resolves them
+ * against the titles it knows, and sends the result. Stored as given —
+ * target_title is an envelope the server cannot compare, so `resolveIncoming`
+ * has nothing to do for these rows; the browser re-resolves when it opens
+ * or saves the source note.
+ */
+function writeLinks(noteId: string, links: { title: string; target_note_id: string | null }[]): void {
+  db.prepare('DELETE FROM note_links WHERE source_note_id = ?').run(noteId);
+  const insert = db.prepare(
+    'INSERT OR IGNORE INTO note_links (source_note_id, target_note_id, target_title) VALUES (?, ?, ?)',
+  );
+  for (const link of links) insert.run(noteId, link.target_note_id, link.title);
 }
 
 /** Picks up dangling links pointing at a note with this title. */
@@ -209,9 +237,23 @@ function snapshotIfNeeded(note: NoteRow, authorId: string): void {
 
 // ── Schemas ───────────────────────────────────────────────────────────────
 
+// A link row as the browser sends it; the title may be an envelope (#215)
+const linkInput = z.object({
+  title: z.string().min(1).max(4_000),
+  target_note_id: z.string().uuid().nullable(),
+});
+
 const createInput = z.object({
-  title: z.string().max(200).optional(),
-  body_md: z.string().max(500_000).optional(),
+  // Minted in the browser when the note is encrypted: the envelope's
+  // authenticated data names the row id, so the id has to exist before the
+  // first byte is encrypted (#215). Optional — a plaintext client lets the
+  // server mint it as before.
+  id: z.string().uuid().optional(),
+  // Encrypted titles are longer than the 200 characters a person types
+  title: z.string().max(4_000).optional(),
+  body_md: z.string().max(2_000_000).optional(),
+  excerpt: z.string().max(4_000).optional(),
+  links: z.array(linkInput).max(200).optional(),
   folder_id: z.string().uuid().nullable().optional(),
   visibility: z.enum(['shared', 'private']).optional(),
   template_id: z.string().uuid().optional(),
@@ -223,8 +265,10 @@ const createInput = z.object({
 });
 
 const patchInput = z.object({
-  title: z.string().min(1, 'The note needs a title').max(200).optional(),
-  body_md: z.string().max(500_000).optional(),
+  title: z.string().min(1, 'The note needs a title').max(4_000).optional(),
+  body_md: z.string().max(2_000_000).optional(),
+  excerpt: z.string().max(4_000).nullable().optional(),
+  links: z.array(linkInput).max(200).optional(),
   folder_id: z.string().uuid().nullable().optional(),
   visibility: z.enum(['shared', 'private']).optional(),
   pinned: z.boolean().optional(),
@@ -319,7 +363,7 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
       .prepare(
         `SELECT n.id, n.title, n.folder_id, n.visibility, n.owner_id, n.pinned,
                 n.daily_date, n.is_template, n.updated_at, u.name AS owner_name,
-                substr(n.body_md, 1, 400) AS excerpt
+                n.excerpt AS stored_excerpt, substr(n.body_md, 1, 400) AS excerpt
            FROM notes n
            LEFT JOIN users u ON u.id = n.owner_id
           WHERE ${where.join(' AND ')}
@@ -329,8 +373,15 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
       .all(...args, q.limit ?? LIST_LIMIT) as Record<string, unknown>[];
 
     // The preview is cleaned here, not in SQL: the query used to cut raw
-    // markdown, and the list showed **asterisks** and [[brackets]]
-    return rows.map((r) => ({ ...r, excerpt: excerptOf(String(r.excerpt ?? '')) }));
+    // markdown, and the list showed **asterisks** and [[brackets]]. An
+    // encrypted note brings its own preview from the browser (#215); an
+    // encrypted note without one has no preview the server could make.
+    return rows.map(({ stored_excerpt, ...r }) => {
+      const stored = stored_excerpt as string | null;
+      if (stored) return { ...r, excerpt: stored };
+      const body = String(r.excerpt ?? '');
+      return { ...r, excerpt: isCiphertext(body) ? '' : excerptOf(body) };
+    });
   });
 
   // ── One note with its connections ───────────────────────────────────────
@@ -393,7 +444,9 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
           | undefined
       )?.name ?? '';
 
-    let body = normalizeWikiLinks(d.body_md ?? '');
+    // Escaped brackets are a markdown-editor artefact in plaintext; an
+    // envelope has no brackets to normalise and must not be touched
+    let body = isCiphertext(d.body_md) ? d.body_md! : normalizeWikiLinks(d.body_md ?? '');
     let titleFromTemplate: string | null = null;
     let inheritedVisibility: 'private' | null = null;
 
@@ -438,18 +491,22 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    const noteId = id();
+    const noteId = d.id ?? id();
+    if (d.id && db.prepare('SELECT 1 FROM notes WHERE id = ?').get(d.id)) {
+      return reply.code(409).send({ error: 'A note with this id already exists' });
+    }
     const title =
       d.title?.trim() || titleFromTemplate || d.daily_date || 'Untitled';
 
     db.prepare(
-      `INSERT INTO notes (id, title, body_md, folder_id, visibility, owner_id, daily_date,
+      `INSERT INTO notes (id, title, body_md, excerpt, folder_id, visibility, owner_id, daily_date,
                           is_template, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       noteId,
       title,
       body,
+      d.excerpt ?? null,
       d.folder_id ?? null,
       d.visibility ?? inheritedVisibility ?? 'shared',
       userId,
@@ -459,8 +516,11 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
       now(),
     );
 
-    rebuildLinks(noteId, body);
-    resolveIncoming(noteId, title);
+    // Links: from the browser when it sent them, from the text when the
+    // text is readable here, and left alone otherwise
+    if (d.links) writeLinks(noteId, d.links);
+    else if (!isCiphertext(body)) rebuildLinks(noteId, body);
+    if (!isCiphertext(title)) resolveIncoming(noteId, title);
 
     return reply.code(201).send(db.prepare('SELECT * FROM notes WHERE id = ?').get(noteId));
   });
@@ -484,16 +544,19 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Only the owner can make a note private' });
     }
 
+    const nextBody =
+      d.body_md === undefined ? undefined : isCiphertext(d.body_md) ? d.body_md : normalizeWikiLinks(d.body_md);
     const contentChanged =
       (d.title !== undefined && d.title !== note.title) ||
-      (d.body_md !== undefined && normalizeWikiLinks(d.body_md) !== note.body_md);
+      (nextBody !== undefined && nextBody !== note.body_md);
 
     const run = db.transaction(() => {
       if (contentChanged) snapshotIfNeeded(note, userId);
 
       const fields: [string, unknown][] = [];
       if (d.title !== undefined) fields.push(['title', d.title.trim()]);
-      if (d.body_md !== undefined) fields.push(['body_md', normalizeWikiLinks(d.body_md)]);
+      if (nextBody !== undefined) fields.push(['body_md', nextBody]);
+      if (d.excerpt !== undefined) fields.push(['excerpt', d.excerpt]);
       if (d.folder_id !== undefined) fields.push(['folder_id', d.folder_id]);
       if (d.pinned !== undefined) fields.push(['pinned', d.pinned ? 1 : 0]);
       if (d.is_template !== undefined) fields.push(['is_template', d.is_template ? 1 : 0]);
@@ -512,8 +575,9 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
         );
       }
 
-      if (d.body_md !== undefined) rebuildLinks(noteId, normalizeWikiLinks(d.body_md));
-      if (d.title !== undefined) resolveIncoming(noteId, d.title.trim());
+      if (d.links) writeLinks(noteId, d.links);
+      else if (nextBody !== undefined && !isCiphertext(nextBody)) rebuildLinks(noteId, nextBody);
+      if (d.title !== undefined && !isCiphertext(d.title)) resolveIncoming(noteId, d.title.trim());
     });
     run();
 
@@ -544,6 +608,11 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/notes/:id/versions', (req, reply) => {
     const { id: noteId } = z.object({ id: z.string().uuid() }).parse(req.params);
     if (!guard(noteId, req, reply)) return;
+    // The history panel wants the recent fifty; the one-time encryption job
+    // in the browser has to reach every version, or plaintext stays behind
+    const { limit } = z
+      .object({ limit: z.coerce.number().int().min(1).max(1000).optional() })
+      .parse(req.query ?? {});
 
     return db
       .prepare(
@@ -553,9 +622,9 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
            LEFT JOIN users u ON u.id = v.author_id
           WHERE v.note_id = ?
           ORDER BY v.created_at DESC
-          LIMIT 50`,
+          LIMIT ?`,
       )
-      .all(noteId);
+      .all(noteId, limit ?? 50);
   });
 
   app.get('/api/notes/:id/versions/:versionId', (req, reply) => {
@@ -597,11 +666,34 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
         now(),
         noteId,
       );
-      rebuildLinks(noteId, version.body_md);
+      if (!isCiphertext(version.body_md)) rebuildLinks(noteId, version.body_md);
     });
     run();
 
     return db.prepare('SELECT * FROM notes WHERE id = ?').get(noteId);
+  });
+
+  /*
+    A version is the note's own ciphertext copied at snapshot time, so it
+    shares the note's envelope binding and reads with the note's id. Rows
+    from before the module was encrypted are plaintext history; the one-time
+    job in Settings rewrites them through this route — the only write a
+    version ever accepts, and only with both fields (#215).
+  */
+  app.patch('/api/notes/:id/versions/:versionId', (req, reply) => {
+    const { id: noteId, versionId } = z
+      .object({ id: z.string().uuid(), versionId: z.string().uuid() })
+      .parse(req.params);
+    if (!guard(noteId, req, reply)) return;
+    const parsed = z
+      .object({ title: z.string().min(1).max(4_000), body_md: z.string().max(2_000_000) })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Check the fields' });
+    const result = db
+      .prepare('UPDATE note_versions SET title = ?, body_md = ? WHERE id = ? AND note_id = ?')
+      .run(parsed.data.title, parsed.data.body_md, versionId, noteId);
+    if (result.changes === 0) return reply.code(404).send({ error: 'Version not found' });
+    return { ok: true };
   });
 
   // ── Daily note ──────────────────────────────────────────────────────────

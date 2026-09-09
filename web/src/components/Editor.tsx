@@ -51,13 +51,15 @@ interface Props {
   onChange: (markdown: string) => void;
   onNavigate: (title: string) => void;
   onUpload: (files: File[]) => Promise<UploadedFile[]>;
+  /** False on a device that cannot open the family key: reading is fine, typing would be lost. */
+  editable?: boolean;
 }
 
 const btn =
   'rounded px-2 py-1 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-ink';
 const btnActive = 'rounded px-2 py-1 text-sm bg-accent-soft text-accent';
 
-export function Editor({ noteId, revision = 0, initialMarkdown, onChange, onNavigate, onUpload }: Props) {
+export function Editor({ noteId, revision = 0, initialMarkdown, onChange, onNavigate, onUpload, editable = true }: Props) {
   const [dropping, setDropping] = useState(false);
   const [uploading, setUploading] = useState(false);
   const uploadRef = useRef(onUpload);
@@ -90,6 +92,7 @@ export function Editor({ noteId, revision = 0, initialMarkdown, onChange, onNavi
         WikiLink.configure({ onNavigate }),
       ],
       content: initialMarkdown,
+      editable,
       editorProps: {
         attributes: { class: 'note-content' },
 
@@ -118,7 +121,7 @@ export function Editor({ noteId, revision = 0, initialMarkdown, onChange, onNavi
     },
     // Recreate the editor when the note changes: no manual content sync
     // needed, and it's impossible to accidentally write text into the wrong note.
-    [noteId, revision],
+    [noteId, revision, editable],
   );
 
   async function handleFiles(files: File[], at?: number) {

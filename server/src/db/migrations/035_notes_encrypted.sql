@@ -1,0 +1,21 @@
+-- Notes are the first module whose words the server stops reading
+-- (ADR 0001, phase 2, #215).
+--
+-- notes.title, notes.body_md, note_versions.title/body_md and
+-- note_links.target_title now arrive as `e1:` field envelopes from the
+-- browser and are stored as given; rows from before stay plaintext until
+-- their next edit or the one-time job in Settings re-encrypts them. Dates,
+-- folder, owner, visibility and the daily_date key stay clear, which is
+-- everything the server ever computed with.
+--
+-- The list preview used to be cut from body_md on the server. It cannot be
+-- any more, so the browser writes one: the first 120 readable characters,
+-- encrypted like the body. NULL means "not written yet" — the server then
+-- falls back to the old substring for a plaintext body, and to nothing for
+-- an encrypted one.
+ALTER TABLE notes ADD COLUMN excerpt TEXT;
+
+-- The FTS5 index (002) keeps its triggers for now: it indexes ciphertext
+-- for encrypted rows, which matches nothing and harms nothing. Search
+-- itself moved to the browser (#216); the index goes with #226 once no
+-- route reads it.

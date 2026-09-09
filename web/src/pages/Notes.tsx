@@ -11,6 +11,10 @@ import { Empty, Page } from '../components/Page';
 import { Editor, type UploadedFile } from '../components/Editor';
 import { EntityDialog } from '../components/EntityDialog';
 import { inlineDanger, useDialogs } from '../components/Dialog';
+import { useKeys } from '../lib/family-key';
+import { applyPlaceholders } from '../lib/notes';
+import { noteIdByTitle } from '../lib/codec';
+import { invalidateSearchCorpus } from '../lib/search';
 
 interface Folder {
   id: string;
@@ -76,6 +80,9 @@ const chipOff = 'border-line text-muted hover:text-ink';
 
 export function Notes() {
   const { user } = useAuth();
+  // A device without the family key reads what it can and writes nothing:
+  // a save from here would land plaintext over the family's ciphertext
+  const locked = useKeys().status === 'locked';
   const [params, setParams] = useSearchParams();
   const dialogs = useDialogs();
   const isLatest = useLatest();
@@ -110,16 +117,21 @@ export function Notes() {
     const params = new URLSearchParams();
     if (folderId === 'templates') params.set('templates', 'true');
     else if (folderId) params.set('folder_id', folderId);
-    if (query.trim()) params.set('q', query.trim());
+    // The query no longer travels: the server cannot look inside an
+    // encrypted title, so the filter runs below on what the codec opened
 
-    // Search fires a request on every keystroke; without this check the
-    // response for «до» can arrive after the one for «докум» and clobber
-    // the results
+    // Two loads can still race on a fast folder switch
     const fresh = isLatest();
     const rows = await api.get<NoteStub[]>(`/notes?${params}`);
     if (!fresh()) return;
     setNotes(rows);
-  }, [folderId, query, isLatest]);
+  }, [folderId, isLatest]);
+
+  const shownNotes = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q || !notes) return notes;
+    return notes.filter((n) => n.title.toLowerCase().includes(q) || n.excerpt.toLowerCase().includes(q));
+  }, [notes, query]);
 
   const loadTemplates = useCallback(async () => {
     setTemplates(await api.get<NoteStub[]>('/notes?templates=true'));
@@ -144,12 +156,23 @@ export function Notes() {
     setVersions(null);
     setSaveState('idle');
     try {
-      setNote(await api.get<Note>(`/notes/${noteId}`));
+      let loaded = await api.get<Note>(`/notes/${noteId}`);
+      // Dangling [[links]] pick themselves up here, not on the server: only
+      // this side can read the titles. If one now resolves, the server is
+      // told and the connections panel reflects it.
+      const resolvable = loaded.outgoing.some((l) => !l.target_note_id && noteIdByTitle(l.target_title));
+      if (resolvable && !locked) {
+        await api.patch(`/notes/${noteId}`, {
+          links: loaded.outgoing.map((l) => ({ title: l.target_title, target_note_id: l.target_note_id ?? noteIdByTitle(l.target_title) })),
+        });
+        loaded = await api.get<Note>(`/notes/${noteId}`);
+      }
+      setNote(loaded);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('Could not open the note'));
     }
-  }, []);
+  }, [locked]);
   // Arriving from global search: /notes?open=<id>.
   // From the quick-actions screen: /notes?new=1 — a new note right away.
   useEffect(() => {
@@ -173,6 +196,7 @@ export function Notes() {
     try {
       await api.patch(`/notes/${entry.noteId}`, entry.patch);
       setSaveState('saved');
+      invalidateSearchCorpus();
       void loadNotes();
 
       // Links are recomputed on the server on every save, so the
@@ -231,18 +255,27 @@ export function Notes() {
   // ── Actions ─────────────────────────────────────────────────────────────
 
   async function createNote(templateId?: string) {
+    // A template expands here, not on the server (#215): the server cannot
+    // read an encrypted template, and this side knows the interface language
+    // for {{date}}/{{time}} anyway (#47). A private template's content stays
+    // private — the note inherits its visibility unless told otherwise (#50).
+    let fromTemplate: { title: string; body_md: string; visibility?: 'private' } | null = null;
+    if (templateId) {
+      const template = await api.get<Note>(`/notes/${templateId}`);
+      const author = user?.name ?? '';
+      fromTemplate = {
+        title: applyPlaceholders(template.title, author, intlLocale),
+        body_md: applyPlaceholders(template.body_md, author, intlLocale),
+        ...(template.visibility === 'private' ? { visibility: 'private' as const } : {}),
+      };
+    }
     const created = await api.post<Note>('/notes', {
-      // No title is sent when creating from a template: the server takes
-      // it from the template and expands the substitutions. An explicit
-      // title would override them.
-      ...(templateId ? {} : { title: inTemplates ? t('New template') : t('Untitled') }),
+      ...(fromTemplate ?? { title: inTemplates ? t('New template') : t('Untitled') }),
       folder_id:
         folderId && folderId !== 'none' && folderId !== 'templates' ? folderId : null,
       ...(inTemplates ? { is_template: true } : {}),
-      // The locale rides along only where placeholders expand — the server
-      // formats {{date}}/{{time}} in the interface language (#47)
-      ...(templateId ? { template_id: templateId, locale: intlLocale } : {}),
     });
+    invalidateSearchCorpus();
     await loadNotes();
     if (inTemplates) await loadTemplates();
     await openNote(created.id);
@@ -291,10 +324,15 @@ export function Notes() {
   /** Following a [[link]]: if the note does not exist, offer to create it. */
   const navigateByTitle = useCallback(
     async (title: string) => {
-      const found = await api.get<NoteStub[]>(`/notes?q=${encodeURIComponent(title)}`);
-      const exact = found.find((n) => n.title.toLowerCase() === title.toLowerCase());
-      if (exact) {
-        await openNote(exact.id);
+      // Titles are matched here: the whole visible list is opened by the
+      // codec and remembered, so an exact title is a lookup, not a query
+      let exactId = noteIdByTitle(title);
+      if (!exactId) {
+        const all = await api.get<NoteStub[]>('/notes?limit=2000');
+        exactId = all.find((n) => n.title.toLowerCase() === title.toLowerCase())?.id ?? null;
+      }
+      if (exactId) {
+        await openNote(exactId);
         return;
       }
       const ok = await dialogs.confirm({
@@ -478,11 +516,11 @@ export function Notes() {
 
           {notes === null ? (
             <div className="h-40 animate-pulse rounded-card bg-surface-3" />
-          ) : notes.length === 0 ? (
+          ) : (shownNotes ?? []).length === 0 ? (
             <Empty>{t('No notes. Start with the “New” button.')}</Empty>
           ) : (
             <ul className="overflow-hidden rounded-card border border-line bg-surface">
-              {notes.map((n) => (
+              {(shownNotes ?? []).map((n) => (
                 <li key={n.id}>
                   <button
                     type="button"
@@ -544,6 +582,7 @@ export function Notes() {
               <input
                 key={note.id}
                 defaultValue={note.title}
+                readOnly={locked}
                 onChange={(e) => queueSave({ title: e.target.value })}
                 onBlur={clearBlankOnBlur(() => queueSave({ title: '' }))}
                 onKeyDown={onEnter(() => void flush())}
@@ -654,10 +693,17 @@ export function Notes() {
               </p>
             )}
 
+            {locked && (
+              <p className="mb-3 rounded-lg border border-line bg-surface-2 px-4 py-2.5 text-xs text-muted">
+                {t('This device does not hold the family key — the note is read-only until you unlock it in Settings.')}
+              </p>
+            )}
+
             <Editor
               noteId={note.id}
               revision={revision}
               initialMarkdown={note.body_md}
+              editable={!locked}
               onChange={(markdown) => queueSave({ body_md: markdown })}
               onNavigate={(title) => void navigateByTitle(title)}
               onUpload={uploadFiles}
