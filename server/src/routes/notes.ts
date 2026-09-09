@@ -415,7 +415,7 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
 
     const attachments = db
       .prepare(
-        `SELECT id, filename, mime, size_bytes, created_at,
+        `SELECT id, filename, mime, size_bytes, created_at, encryption,
                 CASE WHEN mime LIKE 'image/%' THEN 1 ELSE 0 END AS is_image
            FROM attachments
           WHERE note_id = ?

@@ -150,7 +150,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       .all(userId);
     const attachments = db
       .prepare(
-        `SELECT a.id, a.filename, a.size_bytes, a.note_id, n.title AS note_title
+        `SELECT a.id, a.filename, a.mime, a.size_bytes, a.encryption, a.note_id, a.transaction_id,
+                a.mail_message_id, n.title AS note_title
            FROM attachments a
            ${ATTACHMENT_VISIBLE_JOINS}
           WHERE ${ATTACHMENT_VISIBLE}

@@ -984,6 +984,9 @@ export const ru: Record<string, string> = {
   'An item with this id already exists': 'Пункт с таким id уже есть',
   'A section with this id already exists': 'Раздел с таким id уже есть',
   'An entry with this id already exists': 'Запись с таким id уже есть',
+  'An attachment with this id already exists': 'Вложение с таким id уже есть',
+  'The file name is too long': 'Слишком длинное имя файла',
+  'This file is sealed for the family and cannot be opened here yet': 'Файл запечатан для семьи, и здесь его пока не открыть',
   'The link carries the family key for this one list: the server opens it for whoever follows the link.':
     'В ссылке едет ключ семьи для этого одного списка: сервер открывает его тому, кто перейдёт по ссылке.',
   'Wishes are meant for guests, so they are the one thing here the server keeps readable — the family’s public face, not its diary.':

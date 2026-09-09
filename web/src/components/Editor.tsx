@@ -7,6 +7,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import { TableKit } from '@tiptap/extension-table';
 import Highlight from '@tiptap/extension-highlight';
 import Image from '@tiptap/extension-image';
+import { attachmentUrl } from '../lib/files';
 import { Placeholder } from '@tiptap/extensions';
 import { Markdown } from 'tiptap-markdown';
 import { WikiLink } from './WikiLink';
@@ -84,7 +85,24 @@ export function Editor({ noteId, revision = 0, initialMarkdown, onChange, onNavi
         // Lazy loading: a decoded photo takes megabytes of tab memory
         // regardless of file size. In a long note full of photos, let
         // the ones on screen decode rather than all of them at once.
-        Image.configure({
+        // The document keeps /api/attachments/<id> as the src — that is what
+        // the markdown stores — while what is displayed resolves through
+        // lib/files.ts, which decrypts a sealed image into a blob URL (#222)
+        Image.extend({
+          addNodeView() {
+            return ({ node }) => {
+              const img = document.createElement('img');
+              img.loading = 'lazy';
+              img.decoding = 'async';
+              img.alt = String(node.attrs['alt'] ?? '');
+              const src = String(node.attrs['src'] ?? '');
+              const m = /^\/api\/attachments\/([0-9a-f-]{36})$/.exec(src);
+              if (m) void attachmentUrl(m[1]!).then((url) => (img.src = url)).catch(() => undefined);
+              else img.src = src;
+              return { dom: img };
+            };
+          },
+        }).configure({
           inline: false,
           HTMLAttributes: { loading: 'lazy', decoding: 'async' },
         }),

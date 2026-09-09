@@ -93,6 +93,8 @@ Files can be dragged straight into note text or pasted from the clipboard. Image
 
 An attachment is visible to whoever can see the note. Deleting a note removes the files from disk, not just the rows.
 
+With a family key, a file is encrypted in the browser before it is uploaded — receipts and note images alike — in one-megabyte chunks bound to the attachment's id, and its name is encrypted with it. The server stores bytes it cannot read, records the size (the ciphertext's, a few percent more) and the declared type, and serves the file back as an opaque download with a header naming the envelope kind; the browser opens it and shows it from memory, so images in notes and receipt thumbnails look as they always did. There are no server-side thumbnails or previews to lose, because there never were any. The offline cache keeps only ciphertext. Files from before the key are re-uploaded encrypted by the one-time job in Settings, keeping their ids so note text keeps pointing at them.
+
 ## Calendar
 
 ![Calendar: shared and personal layers, recurring events, who is going](screenshots/calendar.png)

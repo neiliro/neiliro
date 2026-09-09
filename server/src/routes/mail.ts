@@ -61,7 +61,7 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
 
     const attachments = db
       .prepare(
-        `SELECT id, filename, mime, size_bytes FROM attachments WHERE mail_message_id = ?`,
+        `SELECT id, filename, mime, size_bytes, encryption FROM attachments WHERE mail_message_id = ?`,
       )
       .all(messageId);
     const replies = db

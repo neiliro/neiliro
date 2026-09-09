@@ -1,6 +1,7 @@
 import { t } from '../lib/i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { AttachmentLink } from '../components/AttachmentMedia';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatStamp } from '../lib/format';
@@ -281,12 +282,15 @@ export function Mail() {
                 <ul className="flex flex-wrap gap-2">
                   {message.attachments.map((a) => (
                     <li key={a.id}>
-                      <a
-                        href={`/api/attachments/${a.id}?download=true`}
+                      <AttachmentLink
+                        id={a.id}
+                        mime={a.mime}
+                        filename={a.filename}
+                        download
                         className="inline-block rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-ink hover:bg-surface-3"
                       >
                         📎 {a.filename}
-                      </a>
+                      </AttachmentLink>
                     </li>
                   ))}
                 </ul>

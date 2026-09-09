@@ -1,6 +1,8 @@
 import { t } from '../lib/i18n';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { uploadAttachments } from '../lib/files';
+import { AttachmentImage, AttachmentLink } from './AttachmentMedia';
 import {
   Modal,
   dialogDanger,
@@ -61,7 +63,7 @@ export function TransactionDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [receipts, setReceipts] = useState<
-    { id: string; filename: string; size_bytes: number; is_image: number }[]
+    { id: string; filename: string; mime: string; size_bytes: number; is_image: number }[]
   >([]);
   const [uploading, setUploading] = useState(false);
 
@@ -81,16 +83,11 @@ export function TransactionDialog({
     try {
       // A receipt photo weighs several megabytes, yet all we need from it is the amount and date
       const shrunk = await shrinkAll(files);
-      const form = new FormData();
-      for (const file of shrunk) form.append('file', file);
-
-      const res = await fetch(`/api/transactions/${transaction.id}/attachments`, {
-        method: 'POST',
-        body: form,
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? t('Could not upload the receipt'));
+      try {
+        // Sealed here before the bytes leave the tab when the family has a key (#222)
+        await uploadAttachments(`/transactions/${transaction.id}/attachments`, shrunk);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('Could not upload the receipt'));
         return;
       }
       setReceipts(await api.get<typeof receipts>(`/transactions/${transaction.id}/attachments`));
@@ -357,20 +354,13 @@ export function TransactionDialog({
               {receipts.map((r) => (
                 <span key={r.id} className="flex items-center gap-2">
                   {r.is_image ? (
-                    <a href={`/api/attachments/${r.id}`} target="_blank" rel="noreferrer">
-                      <img
-                        src={`/api/attachments/${r.id}`}
-                        alt={r.filename}
-                        className="size-10 rounded border border-line object-cover"
-                      />
-                    </a>
+                    <AttachmentLink id={r.id} mime={r.mime} filename={r.filename}>
+                      <AttachmentImage id={r.id} mime={r.mime} alt={r.filename} className="size-10 rounded border border-line object-cover" />
+                    </AttachmentLink>
                   ) : (
-                    <a
-                      href={`/api/attachments/${r.id}?download=true`}
-                      className="text-sm text-accent underline underline-offset-2"
-                    >
+                    <AttachmentLink id={r.id} mime={r.mime} filename={r.filename} download className="text-sm text-accent underline underline-offset-2">
                       {r.filename}
-                    </a>
+                    </AttachmentLink>
                   )}
                   <button
                     type="button"

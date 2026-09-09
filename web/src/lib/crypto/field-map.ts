@@ -43,6 +43,9 @@ export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   // #221 — small, but medical. Birthday and role live in `profiles` and
   // stay clear: the dashboard's reminder needs the date.
   profile_entries: ['label', 'value'],
+  // #222 — the file itself is a file envelope (lib/crypto/files.ts), tracked by
+  // attachments.encryption; the filename is words
+  attachments: ['filename'],
 };
 
 /** Text columns of the tables above that stay readable, and why. */
@@ -183,5 +186,15 @@ export const CLEAR_FIELDS: Record<string, Record<string, string>> = {
     id: 'identifier',
     user_id: 'identifier',
     kind: 'an enum — allergy or preference — the list filters by',
+  },
+  attachments: {
+    id: 'identifier',
+    mime: 'the declared type — tells an image from a document, decides inline serving',
+    storage_path: 'a server-made path, never a human name (see storageNameFor)',
+    note_id: 'identifier',
+    transaction_id: 'identifier',
+    mail_message_id: 'identifier',
+    uploaded_by: 'identifier',
+    created_at: 'a timestamp',
   },
 };

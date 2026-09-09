@@ -26,6 +26,10 @@ function textColumns(table: string): string[] {
     for (const m of sql.matchAll(new RegExp(`ALTER TABLE ${table} ADD COLUMN ([a-z_]+) TEXT\\b`, 'g'))) {
       columns.add(m[1]!);
     }
+    // A column dropped later (attachments.task_id, migration 019) is not a column
+    for (const m of sql.matchAll(new RegExp(`ALTER TABLE ${table} DROP COLUMN ([a-z_]+)`, 'g'))) {
+      columns.delete(m[1]!);
+    }
   }
   return [...columns].sort();
 }

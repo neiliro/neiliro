@@ -283,3 +283,30 @@ describe('profile entries (#221)', () => {
     expect((family[0]!['allergies'] as Row[])[0]!['label']).toBe('nuts');
   });
 });
+
+describe('attachments (#222)', () => {
+  const NOTE_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+  const FILE_ID = '12121212-1212-4121-8121-121212121212';
+
+  beforeEach(async () => setVault({ key: await generateFamilyKey(), familyHasKey: true }));
+
+  it('opens the filename wherever attachments are listed, under the attachment id', async () => {
+    const sealed = (await encodeRequest('PATCH', `/notes/${NOTE_ID}`, { title: 'x' })) as Row; // warms nothing; filenames are sealed by lib/files.ts
+    void sealed;
+    const { sealFields } = await import('./vault');
+    const file = await sealFields('attachments', FILE_ID, { filename: 'receipt.jpg' }, ['filename']);
+    expect(isEncrypted(file['filename'])).toBe(true);
+
+    const note = (await decodeResponse('GET', `/notes/${NOTE_ID}`, {
+      id: NOTE_ID, title: 'plain', body_md: '', outgoing: [], backlinks: [],
+      attachments: [{ id: FILE_ID, filename: file['filename'], mime: 'image/jpeg', encryption: 1 }],
+    })) as Row;
+    expect((note['attachments'] as Row[])[0]!['filename']).toBe('receipt.jpg');
+
+    const receipts = (await decodeResponse('GET', `/transactions/${NOTE_ID}/attachments`, [{ id: FILE_ID, filename: file['filename'] }])) as Row[];
+    expect(receipts[0]!['filename']).toBe('receipt.jpg');
+
+    const mail = (await decodeResponse('GET', `/mail/${NOTE_ID}`, { id: NOTE_ID, attachments: [{ id: FILE_ID, filename: file['filename'] }] })) as Row;
+    expect((mail['attachments'] as Row[])[0]!['filename']).toBe('receipt.jpg');
+  });
+});

@@ -713,7 +713,7 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
     }
     return db
       .prepare(
-        `SELECT id, filename, mime, size_bytes,
+        `SELECT id, filename, mime, size_bytes, encryption,
                 CASE WHEN mime LIKE 'image/%' THEN 1 ELSE 0 END AS is_image
            FROM attachments WHERE transaction_id = ? ORDER BY created_at`,
       )

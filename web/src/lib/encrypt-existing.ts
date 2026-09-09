@@ -1,5 +1,6 @@
 import { api, ApiError } from './api';
 import { pendingPlaintext } from './codec';
+import { encryptExistingAttachment } from './files';
 import { invalidateSearchCorpus } from './search';
 
 /*
@@ -168,6 +169,13 @@ const MODULES: Module[] = [
         if (!(err instanceof ApiError && err.status === 403)) throw err;
       }
     },
+  },
+  {
+    // Files: fetched, sealed under their own id and put back in place. The
+    // corpus is the one list of every attachment this person may see.
+    table: 'attachments',
+    collect: async () => byId((await api.get<{ attachments: Row[] }>('/search/corpus')).attachments.filter((a) => a['encryption'] === 0)),
+    rewrite: (id, row) => encryptExistingAttachment(id, String(row['filename']), String(row['mime'] ?? '')),
   },
   {
     table: 'transactions',

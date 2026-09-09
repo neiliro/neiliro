@@ -15,6 +15,8 @@ import { useKeys } from '../lib/family-key';
 import { applyPlaceholders } from '../lib/notes';
 import { noteIdByTitle } from '../lib/codec';
 import { invalidateSearchCorpus } from '../lib/search';
+import { uploadAttachments } from '../lib/files';
+import { AttachmentImage, AttachmentLink } from '../components/AttachmentMedia';
 
 interface Folder {
   id: string;
@@ -355,20 +357,15 @@ export function Notes() {
       const current = noteRef.current;
       if (!current) return [];
 
-      const form = new FormData();
-      for (const file of files) form.append('file', file);
-
-      const res = await fetch(`/api/notes/${current.id}/attachments`, {
-        method: 'POST',
-        body: form,
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? t('Could not upload the file'));
+      let uploaded: UploadedFile[];
+      try {
+        // Sealed here before the bytes leave the tab when the family has a key (#222)
+        uploaded = await uploadAttachments(`/notes/${current.id}/attachments`, files);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('Could not upload the file'));
         return [];
       }
 
-      const { uploaded } = (await res.json()) as { uploaded: UploadedFile[] };
       const fresh = await api.get<Note>(`/notes/${current.id}`);
       setNote((prev) => (prev && prev.id === fresh.id ? { ...prev, attachments: fresh.attachments } : prev));
       return uploaded;
@@ -736,23 +733,22 @@ export function Notes() {
                     className="flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-0"
                   >
                     {a.is_image ? (
-                      <img
-                        src={`/api/attachments/${a.id}`}
-                        alt=""
-                        className="size-9 shrink-0 rounded object-cover"
-                      />
+                      <AttachmentImage id={a.id} mime={a.mime} alt="" className="size-9 shrink-0 rounded object-cover" />
                     ) : (
                       <span className="grid size-9 shrink-0 place-items-center rounded bg-surface-2 font-mono text-[0.625rem] text-muted uppercase">
                         {(a.filename.split('.').pop() ?? t('file')).slice(0, 4)}
                       </span>
                     )}
 
-                    <a
-                      href={`/api/attachments/${a.id}?download=true`}
+                    <AttachmentLink
+                      id={a.id}
+                      mime={a.mime}
+                      filename={a.filename}
+                      download
                       className="min-w-0 flex-1 truncate text-sm text-ink hover:text-accent"
                     >
                       {a.filename}
-                    </a>
+                    </AttachmentLink>
 
                     <span className="font-mono text-xs text-muted">
                       {formatBytes(a.size_bytes)}

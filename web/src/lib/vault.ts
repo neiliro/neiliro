@@ -32,6 +32,11 @@ export function vaultKey(): CryptoKey | null {
   return familyKey;
 }
 
+/** Whether the family has a key at all — a locked device answers true with no key at hand. */
+export function hasFamilyKey(): boolean {
+  return familyHasKey;
+}
+
 /** What an encrypted value reads as on a device that cannot open it. */
 export const LOCKED_TEXT = '••••••';
 

@@ -1,0 +1,13 @@
+-- How a stored file is protected (ADR 0001, #222 / #223).
+--
+--   0  plaintext, from before the family key or uploaded without one
+--   1  the family-key file envelope ("NE1", web/src/lib/crypto/files.ts),
+--      sealed in the browser before upload; the server stores bytes it
+--      cannot read and serves them back as application/octet-stream
+--   2  sealed on ingest to the family's X25519 public key — incoming mail
+--      parts the server received in the clear and locked before writing
+--
+-- A column rather than sniffing the magic bytes: the read path must know
+-- what it is serving before it opens the file, and a plaintext file that
+-- happens to start with "NE1" must not be mistaken for an envelope.
+ALTER TABLE attachments ADD COLUMN encryption INTEGER NOT NULL DEFAULT 0;

@@ -63,6 +63,8 @@ const PROFILES_LIST = /^\/profiles$/;
 const PROFILE = new RegExp(`^/profiles/(${UUID})$`);
 const PROFILE_ENTRIES = new RegExp(`^/profiles/(${UUID})/entries$`);
 const PROFILE_ENTRY = new RegExp(`^/profiles/(${UUID})/entries/(${UUID})$`);
+const TRANSACTION_ATTACHMENTS = new RegExp(`^/transactions/(${UUID})/attachments$`);
+const MAIL_MESSAGE = new RegExp(`^/mail/(${UUID})$`);
 
 const F = ENCRYPTED_FIELDS;
 
@@ -142,6 +144,9 @@ async function openNote(row: Row): Promise<Row> {
   }
   if (Array.isArray(opened['backlinks'])) {
     opened['backlinks'] = await openRows('notes', opened['backlinks'] as Row[], ['title']);
+  }
+  if (Array.isArray(opened['attachments'])) {
+    opened['attachments'] = await openList('attachments', opened['attachments'] as Row[]);
   }
   return opened;
 }
@@ -424,6 +429,16 @@ export async function decodeResponse(
     return openRow('list_sections', data as Row);
   }
 
+  // Attachments (#222): the filename is words, the file is opened by lib/files.ts
+  if (method === 'GET' && TRANSACTION_ATTACHMENTS.test(path) && Array.isArray(data)) {
+    return openList('attachments', data as Row[]);
+  }
+  if (method === 'GET' && MAIL_MESSAGE.test(path)) {
+    const d = data as Row;
+    if (Array.isArray(d['attachments'])) d['attachments'] = await openList('attachments', d['attachments'] as Row[]);
+    return d;
+  }
+
   // Profiles
   if (method === 'GET' && PROFILES_LIST.test(path) && Array.isArray(data)) {
     return Promise.all(
@@ -481,6 +496,7 @@ export async function decodeResponse(
     if (Array.isArray(d['tasks'])) d['tasks'] = await openList('tasks', d['tasks'] as Row[], [PROJECT_TITLE]);
     if (Array.isArray(d['projects'])) d['projects'] = await openList('projects', d['projects'] as Row[]);
     if (Array.isArray(d['events'])) d['events'] = await openList('events', d['events'] as Row[], [CALENDAR_NAME]);
+    if (Array.isArray(d['attachments'])) d['attachments'] = await openList('attachments', d['attachments'] as Row[]);
     return d;
   }
   return data;
