@@ -100,3 +100,25 @@ describe('the three doors open the same key', () => {
     await expect(unwrapFamilyKey(mine, ann.wrapKey, { kind: 'password', owner: 'user-sam' })).rejects.toThrow();
   });
 });
+
+describe('an invitation carrying the key (#212)', () => {
+  it('the envelope is bound to the invite, and only the fragment opens it', async () => {
+    const family = await generateFamilyKey();
+    const secret = newHandoffSecret();
+    const invite = { kind: 'invite', owner: 'invite-1' };
+    const sealed = await wrapFamilyKey(family, await handoffWrapKey(secret), invite);
+
+    // What the invitee's browser sees: the path with the token goes to the
+    // server, the fragment stays in the browser
+    const url = new URL(`https://smiths.example/join?token=abc${fragmentFor(secret)}`);
+    expect(url.search).toBe('?token=abc');
+    expect(url.search).not.toContain(secret);
+    expect(handoffSecretFromFragment(url.hash)).toBe(secret);
+
+    const opened = await unwrapFamilyKey(sealed, await handoffWrapKey(secret), invite);
+    expect(Array.from(await exportFamilyKey(opened))).toEqual(Array.from(await exportFamilyKey(family)));
+    // The same envelope presented as another invite's, or as a member's handoff, does not open
+    await expect(unwrapFamilyKey(sealed, await handoffWrapKey(secret), { kind: 'invite', owner: 'invite-2' })).rejects.toThrow();
+    await expect(unwrapFamilyKey(sealed, await handoffWrapKey(secret), { kind: 'handoff', owner: 'invite-1' })).rejects.toThrow();
+  });
+});

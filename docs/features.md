@@ -8,7 +8,7 @@ logging), see [architecture.md](architecture.md).
 
 A hub with an empty database offers to create the first account right in the browser — that account becomes the administrator. Passwords are never printed to server logs.
 
-Family members are added with invitations: the administrator creates a single-use link (valid for a week, shown once, stored as a hash), the person opens it and fills in their own name, login and password. This is the only way in — for a kid without their own device, the parent simply opens the link themselves. Each joining member automatically gets a distinct account color (the avatar is the first letter of the name, so color is what tells people apart).
+Family members are added with invitations: the administrator creates a single-use link (valid for a week, shown once, stored as a hash), the person opens it and fills in their own name, login and password. This is the only way in — for a kid without their own device, the parent simply opens the link themselves. Made on a device that holds the family key, the link also carries the key — wrapped under a secret that lives in the part after `#`, which browsers never send to the server — so the new member holds the key from their first sign-in. That makes the link literally the key to the house: send it over a channel you trust, to one person, whole. A link that lost its fragment in a messenger is refused before the form rather than admitting a member without their key. Each joining member automatically gets a distinct account color (the avatar is the first letter of the name, so color is what tells people apart).
 
 On the hosted service every account — the founder's and each invited member's — is created behind one checkbox naming the Terms of Service and the Privacy Policy, which open on the service's own domain; the moment of consent is recorded with the account. A self-hosted hub has no contract with anyone and never shows it.
 
@@ -34,6 +34,8 @@ The address has to be confirmed first, and that is not bureaucracy. The login ha
 Two ways in: password and Google. An account is **never** created via Google: the hub is a family tool, the household is known, a stranger's Google account is refused at the door. Google is linked by an explicit action in Settings, from a live session, and is identified by the account's permanent ID rather than the email address — the email can change, the link survives.
 
 Once linked, password sign-in can be disabled per account in Settings: Google with its protections (prompts, passkeys) guards the entrance better than any password. The mode is invisible from outside — a disabled password answers the same "Wrong login or password" as a merely wrong one, with the same response time.
+
+An account without a password has no wrap key at sign-in, so the family key lives only on the devices that hold it: turning the password off retires the member's key envelope, waits until this device holds the key, and says where a new device will get it — another member's re-admission link or the recovery code. The administrator's password can never be turned off, which keeps at least one password-derived envelope in every family.
 
 On the hosted service Google sign-in works the same way from the outside, through one shared return address; the mechanics are in [architecture.md](architecture.md#hosted-mode).
 

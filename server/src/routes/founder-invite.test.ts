@@ -100,7 +100,14 @@ describe('the founder invitation', () => {
       headers: onHost('founders-f1a1'),
     });
     expect(check.statusCode).toBe(200);
-    expect(check.json()).toEqual({ valid: true, role: 'admin', email: 'sam@example.test' });
+    // The founder's link never carries the family key — they generate it (#212)
+    expect(check.json()).toEqual({
+      valid: true,
+      id: expect.any(String),
+      role: 'admin',
+      email: 'sam@example.test',
+      envelope: null,
+    });
 
     // A token issued for one family opens nothing on another
     const { familyId: otherId } = tenants.createFamily('others-f1a2');

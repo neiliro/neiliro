@@ -244,3 +244,56 @@ describe('a password the browser never wrapped with kills the envelope', () => {
     expect((await h.as(session, 'GET', '/api/keys')).json<{ recovery_envelope: string }>().recovery_envelope).toBe(envelope('R'));
   });
 });
+
+describe('an invitation carrying the key (#212)', () => {
+  it('the administrator attaches the envelope to a live invite; the invitee reads it back with the id', async () => {
+    const h = await buildTestApp();
+    const sam = await member(h, 'Sam', 'admin');
+    const ann = await member(h, 'Ann');
+
+    const { id: inviteId, path } = (await h.as(sam.cookie, 'POST', '/api/invites', {})).json<{ id: string; path: string }>();
+    // No family key yet: nothing to wrap
+    expect((await h.as(sam.cookie, 'PUT', `/api/invites/${inviteId}/envelope`, { envelope: envelope('V') })).statusCode).toBe(409);
+    await createKey(h, sam.cookie);
+    expect((await h.as(ann.cookie, 'PUT', `/api/invites/${inviteId}/envelope`, { envelope: envelope('V') })).statusCode).toBe(403);
+    expect((await h.as(sam.cookie, 'PUT', `/api/invites/${inviteId}/envelope`, { envelope: RAW_KEY })).statusCode).toBe(400);
+    expect((await h.as(sam.cookie, 'PUT', `/api/invites/${inviteId}/envelope`, { envelope: envelope('V') })).statusCode).toBe(200);
+
+    const token = new URL(`http://x${path}`).searchParams.get('token')!;
+    const check = (await h.app.inject({ method: 'GET', url: `/api/auth/invite?token=${token}` })).json<{ id: string; envelope: string }>();
+    expect(check.id).toBe(inviteId);
+    expect(check.envelope).toBe(envelope('V'));
+
+    // A plain invite (from a device without the key) says so
+    const { id: plain, path: plainPath } = (await h.as(sam.cookie, 'POST', '/api/invites', {})).json<{ id: string; path: string }>();
+    const plainToken = new URL(`http://x${plainPath}`).searchParams.get('token')!;
+    expect((await h.app.inject({ method: 'GET', url: `/api/auth/invite?token=${plainToken}` })).json<{ envelope: null }>().envelope).toBeNull();
+    // A used invite cannot be given a key after the fact
+    await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/join',
+      payload: { token: plainToken, name: 'Bob', email: 'bob@hub.local', auth_key: await authKey('bob password 123'), kdf_salt: SALT },
+    });
+    expect((await h.as(sam.cookie, 'PUT', `/api/invites/${plain}/envelope`, { envelope: envelope('W') })).statusCode).toBe(404);
+  });
+});
+
+describe('an account without a password (#213)', () => {
+  it('turning password sign-in off retires the envelope; turning it on writes nothing back', async () => {
+    const h = await buildTestApp();
+    const sam = await member(h, 'Sam', 'admin');
+    const ann = await member(h, 'Ann');
+    await createKey(h, sam.cookie);
+    await h.as(ann.cookie, 'PUT', '/api/keys/envelope', { envelope: envelope('E') });
+    // Google has to be linked before the password may go — the existing invariant
+    runWithDb(h.db, () => h.db.prepare("UPDATE users SET google_sub = 'g-ann' WHERE id = ?").run(ann.userId));
+
+    expect((await h.as(ann.cookie, 'POST', '/api/auth/password-login', { enabled: false })).statusCode).toBe(200);
+    expect((await h.as(ann.cookie, 'GET', '/api/keys')).json<{ password_envelope: null }>().password_envelope).toBeNull();
+
+    expect((await h.as(ann.cookie, 'POST', '/api/auth/password-login', { enabled: true })).statusCode).toBe(200);
+    expect((await h.as(ann.cookie, 'GET', '/api/keys')).json<{ password_envelope: null }>().password_envelope).toBeNull();
+    // The device that holds the key writes the envelope itself at the next password sign-in
+    expect((await h.as(ann.cookie, 'PUT', '/api/keys/envelope', { envelope: envelope('F') })).statusCode).toBe(200);
+  });
+});

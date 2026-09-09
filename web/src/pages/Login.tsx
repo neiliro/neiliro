@@ -10,8 +10,8 @@ import { useAuth } from '../lib/auth';
 import { onEnter } from '../lib/keys';
 import { browserTimezone } from '../lib/timezone';
 import { deriveWith, newCredentials, passwordProblem, prelogin } from '../lib/credentials';
-import { currentWrapKey, defaultKeyStore, wrapFamilyKey } from '../lib/crypto';
-import { passwordPlace } from '../lib/family-key';
+import { currentWrapKey, defaultKeyStore, handoffSecretFromFragment, handoffWrapKey, unwrapFamilyKey, wrapFamilyKey } from '../lib/crypto';
+import { invitePlace, passwordPlace } from '../lib/family-key';
 
 /*
   The sign-in screen is the one page a stranger can reach, so its footer
@@ -624,6 +624,10 @@ interface InviteCheck {
   role: 'admin' | 'member' | 'kid';
   /** The address the invitation was mailed to — the founder's, confirmed by construction. */
   email: string | null;
+  /** The invite's own id — the envelope's authenticated data (#212). */
+  id: string;
+  /** The family key wrapped for this invitation, opened with the secret in the link's fragment. */
+  envelope: string | null;
 }
 
 /**
@@ -640,6 +644,9 @@ function Join() {
   const { refresh } = useAuth();
   const navigate = useNavigate();
   const token = new URLSearchParams(window.location.search).get('token') ?? '';
+  // The family key's secret rides in the fragment and never reaches the
+  // server (#212); read once, before anything could touch the address bar
+  const [secret] = useState(() => handoffSecretFromFragment(window.location.hash));
   const { state: service } = useServiceState();
   const apex = service?.hosted ? service.apex : null;
   const [agreed, setAgreed] = useState(false);
@@ -678,6 +685,21 @@ function Join() {
     setBusy(true);
     setError(null);
     try {
+      /*
+        Open the family key before the account exists: a link whose secret
+        does not fit its envelope must fail here, with the invitation still
+        unused, rather than admit a member and then shrug (#212).
+      */
+      let familyKey: CryptoKey | null = null;
+      if (invite !== null && invite !== false && invite.envelope && secret) {
+        try {
+          familyKey = await unwrapFamilyKey(invite.envelope, await handoffWrapKey(secret), invitePlace(invite.id));
+        } catch {
+          setError(t('This link does not open the key — ask for a new one'));
+          setBusy(false);
+          return;
+        }
+      }
       await api.post('/auth/join', {
         token,
         name,
@@ -686,6 +708,10 @@ function Join() {
         ...(founder ? { timezone: browserTimezone() } : {}),
         ...(apex ? { accept_terms: agreed } : {}),
       });
+      // The key is held on this device from the first moment; the provider
+      // writes this member's own envelope as soon as the session settles,
+      // with the wrap key the credentials above left in memory
+      if (familyKey) await defaultKeyStore().save(familyKey);
       // Same as the first run: stay in the tab so the wrap key survives.
       // /join is not a route inside the app, so the router goes home first —
       // through the router, not history.replaceState, which it would not notice.
@@ -703,6 +729,18 @@ function Join() {
       <Frame title={t('Invitation')}>
         <p className="text-sm text-muted">
           {t('This link is no longer valid: it has expired or was already used. Ask the person who runs the hub for a new one.')}
+        </p>
+      </Frame>
+    );
+  }
+  // The invitation carries the key and the link lost the part that opens
+  // it — a messenger trimmed the fragment. Refused before the form, not
+  // after: an account without its key is a support ticket, not a member.
+  if (invite.envelope && !secret) {
+    return (
+      <Frame title={t('Invitation')}>
+        <p className="text-sm text-muted">
+          {t('This link lost the part after the # — some messengers cut it off. Ask for a new one and paste it whole.')}
         </p>
       </Frame>
     );

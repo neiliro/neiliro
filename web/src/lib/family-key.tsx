@@ -58,6 +58,8 @@ export interface KeysResponse {
 export const RECOVERY_PLACE = { kind: 'recovery', owner: 'family' } as const;
 export const passwordPlace = (userId: string) => ({ kind: 'password', owner: userId });
 export const handoffPlace = (userId: string) => ({ kind: 'handoff', owner: userId });
+/** An invitation's envelope is bound to the invite, not to a member who does not exist yet (#212). */
+export const invitePlace = (inviteId: string) => ({ kind: 'invite', owner: inviteId });
 
 export class KeyDoorError extends Error {}
 
