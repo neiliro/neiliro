@@ -16,6 +16,10 @@ export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   note_versions: ['title', 'body_md'],
   // Bound to the source note's id: one AAD per source, the link rows have no id of their own
   note_links: ['target_title'],
+  // #217 — status, dates, priority and the tree stay clear: the board, the
+  // calendar and the dashboard buckets are the server's queries
+  tasks: ['title', 'description'],
+  projects: ['title', 'description'],
 };
 
 /** Text columns of the tables above that stay readable, and why. */
@@ -38,5 +42,30 @@ export const CLEAR_FIELDS: Record<string, Record<string, string>> = {
   note_links: {
     source_note_id: 'identifier',
     target_note_id: 'identifier — resolved by the browser, joined by the server for backlinks',
+  },
+  tasks: {
+    id: 'identifier',
+    project_id: 'identifier',
+    parent_id: 'identifier — the tree is the server’s',
+    status: 'an enum the board and the buckets filter by',
+    priority: 'an enum the dashboard orders by',
+    due_date: 'a date — buckets, calendar window, recurrence',
+    expected_date: 'a date — replaces the due date in the buckets',
+    assignee_id: 'identifier',
+    recurrence_rule: 'a machine rule (RRULE subset) the server expands',
+    recurrence_parent_id: 'identifier — the series anchor',
+    completed_at: 'a timestamp',
+    created_by: 'identifier',
+    created_at: 'a timestamp',
+    updated_at: 'a timestamp',
+  },
+  projects: {
+    id: 'identifier',
+    color: 'a hex colour',
+    icon: 'an emoji chosen from a fixed set, not written',
+    archived_at: 'a timestamp',
+    created_by: 'identifier',
+    created_at: 'a timestamp',
+    updated_at: 'a timestamp',
   },
 };

@@ -65,6 +65,8 @@ Task order is accepted as a full list of IDs (`POST /api/tasks/reorder`) rather 
 
 `Cmd/Ctrl + K` opens quick-add from any section. A task with no project selected goes to the Inbox.
 
+With a family key, task and project titles and descriptions are encrypted in the browser; status, dates, priority, assignee and the tree stay readable to the server, so the board, the dashboard buckets and the calendar window are still its queries. One consequence shows in recurrence: an encrypted title is bound to its own task, so when such a task is closed the server names the next date and the browser creates the next occurrence — the person sees the same «next one scheduled for…» as before.
+
 ## Notes
 
 ![Notes: markdown with wiki-links, templates and attachments](screenshots/notes.png)
@@ -79,7 +81,7 @@ Templates are ordinary notes with a flag: any note can become a template and bac
 
 A private note is visible only to its owner — in lists, in search, and by direct link. The administrator is no exception. The daily note included: if a private note by someone else already exists for a date, the second person gets an honest refusal, not its content — a second note for the same date cannot exist, the daily date is unique.
 
-Once the family has a key ([ADR 0001](adr/0001-client-side-encryption.md)), a note's title, body and list preview are encrypted in the browser before they are sent; folders, dates, visibility and the links between notes stay readable to the server, which is why the list, the daily note and backlinks work as before. Everything the server used to do with the text — the preview line, extracting `[[links]]`, expanding template placeholders, matching a title — now happens in the browser. A device that does not hold the key shows `••••••` in place of the words and opens notes read-only: saving from there would overwrite ciphertext with plaintext. Notes written before the key existed stay readable until Settings → Family key → *Encrypt existing notes* rewrites them, versions included; each member runs it once for their own private notes, since nobody else can see those.
+Once the family has a key ([ADR 0001](adr/0001-client-side-encryption.md)), a note's title, body and list preview are encrypted in the browser before they are sent — as are task and project titles and descriptions, see below; folders, dates, visibility and the links between notes stay readable to the server, which is why the list, the daily note and backlinks work as before. Everything the server used to do with the text — the preview line, extracting `[[links]]`, expanding template placeholders, matching a title — now happens in the browser. A device that does not hold the key shows `••••••` in place of the words and opens notes read-only: saving from there would overwrite ciphertext with plaintext. Rows written before the key existed stay readable until Settings → Family key → *Encrypt what was written before the key* rewrites them, note versions included; each member runs it once for their own private notes, since nobody else can see those.
 
 ### Attachments
 

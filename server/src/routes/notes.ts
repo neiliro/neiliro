@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { isCiphertext } from '../lib/ciphertext.js';
 import { unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { currentTenant, db, familyTimezone, id, now, today } from '../db/index.js';
@@ -83,11 +84,9 @@ function guard(
   never derives anything from it. Everything below that used to read a
   title or a body — links, excerpts, template placeholders — has a browser
   side now, and the server keeps its old behaviour only for plaintext rows
-  from before the module was migrated.
+  from before the module was migrated. The predicate lives in lib/ciphertext.ts
+  since every module shares it.
 */
-const FIELD_PREFIX = 'e1:';
-export const isCiphertext = (value: string | null | undefined): boolean =>
-  typeof value === 'string' && value.startsWith(FIELD_PREFIX);
 
 // ── [[Title]] links ───────────────────────────────────────────────────────
 

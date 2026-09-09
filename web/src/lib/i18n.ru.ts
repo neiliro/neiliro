@@ -963,15 +963,17 @@ export const ru: Record<string, string> = {
     'На этом устройстве нет ключа семьи — заметка только для чтения, пока вы не откроете ключ в настройках.',
   'This device does not hold the family key — unlock it before editing':
     'На этом устройстве нет ключа семьи — откройте его перед редактированием',
-  'Encrypt existing notes': 'Зашифровать старые заметки',
-  'Notes written before the key existed are still readable on the server. This rewrites them under the key, here in your browser; each member does it once for their private notes.':
-    'Заметки, написанные до появления ключа, всё ещё читаются на сервере. Это перезапишет их под ключом прямо в браузере; свои приватные заметки каждый участник шифрует сам, один раз.',
+  'Encrypt what was written before the key': 'Зашифровать написанное до ключа',
+  'Notes, tasks and projects from before the key existed are still readable on the server. This rewrites them under the key, here in your browser; each member does it once for their private notes.':
+    'Заметки, задачи и проекты, созданные до появления ключа, всё ещё читаются на сервере. Это перезапишет их под ключом прямо в браузере; свои приватные заметки каждый участник шифрует сам, один раз.',
   'Encrypting… {done} of {total}': 'Шифруем… {done} из {total}',
   'Nothing left to encrypt.': 'Шифровать больше нечего.',
   'Done — {n} encrypted.': 'Готово — зашифровано: {n}.',
   'Done — {n} encrypted, {failed} failed. Run it again.': 'Готово — зашифровано: {n}, не получилось: {failed}. Запустите ещё раз.',
   'Encrypt': 'Зашифровать',
   'A note with this id already exists': 'Заметка с таким id уже есть',
+  'A task with this id already exists': 'Задача с таким id уже есть',
+  'A project with this id already exists': 'Проект с таким id уже есть',
 };
 
 /** one / few / many, keyed by the English singular used in plural() calls. */

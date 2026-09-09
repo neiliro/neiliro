@@ -35,7 +35,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new ApiError(t(body?.error ?? 'The server is unreachable'), res.status);
   }
-  return (await decodeResponse(method, path, await res.json())) as T;
+  return (await decodeResponse(method, path, await res.json(), request)) as T;
 }
 
 export const api = {

@@ -34,6 +34,10 @@ const NOTE_VERSION = new RegExp(`^/notes/(${UUID})/versions/(${UUID})$`);
 const NOTE_RESTORE = new RegExp(`^/notes/(${UUID})/restore/${UUID}$`);
 const NOTE_DAILY = /^\/notes\/daily\/\d{4}-\d{2}-\d{2}$/;
 const NOTES_LIST = /^\/notes(?:\?.*)?$/;
+const TASKS_LIST = /^\/tasks(?:\?.*)?$/;
+const TASK = new RegExp(`^/tasks/(${UUID})$`);
+const PROJECTS_LIST = /^\/projects(?:\?.*)?$/;
+const PROJECT = new RegExp(`^/projects/(${UUID})$`);
 
 const F = ENCRYPTED_FIELDS;
 
@@ -122,13 +126,53 @@ async function openNoteList(rows: Row[]): Promise<Row[]> {
   return opened;
 }
 
+// ── Rows with joined titles ───────────────────────────────────────────────
+
+/** A column of another table that a query joined in under its own name. */
+interface Join {
+  field: string;
+  table: string;
+  column: string;
+  idField: string;
+}
+
+const PROJECT_TITLE: Join = { field: 'project_title', table: 'projects', column: 'title', idField: 'project_id' };
+
+/** Open a row's own sealed columns and the joined ones, and note plaintext for the job. */
+async function openRow(table: string, row: Row, joins: Join[] = []): Promise<Row> {
+  const id = String(row['id']);
+  const columns = F[table]!;
+  markPlaintext(table, id, row[columns[0]!]);
+  let out = await openFields(table, id, row, columns);
+  for (const join of joins) {
+    const joinedId = out[join.idField];
+    if (typeof out[join.field] !== 'string' || typeof joinedId !== 'string') continue;
+    const opened = await openFields(join.table, joinedId, { [join.column]: out[join.field] }, [join.column]);
+    out = { ...out, [join.field]: opened[join.column] };
+  }
+  return out;
+}
+
+const openList = (table: string, rows: Row[], joins: Join[] = []) =>
+  Promise.all(rows.map((row) => openRow(table, row, joins)));
+
+/** Seal a create body: mint the id, seal the table's columns under it. */
+async function sealCreate(table: string, b: Body): Promise<Body> {
+  const id = typeof b['id'] === 'string' ? b['id'] : crypto.randomUUID();
+  return sealFields(table, id, { ...b, id }, F[table]!);
+}
+
 // ── The table ─────────────────────────────────────────────────────────────
+
+/** The API client, handed in so the codec can issue the odd follow-up request. */
+export type Requester = (path: string, method: string, body?: unknown) => Promise<unknown>;
 
 export async function encodeRequest(method: string, path: string, body: unknown): Promise<unknown> {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
   const b = body as Body;
   let m: RegExpMatchArray | null;
 
+  // Notes
   if (method === 'POST' && NOTES_LIST.test(path)) {
     const id = typeof b['id'] === 'string' ? b['id'] : crypto.randomUUID();
     return sealNoteBody(id, { ...b, id });
@@ -140,13 +184,46 @@ export async function encodeRequest(method: string, path: string, body: unknown)
     // A version shares the note's binding — it is the note's own ciphertext, kept
     return sealFields('notes', m[1]!, b, F['note_versions']!);
   }
+
+  // Tasks and projects (#217)
+  if (method === 'POST' && TASKS_LIST.test(path)) return sealCreate('tasks', b);
+  if (method === 'PATCH' && (m = path.match(TASK))) return sealFields('tasks', m[1]!, b, F['tasks']!);
+  if (method === 'POST' && PROJECTS_LIST.test(path)) return sealCreate('projects', b);
+  if (method === 'PATCH' && (m = path.match(PROJECT))) return sealFields('projects', m[1]!, b, F['projects']!);
+
   return body;
 }
 
-export async function decodeResponse(method: string, path: string, data: unknown): Promise<unknown> {
+/*
+  Closing an encrypted recurring task: the server cannot copy a title bound
+  to one task id into another, so it answers `next_due` and the browser
+  creates the next occurrence — the same fields, re-sealed under a fresh
+  id — and hands the page the `spawned` row it always expected.
+*/
+async function spawnNext(task: Row, nextDue: string, request: Requester): Promise<Row> {
+  return (await request('/tasks', 'POST', {
+    project_id: task['project_id'],
+    parent_id: task['parent_id'] ?? null,
+    title: task['title'],
+    description: task['description'] ?? null,
+    priority: task['priority'],
+    due_date: nextDue,
+    assignee_id: task['assignee_id'] ?? null,
+    recurrence_rule: task['recurrence_rule'],
+    recurrence_parent_id: task['recurrence_parent_id'] ?? task['id'],
+  })) as Row;
+}
+
+export async function decodeResponse(
+  method: string,
+  path: string,
+  data: unknown,
+  request?: Requester,
+): Promise<unknown> {
   if (data === null || typeof data !== 'object') return data;
   let m: RegExpMatchArray | null;
 
+  // Notes
   if (method === 'GET' && NOTES_LIST.test(path) && Array.isArray(data)) return openNoteList(data as Row[]);
   if (
     (method === 'GET' && (NOTE.test(path) || NOTE_DAILY.test(path))) ||
@@ -166,18 +243,67 @@ export async function decodeResponse(method: string, path: string, data: unknown
   if (method === 'GET' && (m = path.match(NOTE_VERSION))) {
     return openFields('notes', m[1]!, data as Row, F['note_versions']!);
   }
+
+  // Tasks and projects
+  if (method === 'GET' && TASKS_LIST.test(path) && Array.isArray(data)) {
+    return openList('tasks', data as Row[], [PROJECT_TITLE]);
+  }
+  if ((method === 'GET' && TASK.test(path)) || (method === 'POST' && TASKS_LIST.test(path))) {
+    return openRow('tasks', data as Row, [PROJECT_TITLE]);
+  }
+  if (method === 'PATCH' && TASK.test(path)) {
+    const d = data as Row;
+    if (d['task']) d['task'] = await openRow('tasks', d['task'] as Row);
+    if (d['spawned']) d['spawned'] = await openRow('tasks', d['spawned'] as Row);
+    if (typeof d['next_due'] === 'string' && d['task'] && request) {
+      d['spawned'] = await spawnNext(d['task'] as Row, d['next_due'], request);
+    }
+    return d;
+  }
+  if (method === 'GET' && PROJECTS_LIST.test(path) && Array.isArray(data)) return openList('projects', data as Row[]);
+  if ((method === 'POST' && PROJECTS_LIST.test(path)) || (method === 'PATCH' && PROJECT.test(path))) {
+    return openRow('projects', data as Row);
+  }
+
+  // Aggregates
   if (method === 'GET' && path.startsWith('/dashboard')) {
     const d = data as Row;
     if (Array.isArray(d['recentNotes'])) {
       d['recentNotes'] = await openRows('notes', d['recentNotes'] as Row[], ['title']);
       for (const n of d['recentNotes'] as Row[]) rememberNote(n);
     }
+    for (const bucket of ['dueToday', 'overdue', 'upcoming']) {
+      if (Array.isArray(d[bucket])) d[bucket] = await openList('tasks', d[bucket] as Row[], [PROJECT_TITLE]);
+    }
+    if (Array.isArray(d['todayEvents'])) d['todayEvents'] = await openJoined(d['todayEvents'] as Row[], [PROJECT_TITLE]);
     return d;
+  }
+  if (method === 'GET' && path.startsWith('/events')) {
+    if (Array.isArray(data)) return openJoined(data as Row[], [PROJECT_TITLE]);
+    return data;
   }
   if (method === 'GET' && path.startsWith('/search/corpus')) {
     const d = data as Row;
     if (Array.isArray(d['notes'])) d['notes'] = await openNoteList(d['notes'] as Row[]);
+    if (Array.isArray(d['tasks'])) d['tasks'] = await openList('tasks', d['tasks'] as Row[], [PROJECT_TITLE]);
+    if (Array.isArray(d['projects'])) d['projects'] = await openList('projects', d['projects'] as Row[]);
     return d;
   }
   return data;
+}
+
+/** Rows of a table not (yet) encrypted itself, carrying joined sealed titles. */
+async function openJoined(rows: Row[], joins: Join[]): Promise<Row[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      let out = row;
+      for (const join of joins) {
+        const joinedId = out[join.idField];
+        if (typeof out[join.field] !== 'string' || typeof joinedId !== 'string') continue;
+        const opened = await openFields(join.table, joinedId, { [join.column]: out[join.field] }, [join.column]);
+        out = { ...out, [join.field]: opened[join.column] };
+      }
+      return out;
+    }),
+  );
 }

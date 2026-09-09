@@ -3,15 +3,16 @@ import { pendingPlaintext } from './codec';
 import { invalidateSearchCorpus } from './search';
 
 /*
-  The one-time job that brings a family's old notes under the key (#215).
+  The one-time job that brings a family's old rows under the key (#215,
+  #217, and each module after it).
 
-  Notes written before the family key existed sit on the server as
+  Rows written before the family key existed sit on the server as
   plaintext. The server cannot encrypt them — that is the whole point — so
   a browser holding the key reads each one and writes it back; lib/api.ts
-  seals the write like any other. Versions go the same way, each one
+  seals the write like any other. Note versions go the same way, each one
   rewritten with its own ciphertext, so history stays readable afterwards.
 
-  The job sees what this person sees: shared notes and their own private
+  The job sees what this person sees: shared rows and their own private
   ones. Another member's private notes wait for that member to run it.
   Re-running is harmless — an already encrypted row is not on the list.
 */
@@ -22,42 +23,71 @@ export interface EncryptProgress {
   failed: number;
 }
 
-interface NoteBody {
+interface TextRow {
   id: string;
   title: string;
-  body_md: string;
+  description?: string | null;
+  body_md?: string;
 }
 
-interface VersionRow {
-  id: string;
+/** One table: how to see all its rows, and which fields to write back. */
+interface Module {
+  table: string;
+  lists: string[];
+  rewrite: (id: string) => Promise<void>;
 }
 
-export async function encryptExistingNotes(
-  onProgress: (p: EncryptProgress) => void,
-): Promise<EncryptProgress> {
-  // Walking the lists lets the codec register which rows arrived plaintext
-  await api.get<unknown[]>('/notes?limit=2000');
-  await api.get<unknown[]>('/notes?templates=true&limit=2000');
-  const ids = pendingPlaintext('notes');
-  const progress: EncryptProgress = { total: ids.length, done: 0, failed: 0 };
-  onProgress({ ...progress });
-
-  for (const id of ids) {
-    try {
-      const note = await api.get<NoteBody>(`/notes/${id}`);
+const MODULES: Module[] = [
+  {
+    table: 'notes',
+    lists: ['/notes?limit=2000', '/notes?templates=true&limit=2000'],
+    rewrite: async (id) => {
+      const note = await api.get<TextRow>(`/notes/${id}`);
       // The note first: the server keeps a version of the old body on
       // change, and that version is caught by the pass below
       await api.patch(`/notes/${id}`, { title: note.title, body_md: note.body_md });
-      await api.get<VersionRow[]>(`/notes/${id}/versions?limit=1000`);
+      await api.get<unknown[]>(`/notes/${id}/versions?limit=1000`);
       for (const key of pendingPlaintext('note_versions')) {
         const [noteId, versionId] = key.split('/');
         if (noteId !== id) continue;
-        const version = await api.get<NoteBody>(`/notes/${id}/versions/${versionId}`);
-        await api.patch(`/notes/${id}/versions/${versionId}`, {
-          title: version.title,
-          body_md: version.body_md,
-        });
+        const version = await api.get<TextRow>(`/notes/${id}/versions/${versionId}`);
+        await api.patch(`/notes/${id}/versions/${versionId}`, { title: version.title, body_md: version.body_md });
       }
+    },
+  },
+  {
+    table: 'projects',
+    lists: ['/projects', '/projects?archived=true'],
+    rewrite: async (id) => {
+      const rows = await api.get<TextRow[]>('/projects');
+      const archived = await api.get<TextRow[]>('/projects?archived=true');
+      const project = [...rows, ...archived].find((p) => p.id === id);
+      if (project) await api.patch(`/projects/${id}`, { title: project.title, description: project.description ?? null });
+    },
+  },
+  {
+    table: 'tasks',
+    lists: ['/tasks?include_done=true&limit=2000'],
+    rewrite: async (id) => {
+      const task = await api.get<TextRow>(`/tasks/${id}`);
+      await api.patch(`/tasks/${id}`, { title: task.title, description: task.description ?? null });
+    },
+  },
+];
+
+export async function encryptExisting(onProgress: (p: EncryptProgress) => void): Promise<EncryptProgress> {
+  // Walking the lists lets the codec register which rows arrived plaintext
+  const work: { module: Module; id: string }[] = [];
+  for (const module of MODULES) {
+    for (const list of module.lists) await api.get<unknown[]>(list);
+    for (const id of pendingPlaintext(module.table)) work.push({ module, id });
+  }
+  const progress: EncryptProgress = { total: work.length, done: 0, failed: 0 };
+  onProgress({ ...progress });
+
+  for (const { module, id } of work) {
+    try {
+      await module.rewrite(id);
       progress.done += 1;
     } catch {
       progress.failed += 1;

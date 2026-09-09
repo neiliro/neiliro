@@ -4,9 +4,11 @@ import { db, id, now } from '../db/index.js';
 
 export const INBOX_ID = '00000000-0000-4000-8000-000000000001';
 
+// Ceilings sized for envelopes (#217): an encrypted value is roughly a third
+// longer than its words
 const projectInput = z.object({
-  title: z.string().min(1, 'Enter a project name').max(200),
-  description: z.string().max(2000).nullable().optional(),
+  title: z.string().min(1, 'Enter a project name').max(4_000),
+  description: z.string().max(16_000).nullable().optional(),
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, 'Color must look like #1F6E8C')
@@ -35,11 +37,15 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post('/api/projects', (req, reply) => {
-    const parsed = projectInput.safeParse(req.body);
+    // The browser mints the id when it encrypts: the envelope is bound to it
+    const parsed = projectInput.extend({ id: z.string().uuid().optional() }).safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
     }
-    const projectId = id();
+    const projectId = parsed.data.id ?? id();
+    if (parsed.data.id && db.prepare('SELECT 1 FROM projects WHERE id = ?').get(parsed.data.id)) {
+      return reply.code(409).send({ error: 'A project with this id already exists' });
+    }
     db.prepare(
       `INSERT INTO projects (id, title, description, color, icon, position, created_by)
        VALUES (?, ?, ?, ?, ?, (SELECT coalesce(max(position), 0) + 1 FROM projects), ?)`,

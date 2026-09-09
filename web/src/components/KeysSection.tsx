@@ -3,7 +3,7 @@ import { t } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useKeys } from '../lib/family-key';
 import { RecoveryCodeDialog, RecoveryCodePanel } from './RecoveryCode';
-import { encryptExistingNotes, type EncryptProgress } from '../lib/encrypt-existing';
+import { encryptExisting, type EncryptProgress } from '../lib/encrypt-existing';
 
 /*
   Settings → Family key. Every member sees where this device stands and can
@@ -24,7 +24,7 @@ export function KeysSection() {
     setJobRunning(true);
     setError(null);
     try {
-      await encryptExistingNotes(setJob);
+      await encryptExisting(setJob);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('Something went wrong'));
     } finally {
@@ -104,10 +104,10 @@ export function KeysSection() {
       {status === 'unlocked' && user?.role !== 'kid' && (
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">
           <div>
-            <p className="text-sm font-medium text-ink">{t('Encrypt existing notes')}</p>
+            <p className="text-sm font-medium text-ink">{t('Encrypt what was written before the key')}</p>
             <p className="text-xs text-muted">
               {job === null
-                ? t('Notes written before the key existed are still readable on the server. This rewrites them under the key, here in your browser; each member does it once for their private notes.')
+                ? t('Notes, tasks and projects from before the key existed are still readable on the server. This rewrites them under the key, here in your browser; each member does it once for their private notes.')
                 : jobRunning
                   ? t('Encrypting… {done} of {total}', { done: job.done + job.failed, total: job.total })
                   : job.total === 0

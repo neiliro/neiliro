@@ -96,3 +96,64 @@ describe('encodeRequest on a device without the key', () => {
     expect(opened['title']).toBe(LOCKED_TEXT);
   });
 });
+
+describe('tasks and projects (#217)', () => {
+  const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
+  const TASK_ID = '44444444-4444-4444-8444-444444444444';
+
+  beforeEach(async () => setVault({ key: await generateFamilyKey(), familyHasKey: true }));
+
+  it('seals a task and opens the joined project title under the project id', async () => {
+    const project = (await encodeRequest('POST', '/projects', { id: PROJECT_ID, title: 'Garden' })) as Row;
+    const task = (await encodeRequest('POST', '/tasks', { id: TASK_ID, project_id: PROJECT_ID, title: 'Mow', description: 'Back lawn', status: 'todo' })) as Row;
+    expect(isEncrypted(task['title'] as string)).toBe(true);
+    expect(isEncrypted(task['description'] as string)).toBe(true);
+    expect(task['status']).toBe('todo');
+
+    const opened = (await decodeResponse('GET', '/tasks?project_id=x', [
+      { ...task, project_title: project['title'], project_color: '#123456' },
+    ])) as Row[];
+    expect(opened[0]!['title']).toBe('Mow');
+    expect(opened[0]!['description']).toBe('Back lawn');
+    expect(opened[0]!['project_title']).toBe('Garden');
+  });
+
+  it('creates the next occurrence itself when the server answers next_due', async () => {
+    const task = (await encodeRequest('PATCH', `/tasks/${TASK_ID}`, { title: 'Water plants' })) as Row;
+    const calls: { path: string; method: string; body: Row }[] = [];
+    const request = async (path: string, method: string, body?: unknown) => {
+      calls.push({ path, method, body: body as Row });
+      return { id: 'new', ...(body as Row) };
+    };
+    const out = (await decodeResponse(
+      'PATCH',
+      `/tasks/${TASK_ID}`,
+      {
+        task: { id: TASK_ID, project_id: PROJECT_ID, title: task['title'], recurrence_rule: 'FREQ=WEEKLY', priority: 'normal', recurrence_parent_id: null },
+        spawned: null,
+        next_due: '2026-09-08',
+      },
+      request,
+    )) as Row;
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.path).toBe('/tasks');
+    // The page-level requester seals on its own way out; the codec hands it the words
+    expect(calls[0]!.body).toMatchObject({ title: 'Water plants', due_date: '2026-09-08', recurrence_parent_id: TASK_ID });
+    expect((out['spawned'] as Row)['due_date']).toBe('2026-09-08');
+  });
+
+  it('opens the project title on the dashboard buckets and on calendar occurrences', async () => {
+    const project = (await encodeRequest('PATCH', `/projects/${PROJECT_ID}`, { title: 'Garden' })) as Row;
+    const dashboard = (await decodeResponse('GET', '/dashboard', {
+      dueToday: [{ id: TASK_ID, title: 'plain old task', project_id: PROJECT_ID, project_title: project['title'] }],
+      overdue: [],
+      upcoming: [],
+      recentNotes: [],
+      todayEvents: [{ id: 'e1', title: 'Event', project_id: PROJECT_ID, project_title: project['title'] }],
+    })) as Row;
+    expect((dashboard['dueToday'] as Row[])[0]!['project_title']).toBe('Garden');
+    expect((dashboard['dueToday'] as Row[])[0]!['title']).toBe('plain old task');
+    expect((dashboard['todayEvents'] as Row[])[0]!['project_title']).toBe('Garden');
+    expect(pendingPlaintext('tasks')).toContain(TASK_ID);
+  });
+});
