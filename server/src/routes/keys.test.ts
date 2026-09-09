@@ -244,3 +244,36 @@ describe('a password the browser never wrapped with kills the envelope', () => {
     expect((await h.as(session, 'GET', '/api/keys')).json<{ recovery_envelope: string }>().recovery_envelope).toBe(envelope('R'));
   });
 });
+
+describe('an invitation carrying the key (#212)', () => {
+  it('the administrator attaches the envelope to a live invite; the invitee reads it back with the id', async () => {
+    const h = await buildTestApp();
+    const sam = await member(h, 'Sam', 'admin');
+    const ann = await member(h, 'Ann');
+
+    const { id: inviteId, path } = (await h.as(sam.cookie, 'POST', '/api/invites', {})).json<{ id: string; path: string }>();
+    // No family key yet: nothing to wrap
+    expect((await h.as(sam.cookie, 'PUT', `/api/invites/${inviteId}/envelope`, { envelope: envelope('V') })).statusCode).toBe(409);
+    await createKey(h, sam.cookie);
+    expect((await h.as(ann.cookie, 'PUT', `/api/invites/${inviteId}/envelope`, { envelope: envelope('V') })).statusCode).toBe(403);
+    expect((await h.as(sam.cookie, 'PUT', `/api/invites/${inviteId}/envelope`, { envelope: RAW_KEY })).statusCode).toBe(400);
+    expect((await h.as(sam.cookie, 'PUT', `/api/invites/${inviteId}/envelope`, { envelope: envelope('V') })).statusCode).toBe(200);
+
+    const token = new URL(`http://x${path}`).searchParams.get('token')!;
+    const check = (await h.app.inject({ method: 'GET', url: `/api/auth/invite?token=${token}` })).json<{ id: string; envelope: string }>();
+    expect(check.id).toBe(inviteId);
+    expect(check.envelope).toBe(envelope('V'));
+
+    // A plain invite (from a device without the key) says so
+    const { id: plain, path: plainPath } = (await h.as(sam.cookie, 'POST', '/api/invites', {})).json<{ id: string; path: string }>();
+    const plainToken = new URL(`http://x${plainPath}`).searchParams.get('token')!;
+    expect((await h.app.inject({ method: 'GET', url: `/api/auth/invite?token=${plainToken}` })).json<{ envelope: null }>().envelope).toBeNull();
+    // A used invite cannot be given a key after the fact
+    await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/join',
+      payload: { token: plainToken, name: 'Bob', email: 'bob@hub.local', auth_key: await authKey('bob password 123'), kdf_salt: SALT },
+    });
+    expect((await h.as(sam.cookie, 'PUT', `/api/invites/${plain}/envelope`, { envelope: envelope('W') })).statusCode).toBe(404);
+  });
+});

@@ -930,6 +930,11 @@ export const ru: Record<string, string> = {
   'You hold the family key again on this device. It is also wrapped under your current password, so the next sign-in will not need a link.':
     'Ключ семьи снова на этом устройстве. Он также запечатан под ваш текущий пароль, так что при следующем входе ссылка не понадобится.',
   'This device already holds the family key.': 'На этом устройстве ключ семьи уже есть.',
+  // Invitations carrying the key (#212)
+  'This device does not hold the family key, so a link made here comes without it: the new member will need a re-admission link afterwards.':
+    'На этом устройстве нет ключа семьи, поэтому ссылка отсюда будет без него: новому участнику потом понадобится ссылка на возврат ключа.',
+  'This link is the key to the house: it carries the family key. Send it over a channel you trust, to one person, whole — the part after # is what opens it.':
+    'Эта ссылка — ключ от дома: в ней ключ семьи. Передайте её по каналу, которому доверяете, одному человеку и целиком — открывает её часть после #.',
   // Door errors thrown in lib/family-key.tsx
   'The family has no recovery code': 'У семьи нет кода восстановления',
   'That is not the recovery code': 'Это не код восстановления',
@@ -947,6 +952,7 @@ export const ru: Record<string, string> = {
   'Only a member who holds the key can hand it on': 'Передать ключ может только участник, у которого он есть',
   'You already hold the key': 'У вас уже есть ключ',
   'Handoff not found': 'Ссылка на возврат ключа не найдена',
+  'Invite not found': 'Приглашение не найдено',
 };
 
 /** one / few / many, keyed by the English singular used in plural() calls. */

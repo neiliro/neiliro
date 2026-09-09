@@ -6,6 +6,7 @@ import { isValidTimezone } from '../lib/timezone.js';
 import { createSession, setSessionCookie } from '../lib/auth.js';
 import { hashPassword } from '../lib/password.js';
 import { AUTH_KEY_PATTERN, KDF_SALT_PATTERN } from '../lib/kdf.js';
+import { ENVELOPE_PATTERN, familyKey } from '../lib/keys.js';
 import { sendVerificationEmail } from './email-verify.js';
 import { log } from '../lib/log.js';
 import { env } from '../env.js';
@@ -100,12 +101,14 @@ interface InviteRow {
   email: string | null;
   expires_at: string;
   used_at: string | null;
+  /** The family key wrapped for this invite (#212); null when the link carries none. */
+  envelope: string | null;
 }
 
 /** A live invite by token: not used and not expired. */
 function liveInvite(token: string): InviteRow | null {
   const row = db
-    .prepare('SELECT id, role, email, expires_at, used_at FROM invites WHERE token_hash = ?')
+    .prepare('SELECT id, role, email, expires_at, used_at, envelope FROM invites WHERE token_hash = ?')
     .get(hashInviteToken(token)) as InviteRow | undefined;
   if (!row || row.used_at || row.expires_at <= new Date().toISOString()) return null;
   // A founder invitation outlives its purpose the moment the family has
@@ -261,6 +264,30 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send({ id: inviteId, path: `/join?token=${token}` });
   });
 
+  /*
+    The family key, wrapped for this invitation (#212). A second request
+    rather than a field of the first: the envelope's authenticated data is
+    the invite's id, which only exists once the row does. The browser sends
+    both within a second; an invite that never gets its envelope is a plain
+    invite, and the member it admits arrives locked — the state every
+    member from before the key was in.
+  */
+  app.put('/api/invites/:id/envelope', (req, reply) => {
+    if (req.user?.role !== 'admin') {
+      return reply.code(403).send({ error: 'Administrators only' });
+    }
+    const { id: inviteId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const parsed = z.object({ envelope: z.string().regex(ENVELOPE_PATTERN) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Not a key envelope' });
+    if (!familyKey()) return reply.code(409).send({ error: 'The family has no key yet' });
+    // Only a live, ordinary invite: the founder's carries no key (they make it), a used one is history
+    const result = db
+      .prepare("UPDATE invites SET envelope = ? WHERE id = ? AND used_at IS NULL AND role <> 'admin' AND created_by = ?")
+      .run(parsed.data.envelope, inviteId, req.user.id);
+    if (result.changes === 0) return reply.code(404).send({ error: 'Invite not found' });
+    return { ok: true };
+  });
+
   app.get('/api/invites', (req, reply) => {
     if (req.user?.role !== 'admin') {
       return reply.code(403).send({ error: 'Administrators only' });
@@ -302,7 +329,10 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     if (!invite) {
       return reply.code(404).send({ error: 'The link is invalid: expired or already used' });
     }
-    return { valid: true, role: invite.role, email: invite.email };
+    // The envelope is useless without the secret in the link's fragment,
+    // which never reaches this server — handing it out here reveals nothing.
+    // The id is the envelope's authenticated data; the browser needs it to open it.
+    return { valid: true, id: invite.id, role: invite.role, email: invite.email, envelope: invite.envelope };
   });
 
   app.post('/api/auth/join', strictRate, async (req, reply) => {

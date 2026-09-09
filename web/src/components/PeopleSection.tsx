@@ -6,7 +6,8 @@ import { EntityDialog } from './EntityDialog';
 import { dialogField, dialogLabel, inlineDanger, useDialogs } from './Dialog';
 import { reportFailure } from '../lib/failures';
 import { useAuth } from '../lib/auth';
-import { useKeys } from '../lib/family-key';
+import { invitePlace, useKeys } from '../lib/family-key';
+import { fragmentFor, handoffWrapKey, newHandoffSecret, wrapFamilyKey } from '../lib/crypto';
 
 interface ManagedUser {
   id: string;
@@ -103,10 +104,14 @@ interface Invite {
  * The link is single-use, lives a week and is shown once.
  */
 function InvitesBlock() {
+  const keys = useKeys();
   const [invites, setInvites] = useState<Invite[] | null>(null);
-  const [freshLink, setFreshLink] = useState<string | null>(null);
+  const [freshLink, setFreshLink] = useState<{ link: string; withKey: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  // The family has a key but this device does not: a link made here admits
+  // a member who will then need re-admission — said before, not after
+  const keyOutOfReach = keys.status === 'locked';
 
   async function load() {
     setInvites(await api.get<Invite[]>('/invites'));
@@ -119,10 +124,33 @@ function InvitesBlock() {
   async function create() {
     setBusy(true);
     try {
-      const { path } = await api.post<{ id: string; path: string }>('/invites', {});
-      setFreshLink(window.location.origin + path);
+      const { id, path } = await api.post<{ id: string; path: string }>('/invites', {});
+      let fragment = '';
+      /*
+        The link carries the family key (#212): wrapped under a secret only
+        the fragment holds, so the server stores something it cannot open
+        and the member holds the key from their first sign-in. A device
+        without the key makes an ordinary link — the member arrives locked
+        and is re-admitted later, as every member from before the key was.
+      */
+      if (keys.familyKey) {
+        const secret = newHandoffSecret();
+        const envelope = await wrapFamilyKey(keys.familyKey, await handoffWrapKey(secret), invitePlace(id));
+        try {
+          await api.put(`/invites/${id}/envelope`, { envelope });
+        } catch (err) {
+          // Half an invitation is worse than none: the link would admit a
+          // member the fragment cannot unlock
+          await api.delete(`/invites/${id}`).catch(() => {});
+          throw err;
+        }
+        fragment = fragmentFor(secret);
+      }
+      setFreshLink({ link: window.location.origin + path + fragment, withKey: fragment !== '' });
       setCopied(false);
       await load();
+    } catch (err) {
+      reportFailure(err instanceof Error ? err.message : t('Could not save'));
     } finally {
       setBusy(false);
     }
@@ -155,18 +183,28 @@ function InvitesBlock() {
           {t('Single-use, valid for a week. Send it to a family member — they fill in the rest themselves.')}
         </p>
       </div>
+      {keyOutOfReach && (
+        <p className="mt-3 text-xs text-muted">
+          {t('This device does not hold the family key, so a link made here comes without it: the new member will need a re-admission link afterwards.')}
+        </p>
+      )}
 
       {freshLink && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-line bg-surface-2 p-3">
-          <code className="min-w-0 flex-1 truncate font-mono text-xs text-ink">{freshLink}</code>
+          <code className="min-w-0 flex-1 truncate font-mono text-xs text-ink">{freshLink.link}</code>
           <button
             type="button"
-            onClick={() => void copy(freshLink)}
+            onClick={() => void copy(freshLink.link)}
             className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs text-ink hover:bg-surface-3"
           >
             {copied ? t('Copied') : t('Copy')}
           </button>
         </div>
+      )}
+      {freshLink?.withKey && (
+        <p className="mt-2 text-xs text-muted">
+          {t('This link is the key to the house: it carries the family key. Send it over a channel you trust, to one person, whole — the part after # is what opens it.')}
+        </p>
       )}
 
       {pending.length > 0 && (
