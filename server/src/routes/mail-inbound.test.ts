@@ -87,6 +87,16 @@ async function post(payload: string) {
   });
 }
 
+/** The same delivery, but posted to a family's own subdomain rather than the webhook host. */
+async function postTo(host: string, payload: string) {
+  return app.inject({
+    method: 'POST',
+    url: INBOUND,
+    headers: { host, 'content-type': 'application/x-www-form-urlencoded' },
+    payload,
+  });
+}
+
 /** The Mail section as that family sees it. */
 async function mailbox(slug: string, cookie: string) {
   const res = await app.inject({
@@ -458,5 +468,29 @@ describe('inbound family mail', () => {
 
     const jones = await mailbox(JONES, jonesCookie);
     expect(jones.messages.map((m) => m.subject)).toEqual(['Electricity bill']);
+  });
+});
+
+describe('the webhook belongs to one host (#244)', () => {
+  it('refuses a delivery posted to a family subdomain, with 406, and stores nothing', async () => {
+    const before = (await mailbox(SMITHS, smithsCookie)).messages.length;
+    const res = await postTo(
+      `${SMITHS}.neiliro.test`,
+      delivery({
+        recipient: `${SMITHS}@mail.neiliro.test`,
+        'body-mime': letter('wrong-host@school.example', 'Posted to the family host'),
+      }),
+    );
+    expect(res.statusCode).toBe(406);
+    expect(res.json()).toEqual({ error: 'Wrong host' });
+    expect((await mailbox(SMITHS, smithsCookie)).messages.length).toBe(before);
+    // The reserved host still takes the very same delivery
+    const ok = await post(
+      delivery({
+        recipient: `${SMITHS}@mail.neiliro.test`,
+        'body-mime': letter('wrong-host@school.example', 'Posted to the family host'),
+      }),
+    );
+    expect(ok.statusCode).toBe(200);
   });
 });
