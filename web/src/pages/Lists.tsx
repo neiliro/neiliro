@@ -1,6 +1,7 @@
 import { t } from '../lib/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
+import { familyKeySuffix } from '../lib/token-key';
 import { Empty, Page } from '../components/Page';
 import { onEnter } from '../lib/keys';
 import { inlineDanger, useDialogs } from '../components/Dialog';
@@ -133,7 +134,8 @@ export function Lists() {
     setList(loaded);
     // An existing link has to show up on open, not only right after it is
     // created — otherwise the family cannot find the link they already sent
-    setSharePath(loaded.share_token ? `/list/${loaded.share_token}` : null);
+    // The guest page needs words: the family key rides after the token (#220)
+    setSharePath(loaded.share_token ? `/list/${loaded.share_token}${await familyKeySuffix()}` : null);
     setCopied(false);
   }, []);
 
@@ -287,7 +289,7 @@ export function Lists() {
   async function share() {
     if (!list) return;
     const res = await api.post<{ path: string }>(`/lists/${list.id}/share`, {});
-    setSharePath(res.path);
+    setSharePath(`${res.path}${await familyKeySuffix()}`);
     setCopied(false);
   }
 
@@ -380,7 +382,8 @@ export function Lists() {
                 {sharePath}
               </p>
               <p className="mt-1.5 text-xs text-muted">
-                {t('Anyone with this link can see this list and tick items off — nothing else.')}
+                {t('Anyone with this link can see this list and tick items off — nothing else.')}{' '}
+                {t('The link carries the family key for this one list: the server opens it for whoever follows the link.')}
               </p>
               <div className="mt-2 flex flex-wrap gap-3">
                 <button

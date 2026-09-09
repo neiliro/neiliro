@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db, id, now } from '../db/index.js';
 import { isValidRecurrence, occurrenceAfter } from '../lib/recurrence.js';
+import { isCiphertext } from '../lib/ciphertext.js';
 
 const STATUSES = ['backlog', 'todo', 'in_progress', 'done', 'cancelled'] as const;
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
@@ -48,20 +49,27 @@ interface TaskRow {
   position: number;
 }
 
+// Ceilings are sized for envelopes: an encrypted value is base64 plus a
+// nonce, roughly a third longer than the words it holds (#217)
 const createInput = z.object({
+  // The browser mints the id when it encrypts: the envelope is bound to it
+  id: z.string().uuid().optional(),
   project_id: z.string().uuid(),
   parent_id: z.string().uuid().nullable().optional(),
-  title: z.string().min(1, 'The task needs a title').max(300),
-  description: z.string().max(10_000).nullable().optional(),
+  title: z.string().min(1, 'The task needs a title').max(4_000),
+  description: z.string().max(40_000).nullable().optional(),
   status: z.enum(STATUSES).optional(),
   priority: z.enum(PRIORITIES).optional(),
   due_date: z.string().regex(DATE, 'Date must be YYYY-MM-DD').nullable().optional(),
   expected_date: z.string().regex(DATE, 'Date must be YYYY-MM-DD').nullable().optional(),
   assignee_id: z.string().uuid().nullable().optional(),
   recurrence_rule: z.string().max(100).nullable().optional(),
+  // Set by the browser when it spawns the next occurrence of an encrypted
+  // recurring task itself (see the PATCH route); never by a person
+  recurrence_parent_id: z.string().uuid().nullable().optional(),
 });
 
-const patchInput = createInput.partial().omit({ project_id: true });
+const patchInput = createInput.partial().omit({ project_id: true, id: true, recurrence_parent_id: true });
 
 /** Subtree depth relative to the task itself: 0 — no children. */
 function subtreeDepth(taskId: string): number {
@@ -218,11 +226,18 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
       level = parent.level + 1;
     }
 
-    const taskId = id();
+    const taskId = d.id ?? id();
+    if (d.id && db.prepare('SELECT 1 FROM tasks WHERE id = ?').get(d.id)) {
+      return reply.code(409).send({ error: 'A task with this id already exists' });
+    }
+    if (d.recurrence_parent_id && !db.prepare('SELECT 1 FROM tasks WHERE id = ?').get(d.recurrence_parent_id)) {
+      return reply.code(400).send({ error: 'Parent task not found' });
+    }
     db.prepare(
       `INSERT INTO tasks (id, project_id, parent_id, level, title, description, status, priority,
-                          due_date, expected_date, assignee_id, recurrence_rule, position, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                          due_date, expected_date, assignee_id, recurrence_rule, recurrence_parent_id,
+                          position, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                (SELECT coalesce(max(position), 0) + 1 FROM tasks WHERE project_id = ?), ?)`,
     ).run(
       taskId,
@@ -237,6 +252,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
       d.expected_date ?? null,
       d.assignee_id ?? null,
       d.recurrence_rule ?? null,
+      d.recurrence_parent_id ?? null,
       d.project_id,
       req.user?.id ?? null,
     );
@@ -318,8 +334,13 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
     });
     run();
 
-    // A recurring task spawns the next one when closed
+    // A recurring task spawns the next one when closed. An encrypted title is
+    // bound to this task's id and would not open under a new one, so for such
+    // a task the server only names the date and the browser creates the copy
+    // (`next_due`, handled in web/src/lib/codec.ts); a plaintext task from
+    // before the key is copied here as before.
     let spawned: unknown = null;
+    let nextDue: string | null = null;
     if (d.status === 'done' && task.recurrence_rule && task.due_date) {
       // The series starts at the original task — that is what we count from.
       const rootId = task.recurrence_parent_id ?? taskId;
@@ -328,7 +349,9 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         | undefined;
       const anchor = root?.due_date ?? task.due_date;
       const next = occurrenceAfter(anchor, task.due_date, task.recurrence_rule);
-      if (next) {
+      if (next && isCiphertext(task.title)) {
+        nextDue = next;
+      } else if (next) {
         const nextId = id();
         // expected_date is deliberately not copied: it describes how one
         // specific occurrence is going in reality, not the series pattern
@@ -357,7 +380,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    return { task: db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId), spawned };
+    return { task: db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId), spawned, next_due: nextDue };
   });
 
   /**

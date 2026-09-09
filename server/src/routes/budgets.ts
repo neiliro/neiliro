@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db, id, now, today } from '../db/index.js';
 import { expandOccurrences, isValidRecurrence } from '../lib/recurrence.js';
+import { isCiphertext } from '../lib/ciphertext.js';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH = /^\d{4}-\d{2}$/;
@@ -42,6 +43,9 @@ export interface DueItem {
   kind: string;
   amount: number;
   currency: string;
+  /** The joined names may be envelopes; the browser opens them under these ids (#219) */
+  account_id: string;
+  category_id: string | null;
   account_name: string;
   /** Where a transfer lands — the outlook needs it to tell an internal move from an outflow. */
   to_account_id: string | null;
@@ -94,6 +98,8 @@ export function dueOccurrences(userId: string, horizon = today()): DueItem[] {
         kind: rule.kind,
         amount: rule.amount,
         currency: rule.currency,
+        account_id: rule.account_id,
+        category_id: rule.category_id,
         account_name: rule.account_name,
         to_account_id: rule.to_account_id,
         category_name: rule.category_name,
@@ -118,6 +124,10 @@ function materialize(ruleId: string, date: string, userId: string | null): strin
   if (exists) return exists.id;
 
   const txId = id();
+  // An encrypted note is bound to the rule's id and would not open under the
+  // transaction's; it is not copied — the transaction inherits the rule's
+  // words through recurring_id (the list joins them, the browser shows
+  // them). A plaintext rule from before the key is copied as before.
   db.prepare(
     `INSERT INTO transactions (id, kind, occurred_on, account_id, amount, to_account_id, to_amount,
                                category_id, note, place, recurring_id, recurring_on, created_by)
@@ -131,8 +141,8 @@ function materialize(ruleId: string, date: string, userId: string | null): strin
     rule.to_account_id,
     rule.to_amount,
     rule.category_id,
-    rule.note,
-    rule.place,
+    isCiphertext(rule.note) ? null : rule.note,
+    isCiphertext(rule.place) ? null : rule.place,
     ruleId,
     date,
     userId,
@@ -190,8 +200,9 @@ export function runAutoCreate(): number {
 
 // ── Schemas ───────────────────────────────────────────────────────────────
 
+// Ceilings sized for envelopes (#219)
 const recurringInput = z.object({
-  title: z.string().min(1, 'Enter a title').max(200),
+  title: z.string().min(1, 'Enter a title').max(4_000),
   kind: z.enum(['expense', 'income', 'transfer']),
   start_on: z.string().regex(DATE, 'Date must be YYYY-MM-DD'),
   recurrence_rule: z.string().min(1).max(100),
@@ -200,8 +211,8 @@ const recurringInput = z.object({
   to_account_id: z.string().uuid().nullable().optional(),
   to_amount: z.number().int().positive().nullable().optional(),
   category_id: z.string().uuid().nullable().optional(),
-  note: z.string().max(500).nullable().optional(),
-  place: z.string().max(200).nullable().optional(),
+  note: z.string().max(4_000).nullable().optional(),
+  place: z.string().max(4_000).nullable().optional(),
   auto_create: z.boolean().optional(),
   active: z.boolean().optional(),
 });
@@ -258,7 +269,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
            FROM chosen b
            JOIN categories c ON c.id = b.category_id
           WHERE b.rn = 1 AND c.archived_at IS NULL
-          ORDER BY c.position, c.name`,
+          ORDER BY c.position`,
       )
       .all(month, from, to, userId);
   });
@@ -313,13 +324,14 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
            JOIN accounts a ON a.id = r.account_id
            LEFT JOIN categories c ON c.id = r.category_id
           WHERE ${ACCOUNT_VISIBLE}
-          ORDER BY r.active DESC, r.title`,
+          ORDER BY r.active DESC, r.created_at`,
       )
       .all(req.user?.id ?? ''),
   );
 
   app.post('/api/recurring', (req, reply) => {
-    const parsed = recurringInput.safeParse(req.body);
+    // The browser mints the id when it encrypts: the envelope is bound to it
+    const parsed = recurringInput.extend({ id: z.string().uuid().optional() }).safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
     }
@@ -337,7 +349,10 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(400).send({ error: 'Destination account not found' });
     }
 
-    const ruleId = id();
+    const ruleId = d.id ?? id();
+    if (d.id && db.prepare('SELECT 1 FROM recurring_transactions WHERE id = ?').get(d.id)) {
+      return reply.code(409).send({ error: 'A rule with this id already exists' });
+    }
     db.prepare(
       `INSERT INTO recurring_transactions
          (id, title, kind, start_on, recurrence_rule, account_id, amount, to_account_id, to_amount,

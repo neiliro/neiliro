@@ -3,6 +3,7 @@ import { t } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useKeys } from '../lib/family-key';
 import { RecoveryCodeDialog, RecoveryCodePanel } from './RecoveryCode';
+import { encryptExisting, type EncryptProgress } from '../lib/encrypt-existing';
 
 /*
   Settings → Family key. Every member sees where this device stands and can
@@ -16,6 +17,20 @@ export function KeysSection() {
   const [fresh, setFresh] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [job, setJob] = useState<EncryptProgress | null>(null);
+  const [jobRunning, setJobRunning] = useState(false);
+
+  async function encryptNotes() {
+    setJobRunning(true);
+    setError(null);
+    try {
+      await encryptExisting(setJob);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('Something went wrong'));
+    } finally {
+      setJobRunning(false);
+    }
+  }
 
   const rowButton =
     'rounded-lg border border-line px-3 py-1.5 text-sm text-ink transition-colors hover:bg-surface-2 disabled:opacity-50';
@@ -83,6 +98,28 @@ export function KeysSection() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {status === 'unlocked' && user?.role !== 'kid' && (
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">
+          <div>
+            <p className="text-sm font-medium text-ink">{t('Encrypt what was written before the key')}</p>
+            <p className="text-xs text-muted">
+              {job === null
+                ? t('Notes, tasks, projects, events and money records from before the key existed are still readable on the server. This rewrites them under the key, here in your browser; each member does it once for their private notes, calendars and accounts.')
+                : jobRunning
+                  ? t('Encrypting… {done} of {total}', { done: job.done + job.failed, total: job.total })
+                  : job.total === 0
+                    ? t('Nothing left to encrypt.')
+                    : job.failed === 0
+                      ? t('Done — {n} encrypted.', { n: job.done })
+                      : t('Done — {n} encrypted, {failed} failed. Run it again.', { n: job.done, failed: job.failed })}
+            </p>
+          </div>
+          <button type="button" className={rowButton} disabled={jobRunning} onClick={() => void encryptNotes()}>
+            {t('Encrypt')}
+          </button>
         </div>
       )}
 

@@ -1,4 +1,5 @@
 import { t } from './i18n';
+import { decodeResponse, encodeRequest } from './codec';
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -8,10 +9,19 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/*
+  Every body goes through the codec before it leaves and every answer
+  before it is returned (lib/codec.ts, ADR 0001): fields the family
+  encrypts are sealed and opened here, so the pages above keep speaking
+  plaintext. A codec refusal (this device holds no key while the family
+  has one) surfaces as an ordinary error message.
+*/
+async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+  const encoded = body === undefined ? undefined : await encodeRequest(method, path, body);
   const res = await fetch(`/api${path}`, {
+    method,
     headers: { 'Content-Type': 'application/json' },
-    ...init,
+    ...(encoded === undefined ? {} : { body: JSON.stringify(encoded) }),
   });
   if (!res.ok) {
     // A dead session must take the offline caches with it: after a
@@ -25,18 +35,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new ApiError(t(body?.error ?? 'The server is unreachable'), res.status);
   }
-  return (await res.json()) as T;
+  return (await decodeResponse(method, path, await res.json(), request)) as T;
 }
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
-  patch: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
-  put: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
-  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  post: <T>(path: string, body: unknown) => request<T>(path, 'POST', body),
+  patch: <T>(path: string, body: unknown) => request<T>(path, 'PATCH', body),
+  put: <T>(path: string, body: unknown) => request<T>(path, 'PUT', body),
+  delete: <T>(path: string) => request<T>(path, 'DELETE'),
 };
 
 // ── Types shared with the server ──────────────────────────────────────────

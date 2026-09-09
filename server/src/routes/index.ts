@@ -108,6 +108,59 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
    * for an entity whose visibility depends on calendar settings is a
    * desync source out of nowhere.
    */
+  /*
+    The searchable corpus, for a search that runs in the browser (#216).
+
+    Once titles and bodies are ciphertext the server cannot match a query
+    against them; what it still can do — and must — is decide who may see
+    which row. This endpoint applies exactly the visibility rules the old
+    /api/search applied (owner_id for notes, calendar sharing for events,
+    the attachment joins from #184) and returns the rows with their text
+    fields as stored, encrypted or not. The browser decrypts and matches.
+    A family's corpus is thousands of rows; the caps keep one family from
+    spending everybody's event loop, same as the list endpoints.
+  */
+  app.get('/api/search/corpus', (req) => {
+    const userId = req.user?.id ?? '';
+    const notes = db
+      .prepare(
+        `SELECT n.id, n.title, n.body_md, n.visibility, n.is_template, f.name AS folder_name
+           FROM notes n LEFT JOIN folders f ON f.id = n.folder_id
+          WHERE (n.visibility = 'shared' OR n.owner_id = ?)
+          ORDER BY n.updated_at DESC LIMIT 2000`,
+      )
+      .all(userId);
+    const tasks = db
+      .prepare(
+        `SELECT t.id, t.title, t.description, t.status, t.due_date, t.project_id,
+                p.title AS project_title, p.color
+           FROM tasks t JOIN projects p ON p.id = t.project_id
+          ORDER BY t.updated_at DESC LIMIT 5000`,
+      )
+      .all();
+    const projects = db.prepare('SELECT id, title, description, color FROM projects').all();
+    const events = db
+      .prepare(
+        `SELECT e.id, e.title, e.description, e.location, e.starts_at, e.calendar_id, e.profile_user_id,
+                c.name AS calendar_name, c.color
+           FROM events e JOIN calendars c ON c.id = e.calendar_id
+          WHERE (c.shared = 1 OR c.owner_id = ?)
+          ORDER BY e.starts_at DESC LIMIT 5000`,
+      )
+      .all(userId);
+    const attachments = db
+      .prepare(
+        `SELECT a.id, a.filename, a.mime, a.size_bytes, a.encryption, a.note_id, a.transaction_id,
+                a.mail_message_id, n.title AS note_title
+           FROM attachments a
+           ${ATTACHMENT_VISIBLE_JOINS}
+          WHERE ${ATTACHMENT_VISIBLE}
+          ORDER BY a.created_at DESC LIMIT 5000`,
+      )
+      .all(userId, userId);
+    return { notes, tasks, projects, events, attachments };
+  });
+
   app.get('/api/search', (req, reply) => {
     const { q } = z.object({ q: z.string() }).parse(req.query);
     const query = q.trim();

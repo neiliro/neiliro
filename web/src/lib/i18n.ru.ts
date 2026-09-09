@@ -957,6 +957,49 @@ export const ru: Record<string, string> = {
   'You already hold the key': 'У вас уже есть ключ',
   'Handoff not found': 'Ссылка на возврат ключа не найдена',
   'Invite not found': 'Приглашение не найдено',
+
+  // E2E phase 2: notes under the key
+  'This device does not hold the family key — the note is read-only until you unlock it in Settings.':
+    'На этом устройстве нет ключа семьи — заметка только для чтения, пока вы не откроете ключ в настройках.',
+  'This device does not hold the family key — unlock it before editing':
+    'На этом устройстве нет ключа семьи — откройте его перед редактированием',
+  'Encrypt what was written before the key': 'Зашифровать написанное до ключа',
+  'Notes, tasks, projects, events and money records from before the key existed are still readable on the server. This rewrites them under the key, here in your browser; each member does it once for their private notes, calendars and accounts.':
+    'Заметки, задачи, проекты, события и денежные записи, созданные до появления ключа, всё ещё читаются на сервере. Это перезапишет их под ключом прямо в браузере; свои приватные заметки, календари и счета каждый участник шифрует сам, один раз.',
+  'Encrypting… {done} of {total}': 'Шифруем… {done} из {total}',
+  'Nothing left to encrypt.': 'Шифровать больше нечего.',
+  'Done — {n} encrypted.': 'Готово — зашифровано: {n}.',
+  'Done — {n} encrypted, {failed} failed. Run it again.': 'Готово — зашифровано: {n}, не получилось: {failed}. Запустите ещё раз.',
+  'Encrypt': 'Зашифровать',
+  'A note with this id already exists': 'Заметка с таким id уже есть',
+  'A task with this id already exists': 'Задача с таким id уже есть',
+  'A project with this id already exists': 'Проект с таким id уже есть',
+  'An event with this id already exists': 'Событие с таким id уже есть',
+  'A calendar with this id already exists': 'Календарь с таким id уже есть',
+  'An account with this id already exists': 'Счёт с таким id уже есть',
+  'A category with this id already exists': 'Категория с таким id уже есть',
+  'A transaction with this id already exists': 'Операция с таким id уже есть',
+  'A rule with this id already exists': 'Правило с таким id уже есть',
+  'A list with this id already exists': 'Список с таким id уже есть',
+  'An item with this id already exists': 'Пункт с таким id уже есть',
+  'A section with this id already exists': 'Раздел с таким id уже есть',
+  'An entry with this id already exists': 'Запись с таким id уже есть',
+  'An attachment with this id already exists': 'Вложение с таким id уже есть',
+  'The file name is too long': 'Слишком длинное имя файла',
+  'The browser creates the task for an encrypted letter': 'Задачу из зашифрованного письма создаёт браузер',
+  'The browser names the recipient and the subject for an encrypted letter': 'Получателя и тему зашифрованного письма называет браузер',
+  'A reply is sent by the server, so the server sees what you write here — it is the one sending it. Letters you receive are sealed for the family the moment they arrive.':
+    'Ответ отправляет сервер, поэтому он видит написанное здесь — это он его посылает. Входящие письма запечатываются для семьи в момент прибытия.',
+  'The link carries the family key for this one list: the server opens it for whoever follows the link.':
+    'В ссылке едет ключ семьи для этого одного списка: сервер открывает его тому, кто перейдёт по ссылке.',
+  'Wishes are meant for guests, so they are the one thing here the server keeps readable — the family’s public face, not its diary.':
+    'Желания — для гостей, поэтому это единственное здесь, что сервер хранит читаемым: публичное лицо семьи, а не её дневник.',
+  'The link carries the family key after the address: your calendar app needs readable events, so the server opens them for that app alone, each time it asks. A subscription added before encryption shows dots instead of words — remove it and add this link again.':
+    'После адреса в ссылке идёт ключ семьи: календарю нужны читаемые события, поэтому сервер открывает их только для этого приложения и только когда оно спрашивает. Подписка, добавленная до шифрования, покажет точки вместо слов — удалите её и добавьте эту ссылку заново.',
+  'This device does not hold the family key, so the link shown here opens no encrypted events. Open the key on this device and come back for the full link.':
+    'На этом устройстве нет ключа семьи, поэтому показанная ссылка не откроет зашифрованные события. Откройте ключ на этом устройстве и вернитесь за полной ссылкой.',
+  'The link carries the family key for this one event: the server opens it for whoever follows the link.':
+    'В ссылке едет ключ семьи для этого одного события: сервер открывает его тому, кто перейдёт по ссылке.',
 };
 
 /** one / few / many, keyed by the English singular used in plural() calls. */

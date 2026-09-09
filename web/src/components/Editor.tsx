@@ -7,6 +7,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import { TableKit } from '@tiptap/extension-table';
 import Highlight from '@tiptap/extension-highlight';
 import Image from '@tiptap/extension-image';
+import { attachmentUrl } from '../lib/files';
 import { Placeholder } from '@tiptap/extensions';
 import { Markdown } from 'tiptap-markdown';
 import { WikiLink } from './WikiLink';
@@ -51,13 +52,15 @@ interface Props {
   onChange: (markdown: string) => void;
   onNavigate: (title: string) => void;
   onUpload: (files: File[]) => Promise<UploadedFile[]>;
+  /** False on a device that cannot open the family key: reading is fine, typing would be lost. */
+  editable?: boolean;
 }
 
 const btn =
   'rounded px-2 py-1 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-ink';
 const btnActive = 'rounded px-2 py-1 text-sm bg-accent-soft text-accent';
 
-export function Editor({ noteId, revision = 0, initialMarkdown, onChange, onNavigate, onUpload }: Props) {
+export function Editor({ noteId, revision = 0, initialMarkdown, onChange, onNavigate, onUpload, editable = true }: Props) {
   const [dropping, setDropping] = useState(false);
   const [uploading, setUploading] = useState(false);
   const uploadRef = useRef(onUpload);
@@ -82,7 +85,24 @@ export function Editor({ noteId, revision = 0, initialMarkdown, onChange, onNavi
         // Lazy loading: a decoded photo takes megabytes of tab memory
         // regardless of file size. In a long note full of photos, let
         // the ones on screen decode rather than all of them at once.
-        Image.configure({
+        // The document keeps /api/attachments/<id> as the src — that is what
+        // the markdown stores — while what is displayed resolves through
+        // lib/files.ts, which decrypts a sealed image into a blob URL (#222)
+        Image.extend({
+          addNodeView() {
+            return ({ node }) => {
+              const img = document.createElement('img');
+              img.loading = 'lazy';
+              img.decoding = 'async';
+              img.alt = String(node.attrs['alt'] ?? '');
+              const src = String(node.attrs['src'] ?? '');
+              const m = /^\/api\/attachments\/([0-9a-f-]{36})$/.exec(src);
+              if (m) void attachmentUrl(m[1]!).then((url) => (img.src = url)).catch(() => undefined);
+              else img.src = src;
+              return { dom: img };
+            };
+          },
+        }).configure({
           inline: false,
           HTMLAttributes: { loading: 'lazy', decoding: 'async' },
         }),
@@ -90,6 +110,7 @@ export function Editor({ noteId, revision = 0, initialMarkdown, onChange, onNavi
         WikiLink.configure({ onNavigate }),
       ],
       content: initialMarkdown,
+      editable,
       editorProps: {
         attributes: { class: 'note-content' },
 
@@ -118,7 +139,7 @@ export function Editor({ noteId, revision = 0, initialMarkdown, onChange, onNavi
     },
     // Recreate the editor when the note changes: no manual content sync
     // needed, and it's impossible to accidentally write text into the wrong note.
-    [noteId, revision],
+    [noteId, revision, editable],
   );
 
   async function handleFiles(files: File[], at?: number) {

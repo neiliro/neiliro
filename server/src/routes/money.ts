@@ -30,8 +30,10 @@ const BALANCE_SQL = `a.opening_balance
   + coalesce((SELECT sum(t.to_amount) FROM transactions t
        WHERE t.to_account_id = a.id AND t.kind = 'transfer'), 0)`;
 
+// Ceilings are sized for envelopes (#219): an encrypted value is roughly a
+// third longer than its words. Amounts, dates, kinds and ids never change.
 const accountInput = z.object({
-  name: z.string().min(1, 'Enter an account name').max(100),
+  name: z.string().min(1, 'Enter an account name').max(4_000),
   currency: z
     .string()
     .regex(/^[A-Z]{3}$/, 'The currency code is three capital letters, e.g. RSD or EUR'),
@@ -42,7 +44,7 @@ const accountInput = z.object({
 });
 
 const categoryInput = z.object({
-  name: z.string().min(1, 'Enter a category name').max(100),
+  name: z.string().min(1, 'Enter a category name').max(4_000),
   kind: z.enum(['expense', 'income']),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   parent_id: z.string().uuid().nullable().optional(),
@@ -71,8 +73,8 @@ const txBase = z.object({
   to_account_id: z.string().uuid().nullable().optional(),
   to_amount: z.number().int().positive().nullable().optional(),
   category_id: z.string().uuid().nullable().optional(),
-  note: z.string().max(500).nullable().optional(),
-  place: z.string().max(200).nullable().optional(),
+  note: z.string().max(4_000).nullable().optional(),
+  place: z.string().max(4_000).nullable().optional(),
 });
 
 type TxDraft = Partial<z.infer<typeof txBase>>;
@@ -86,7 +88,9 @@ const secondSideOnlyForTransfer = (v: TxDraft) =>
 const notSameAccount = (v: TxDraft) =>
   !v.to_account_id || v.account_id !== v.to_account_id;
 
+// The browser mints the id when it encrypts: the envelope is bound to it
 const txInput = txBase
+  .extend({ id: z.string().uuid().optional() })
   .refine(transferHasSecondSide, {
     message: 'A transfer needs a destination account and a received amount',
     path: ['to_account_id'],
@@ -144,7 +148,7 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
            FROM accounts a
            LEFT JOIN users u ON u.id = a.owner_id
           WHERE ${ACCOUNT_VISIBLE} AND a.archived_at ${clause}
-          ORDER BY a.shared DESC, a.position, a.name`,
+          ORDER BY a.shared DESC, a.position`,
       )
       .all(req.user?.id ?? '') as (AccountRow & {
       balance: number;
@@ -198,13 +202,16 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/accounts', (req, reply) => {
-    const parsed = accountInput.safeParse(req.body);
+    const parsed = accountInput.extend({ id: z.string().uuid().optional() }).safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
     }
     const d = parsed.data;
     const personal = d.shared === false;
-    const accountId = id();
+    const accountId = d.id ?? id();
+    if (d.id && db.prepare('SELECT 1 FROM accounts WHERE id = ?').get(d.id)) {
+      return reply.code(409).send({ error: 'An account with this id already exists' });
+    }
 
     db.prepare(
       `INSERT INTO accounts (id, name, currency, kind, opening_balance, owner_id, shared, color,
@@ -326,7 +333,7 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
       .object({
         checked_on: z.string().regex(DATE),
         actual_balance: z.number().int(),
-        note: z.string().max(300).nullable().optional(),
+        note: z.string().max(4_000).nullable().optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Enter the date and the actual balance' });
@@ -369,13 +376,13 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
     return db
       .prepare(
         `SELECT * FROM categories WHERE archived_at IS NULL ${clause}
-          ORDER BY kind, position, name`,
+          ORDER BY kind, position`,
       )
       .all(...args);
   });
 
   app.post('/api/categories', (req, reply) => {
-    const parsed = categoryInput.safeParse(req.body);
+    const parsed = categoryInput.extend({ id: z.string().uuid().optional() }).safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
     }
@@ -383,7 +390,10 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
       const problem = parentProblem(parsed.data.parent_id, parsed.data.kind);
       if (problem) return reply.code(400).send({ error: problem });
     }
-    const categoryId = id();
+    const categoryId = parsed.data.id ?? id();
+    if (parsed.data.id && db.prepare('SELECT 1 FROM categories WHERE id = ?').get(parsed.data.id)) {
+      return reply.code(409).send({ error: 'A category with this id already exists' });
+    }
     db.prepare(
       `INSERT INTO categories (id, name, kind, color, position, parent_id)
        VALUES (?, ?, ?, ?, (SELECT coalesce(max(position), 0) + 1 FROM categories), ?)`,
@@ -511,12 +521,14 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
                 b.shared AS to_shared, b.owner_id AS to_owner,
                 c.name AS category_name, c.color AS category_color,
                 u.name AS author_name,
+                r.title AS recurring_title, r.note AS recurring_note, r.place AS recurring_place,
                 (SELECT count(*) FROM attachments att WHERE att.transaction_id = t.id) AS receipts
            FROM transactions t
            JOIN accounts a ON a.id = t.account_id
            LEFT JOIN accounts b ON b.id = t.to_account_id
            LEFT JOIN categories c ON c.id = t.category_id
            LEFT JOIN users u ON u.id = t.created_by
+           LEFT JOIN recurring_transactions r ON r.id = t.recurring_id
           WHERE ${where.join(' AND ')}
           ORDER BY t.occurred_on DESC, t.created_at DESC
           LIMIT ?`,
@@ -546,6 +558,9 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
         masked['account_color'] = null;
         masked['note'] = null;
         masked['place'] = null;
+        masked['recurring_title'] = null;
+        masked['recurring_note'] = null;
+        masked['recurring_place'] = null;
         masked['category_name'] = null;
       }
       return masked;
@@ -580,7 +595,10 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    const txId = id();
+    const txId = d.id ?? id();
+    if (d.id && db.prepare('SELECT 1 FROM transactions WHERE id = ?').get(d.id)) {
+      return reply.code(409).send({ error: 'A transaction with this id already exists' });
+    }
     db.prepare(
       `INSERT INTO transactions (id, kind, occurred_on, account_id, amount, to_account_id,
                                  to_amount, category_id, note, place, created_by)
@@ -695,7 +713,7 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
     }
     return db
       .prepare(
-        `SELECT id, filename, mime, size_bytes,
+        `SELECT id, filename, mime, size_bytes, encryption,
                 CASE WHEN mime LIKE 'image/%' THEN 1 ELSE 0 END AS is_image
            FROM attachments WHERE transaction_id = ? ORDER BY created_at`,
       )
@@ -834,7 +852,7 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
           currency,
           balance,
           next_income: income
-            ? { title: income.title, date: income.occurred_on, amount: income.amount }
+            ? { recurring_id: income.recurring_id, title: income.title, date: income.occurred_on, amount: income.amount }
             : null,
           until,
           bills,

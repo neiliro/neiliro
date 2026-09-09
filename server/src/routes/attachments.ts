@@ -37,7 +37,20 @@ interface AttachmentRow {
   storage_path: string;
   note_id: string | null;
   transaction_id: string | null;
+  /** 0 plaintext, 1 family-key file envelope, 2 sealed to the family public key (migration 036) */
+  encryption: number;
 }
+
+/*
+  An encrypted upload (#222) names itself by its multipart field: `sealed:<id>`
+  carries a file the browser already encrypted under the id it minted (the
+  file envelope's authenticated data is the attachment id, so the id must
+  exist before the first byte is encrypted). The filename that arrives with
+  it is an envelope too. A plain `file` part is a plaintext upload from a
+  family without a key, stored as before.
+*/
+const SEALED_FIELD = /^sealed:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const FILENAME_MAX = 4_000;
 
 /*
   Who may see an attachment, as one expression rather than one per caller.
@@ -102,6 +115,7 @@ interface UploadedInfo {
   mime: string;
   size_bytes: number;
   is_image: boolean;
+  encryption: number;
   url: string;
 }
 
@@ -124,12 +138,16 @@ interface UploadedInfo {
 */
 
 export interface StagedAttachment {
+  /** Minted by the caller: a sealed file is bound to it before it is written (#223) */
+  id: string;
   filename: string;
   mime: string;
   size: number;
   /** Relative to the family's attachments directory, as stored in the row. */
   storagePath: string;
   absPath: string;
+  /** 0 plaintext, 2 sealed to the family public key */
+  encryption: number;
 }
 
 /** Bytes already on this family's tab — the budget is cumulative across parts. */
@@ -146,13 +164,14 @@ export function attachmentBytesUsed(): number {
  * message without re-reading the table per part.
  */
 export async function stageMailAttachment(
-  file: { filename: string; mime: string; content: Buffer },
+  file: { id: string; filename: string; mime: string; content: Buffer; encryption: number },
   usedBytes: number,
 ): Promise<StagedAttachment | null> {
   if (file.content.length === 0 || file.content.length > MAX_FILE_BYTES) return null;
   if (usedBytes + file.content.length > BUDGET_BYTES) return null;
 
-  const storageName = storageNameFor(file.filename);
+  // A sealed file's extension is nobody's business; the stored name is an id
+  const storageName = storageNameFor(file.encryption ? '' : file.filename);
   const month = today().slice(0, 7);
   const folder = join(currentTenant().attachmentsDir, month);
   await mkdir(folder, { recursive: true });
@@ -160,20 +179,22 @@ export async function stageMailAttachment(
   await writeFile(absPath, file.content);
 
   return {
-    filename: file.filename.slice(0, 300),
+    id: file.id,
+    filename: file.filename.slice(0, FILENAME_MAX),
     mime: safeMime(file.mime),
     size: file.content.length,
     storagePath: join(month, storageName),
     absPath,
+    encryption: file.encryption,
   };
 }
 
 /** The row for a staged part — synchronous, meant for the caller's transaction. */
 export function insertStagedAttachment(mailMessageId: string, staged: StagedAttachment): void {
   db.prepare(
-    `INSERT INTO attachments (id, filename, mime, size_bytes, storage_path, mail_message_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id(), staged.filename, staged.mime, staged.size, staged.storagePath, mailMessageId, now());
+    `INSERT INTO attachments (id, filename, mime, size_bytes, storage_path, mail_message_id, created_at, encryption)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(staged.id, staged.filename, staged.mime, staged.size, staged.storagePath, mailMessageId, now(), staged.encryption);
 }
 
 /** Undo staging when the message did not land. Best effort: a file that is already gone is fine. */
@@ -218,7 +239,19 @@ async function receiveFiles(
   }
 
   for await (const part of req.files()) {
-    const storageName = storageNameFor(part.filename);
+    const sealed = SEALED_FIELD.exec(part.fieldname);
+    if (sealed && db.prepare('SELECT 1 FROM attachments WHERE id = ?').get(sealed[1]!)) {
+      await rollback();
+      await reply.code(409).send({ error: 'An attachment with this id already exists' });
+      return null;
+    }
+    if (part.filename.length > FILENAME_MAX) {
+      await rollback();
+      await reply.code(400).send({ error: 'The file name is too long' });
+      return null;
+    }
+    // A sealed file's extension is nobody's business; the stored name is the id
+    const storageName = storageNameFor(sealed ? '' : part.filename);
     // The month folder — by the local clock, like everything else in the app
     const month = today().slice(0, 7);
     const folder = join(currentTenant().attachmentsDir, month);
@@ -238,11 +271,12 @@ async function receiveFiles(
     }
 
     const { size } = await stat(fullPath);
-    const attachmentId = id();
+    const attachmentId = sealed ? sealed[1]! : id();
+    const encryption = sealed ? 1 : 0;
     db.prepare(
       `INSERT INTO attachments (id, filename, mime, size_bytes, storage_path, note_id,
-                                transaction_id, uploaded_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                transaction_id, uploaded_by, created_at, encryption)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       attachmentId,
       part.filename,
@@ -254,6 +288,7 @@ async function receiveFiles(
       target.transaction_id,
       (req.user?.id ?? '') || null,
       now(),
+      encryption,
     );
 
     savedPaths.push(fullPath);
@@ -263,6 +298,7 @@ async function receiveFiles(
       mime: safeMime(part.mimetype),
       size_bytes: size,
       is_image: IMAGE_MIME.test(part.mimetype),
+      encryption,
       url: `/api/attachments/${attachmentId}`,
     });
   }
@@ -340,6 +376,19 @@ export async function registerAttachmentRoutes(app: FastifyInstance): Promise<vo
       return reply.code(404).send({ error: 'The file is missing on disk' });
     }
 
+    // An encrypted file is bytes the browser opens after the fetch (#222):
+    // it is served as an opaque download under its id, with the envelope
+    // kind in a header so the client knows which key opens it. The cache
+    // header is unchanged — the service worker caches ciphertext, which is
+    // the better thing to have on a lost device.
+    if (attachment.encryption > 0) {
+      return reply
+        .header('Content-Type', 'application/octet-stream')
+        .header('Content-Disposition', `attachment; filename="${attachment.id}.ne1"`)
+        .header('X-Neiliro-Encryption', String(attachment.encryption))
+        .header('Cache-Control', 'private, max-age=31536000, immutable')
+        .send(createReadStream(fullPath));
+    }
     const inline = download !== 'true' && INLINE_MIME.test(attachment.mime);
     return reply
       .header('Content-Type', safeMime(attachment.mime))
@@ -347,6 +396,47 @@ export async function registerAttachmentRoutes(app: FastifyInstance): Promise<vo
       // Content under an id never changes; safe to cache for a long time
       .header('Cache-Control', 'private, max-age=31536000, immutable')
       .send(createReadStream(fullPath));
+  });
+
+  /*
+    The one-time job re-uploads an existing plaintext file encrypted (#222).
+    The id has to survive — note markdown refers to /api/attachments/<id> —
+    so this replaces the bytes and the filename in place: one `sealed:<id>`
+    part, the same id as the route. Size is the ciphertext's; the declared
+    MIME type stays, it is how the client tells an image from a document.
+  */
+  app.put('/api/attachments/:id', async (req, reply) => {
+    const { id: attachmentId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const attachment = loadVisible(attachmentId, req.user?.id ?? '');
+    if (!attachment) return reply.code(404).send({ error: 'File not found' });
+
+    let replaced: { path: string; storagePath: string; size: number; filename: string } | null = null;
+    for await (const part of req.files()) {
+      const sealed = SEALED_FIELD.exec(part.fieldname);
+      if (!sealed || sealed[1] !== attachmentId || replaced) {
+        // Drain what we will not keep, so the parser finishes cleanly
+        for await (const _chunk of part.file) void _chunk;
+        continue;
+      }
+      const month = today().slice(0, 7);
+      const folder = join(currentTenant().attachmentsDir, month);
+      await mkdir(folder, { recursive: true });
+      const storageName = storageNameFor('');
+      const fullPath = join(folder, storageName);
+      await pipeline(part.file, createWriteStream(fullPath));
+      if (part.file.truncated || part.filename.length > FILENAME_MAX) {
+        await unlink(fullPath).catch(() => {});
+        return reply.code(413).send({ error: `The file exceeds ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB` });
+      }
+      replaced = { path: fullPath, storagePath: join(month, storageName), size: (await stat(fullPath)).size, filename: part.filename };
+    }
+    if (!replaced) return reply.code(400).send({ error: 'No file received' });
+
+    db.prepare(
+      'UPDATE attachments SET filename = ?, size_bytes = ?, storage_path = ?, encryption = 1 WHERE id = ?',
+    ).run(replaced.filename, replaced.size, replaced.storagePath, attachmentId);
+    await unlink(resolve(currentTenant().attachmentsDir, attachment.storage_path)).catch(() => {});
+    return { id: attachmentId, filename: replaced.filename, size_bytes: replaced.size, encryption: 1 };
   });
 
   app.delete('/api/attachments/:id', async (req, reply) => {

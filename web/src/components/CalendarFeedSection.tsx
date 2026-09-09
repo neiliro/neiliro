@@ -1,6 +1,8 @@
 import { t } from '../lib/i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { useKeys } from '../lib/family-key';
+import { familyKeySuffix } from '../lib/token-key';
 
 /**
  * Subscribe-by-URL for the calendar.
@@ -12,13 +14,21 @@ import { api } from '../lib/api';
  */
 export function CalendarFeedSection() {
   const [token, setToken] = useState<string | null>(null);
+  const [suffix, setSuffix] = useState('');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const { status } = useKeys();
 
   const load = useCallback(async () => {
     const res = await api.get<{ token: string | null }>('/calendar/feed');
     setToken(res.token);
   }, []);
+
+  // The key half of the link is appended on this device (#218): the server
+  // never sees it outside the requests the calendar app makes
+  useEffect(() => {
+    void familyKeySuffix().then(setSuffix);
+  }, [status]);
 
   useEffect(() => {
     void load();
@@ -26,7 +36,7 @@ export function CalendarFeedSection() {
 
   // Built from the current origin: the hub does not need to know its own
   // public address, and a family on a subdomain gets its own host for free.
-  const url = token ? `${window.location.origin}/api/calendar/feed/${token}.ics` : null;
+  const url = token ? `${window.location.origin}/api/calendar/feed/${token}${suffix}.ics` : null;
 
   async function create() {
     setBusy(true);
@@ -72,6 +82,13 @@ export function CalendarFeedSection() {
           <p className="mt-2 text-sm text-muted">
             {t('Paste this address into Apple Calendar, Google Calendar or Outlook as a subscription.')}
           </p>
+          {status !== 'absent' && (
+            <p className="mt-2 text-xs text-muted">
+              {status === 'unlocked'
+                ? t('The link carries the family key after the address: your calendar app needs readable events, so the server opens them for that app alone, each time it asks. A subscription added before encryption shows dots instead of words — remove it and add this link again.')
+                : t('This device does not hold the family key, so the link shown here opens no encrypted events. Open the key on this device and come back for the full link.')}
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"

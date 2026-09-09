@@ -290,7 +290,7 @@ interface Outlook {
   currencies: {
     currency: string;
     balance: number;
-    next_income: { title: string; date: string; amount: number } | null;
+    next_income: { recurring_id: string; title: string; date: string; amount: number } | null;
     until: string;
     bills: { title: string; date: string; amount: number }[];
     bills_total: number;
@@ -353,7 +353,9 @@ describe('the outlook says what is left until the next money arrives', () => {
     const chf = await outlookFor('CHF');
 
     expect(chf.balance).toBe(200_000);
-    expect(chf.next_income).toEqual({ title: 'Pay day', date: on(10), amount: 300_000 });
+    // The rule id rides along so the browser can open an encrypted title (#219)
+    expect(chf.next_income).toMatchObject({ title: 'Pay day', date: on(10), amount: 300_000 });
+    expect(typeof chf.next_income?.recurring_id).toBe('string');
     expect(chf.bills.map((b) => b.title)).toEqual(['Rent', 'Into the piggy bank']);
     expect(chf.bills_total).toBe(105_000);
     expect(chf.left).toBe(95_000);

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, api } from './api';
 import { useAuth } from './auth';
+import { setVault } from './vault';
 import {
   currentWrapKey,
   defaultKeyStore,
@@ -210,6 +211,14 @@ export function KeyProvider({ children, store }: { children: ReactNode; store?: 
   useEffect(() => {
     void sync();
   }, [sync]);
+
+  // The codec (lib/api.ts → lib/codec.ts) cannot read a React context, so
+  // the key's state is mirrored into lib/vault.ts. "The family has a key"
+  // is true for every state but `absent` — while the answer is still
+  // loading a write must refuse rather than fall through to plaintext.
+  useEffect(() => {
+    setVault({ key: familyKey, familyHasKey: status !== 'absent' });
+  }, [familyKey, status]);
 
   const unlockWithRecoveryCode = useCallback(
     async (code: string) => {

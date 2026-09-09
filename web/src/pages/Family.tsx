@@ -50,7 +50,7 @@ interface Member {
   color: string;
   birthday: string | null;
   family_role: FamilyRole | null;
-  allergies: string[];
+  allergies: { id: string; label: string }[];
 }
 
 interface Entry {
@@ -133,7 +133,7 @@ function MemberCard({ member, active }: { member: Member; active: boolean }) {
           not a click away */}
       {member.allergies.length > 0 && (
         <p className="mt-2 rounded-lg border border-urgent/40 bg-urgent/10 px-2.5 py-1.5 text-xs text-ink">
-          ⚠ {t('Allergies')}: {member.allergies.join(', ')}
+          ⚠ {t('Allergies')}: {member.allergies.map((a) => a.label).join(', ')}
         </p>
       )}
     </Link>
@@ -522,6 +522,9 @@ function MemberDetail({ userId, onChanged }: { userId: string; onChanged: () => 
         {/* The public link — the only thing here a guest ever sees */}
         {canEdit && (
           <div className="mt-4 border-t border-line pt-3 text-sm">
+            <p className="mb-2 text-xs text-muted">
+              {t('Wishes are meant for guests, so they are the one thing here the server keeps readable — the family’s public face, not its diary.')}
+            </p>
             {profile.wishlist_share_path ? (
               /* The link stays copyable for as long as it lives — it comes
                  with the profile, so a reload changes nothing (the token is

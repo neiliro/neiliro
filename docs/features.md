@@ -65,6 +65,8 @@ Task order is accepted as a full list of IDs (`POST /api/tasks/reorder`) rather 
 
 `Cmd/Ctrl + K` opens quick-add from any section. A task with no project selected goes to the Inbox.
 
+With a family key, task and project titles and descriptions are encrypted in the browser; status, dates, priority, assignee and the tree stay readable to the server, so the board, the dashboard buckets and the calendar window are still its queries. One consequence shows in recurrence: an encrypted title is bound to its own task, so when such a task is closed the server names the next date and the browser creates the next occurrence — the person sees the same «next one scheduled for…» as before.
+
 ## Notes
 
 ![Notes: markdown with wiki-links, templates and attachments](screenshots/notes.png)
@@ -79,6 +81,8 @@ Templates are ordinary notes with a flag: any note can become a template and bac
 
 A private note is visible only to its owner — in lists, in search, and by direct link. The administrator is no exception. The daily note included: if a private note by someone else already exists for a date, the second person gets an honest refusal, not its content — a second note for the same date cannot exist, the daily date is unique.
 
+Once the family has a key ([ADR 0001](adr/0001-client-side-encryption.md)), a note's title, body and list preview are encrypted in the browser before they are sent — as are task and project titles and descriptions, see below; folders, dates, visibility and the links between notes stay readable to the server, which is why the list, the daily note and backlinks work as before. Everything the server used to do with the text — the preview line, extracting `[[links]]`, expanding template placeholders, matching a title — now happens in the browser. A device that does not hold the key shows `••••••` in place of the words and opens notes read-only: saving from there would overwrite ciphertext with plaintext. Rows written before the key existed stay readable until Settings → Family key → *Encrypt what was written before the key* rewrites them, note versions included; each member runs it once for their own private notes, since nobody else can see those.
+
 ### Attachments
 
 Files go to the data directory under `attachments/YYYY-MM/` with generated names; the original name is kept in the database. A human-supplied name never becomes part of a disk path — otherwise `../../` in a name would write anywhere.
@@ -89,6 +93,8 @@ Files can be dragged straight into note text or pasted from the clipboard. Image
 
 An attachment is visible to whoever can see the note. Deleting a note removes the files from disk, not just the rows.
 
+With a family key, a file is encrypted in the browser before it is uploaded — receipts and note images alike — in one-megabyte chunks bound to the attachment's id, and its name is encrypted with it. The server stores bytes it cannot read, records the size (the ciphertext's, a few percent more) and the declared type, and serves the file back as an opaque download with a header naming the envelope kind; the browser opens it and shows it from memory, so images in notes and receipt thumbnails look as they always did. There are no server-side thumbnails or previews to lose, because there never were any. The offline cache keeps only ciphertext. Files from before the key are re-uploaded encrypted by the one-time job in Settings, keeping their ids so note text keeps pointing at them.
+
 ## Calendar
 
 ![Calendar: shared and personal layers, recurring events, who is going](screenshots/calendar.png)
@@ -96,6 +102,8 @@ An attachment is visible to whoever can see the note. Deleting a note removes th
 Time is stored as local wall-clock time, not UTC. "Every Tuesday at 10:00" must stay at 10:00 after a clock change; storing UTC would force recalculating every series occurrence through DST rules. A household lives in one time zone, and names it in Settings → Time zone.
 
 Recurring events expand on the fly per requested range and are never materialised into the database: "every year" with no end date is an infinite table. A single occurrence can be cancelled without touching the series; cancelled dates are kept as an exception list.
+
+With a family key, an event's title, description and location and a calendar's name are encrypted in the browser; times, the recurrence rule and which calendar an event is in stay readable, so the server still expands series and applies calendar privacy. A birthday derived from a profile keeps the member's name readable, as the member list does.
 
 Event participants ("who is going") show as circles with the first letter of the name — in the grid, the agenda and the dashboard. Without that, picking participants produced no visible result and looked broken.
 
@@ -105,7 +113,7 @@ A calendar is either shared (visible to all) or personal (visible only to the ow
 
 `Cmd/Ctrl + Shift + F` — across tasks, notes, events, projects and file names. `Cmd + K` stays reserved for quick task adding.
 
-Notes, tasks and projects are searched via FTS5; events and attachments by direct scan with `ci_contains`. Keeping an index for an entity whose visibility depends on calendar settings would create a desynchronisation source; and there are hundreds of events, not tens of thousands.
+Matching happens in the browser: the server hands over the rows this person may see (`GET /api/search/corpus`, with the same owner and calendar filters the lists apply), the browser decrypts them and looks for the query as a case-insensitive substring, three characters minimum. That is what the old trigram index did, so morphology still comes for free — «переезд» finds «переезда» — and it is the only arrangement that works once titles are encrypted, since the server cannot look inside them. The corpus is a few thousand rows at most and is cached for half a minute in the tab.
 
 Private content never appears in someone else's results — not notes, not personal-calendar events, not files attached to them.
 
@@ -130,7 +138,7 @@ The things a household knows about each other and otherwise keeps in someone's h
 
 The household stands in a column down the left and the chosen profile opens beside it, so checking a second person — the other child's allergies, who else has a birthday this month — is one click rather than a return trip through a list. A phone has room for one pane and shows whichever the address asks for.
 
-**Allergies are on the family list itself**, not behind a click: they exist to be findable in a hurry by whoever is cooking. **Preferences** are label–value pairs ("Shoes — 38"), scannable in a shop. The **birthday** saved on a profile derives a yearly event in the shared calendar, age included — the profile owns the date, the calendar entry follows it.
+With a family key, allergies and preferences — label and value — are encrypted in the browser; the birthday and the family role stay readable because the dashboard's reminder needs the date. **Allergies are on the family list itself**, not behind a click: they exist to be findable in a hurry by whoever is cooking. **Preferences** are label–value pairs ("Shoes — 38"), scannable in a shop. The **birthday** saved on a profile derives a yearly event in the shared calendar, age included — the profile owns the date, the calendar entry follows it.
 
 The **wishlist** keeps its surprise on the server: the owner is never sent what is reserved — not a flag, not a name — the same way a personal account's transfers are masked. Other family members see who reserved what and can reserve with one click.
 
@@ -156,11 +164,15 @@ Any event can get a public link — "the party is on Saturday at three, here is 
 
 It reveals **one event and nothing around it**: not the calendar it belongs to (that name can itself be private), not who is attending, not what else is on that day. Sharing an invitation should not open a window into the household. The link is revocable, and asking for it twice returns the same one, so it can be re-sent to the second parent a week later without breaking the first copy.
 
+When the family has a key, the link carries it after the token (`/event/<token>~<key>`): a guest needs words, so the server opens that one event for whoever follows the link, for that request only. The dialog says so where the link is shown.
+
 ### In your own calendar app
 
 The family calendar can be subscribed to from Apple Calendar, Google Calendar or Outlook: **Settings → Subscribe in your calendar** issues a read-only link, and the calendar shows up next to the work one on a phone.
 
 Three properties are worth knowing. The link is **per person**, not per family — calendars can be private, so a feed shows exactly what its owner is allowed to see and nothing more. It is **read-only by construction**: there is no write path behind that URL, so the hub is not a CalDAV server and cannot be edited from outside. And it is **revocable in one click**, which is the safety story for an address that lives in someone else's app: revoke it and every subscribed device goes dark at once.
+
+Once the family has a key, the address carries it after the token (`…/feed/<token>~<key>.ics`). A calendar app expects readable events, and the person pasting the link into Google Calendar is handing those events to Google anyway; the server opens them for that request and keeps nothing — the key half is never stored, it exists only in the link, which is why a device without the key shows a link that opens no encrypted events. A subscription added before encryption keeps working but shows `••••••` in place of words until it is removed and added again from the new address.
 
 Times travel as local wall-clock, unconverted — a 9am school run stays 9am in whatever zone the reading device is in, which is the same convention the hub uses everywhere. Repeating events travel as their rule, so a weekly event is one entry that the calendar app expands, not fifty copies.
 
@@ -179,6 +191,8 @@ Long lists can be split into **sections** — "Vegetables", "Dairy", "Household"
 Deleting a section keeps its items — they rise back to the top of the list. The items are the point; the grouping is a convenience, and the confirmation says so before you click.
 
 **A list can be handed to someone without an account** — typically whoever is going to the shop. Unlike the other share links in the hub, this one accepts a write: the guest can tick items off, because a shopping list nobody can tick off is a screenshot. That is the only thing they can do — no adding, no renaming, no deleting, and nothing beyond that single list is visible. Ticks land on the same list the family sees, since it is the same list and not a copy. The link is revocable, deleting the list revokes it too, and asking twice returns the same link so it can be re-sent.
+
+With a family key, list, section and item titles are encrypted in the browser; order, checked state, sections and the caps (which count rows, not characters) stay as they were. Shared lists remain the one place without an owner — encryption changes nothing about who in the family sees a list. A guest link carries the key after its token, exactly like a shared event, so the neighbour in the shop reads words and the server opens that one list for that request only. **Wishlists are the deliberate exception**: a wishlist exists to be shown to people outside the family, so wish titles stay readable on the server, and the profile page says so where the link is made.
 
 ## Mail
 
@@ -218,11 +232,17 @@ v1 renders the plain-text part of a message; HTML rendering, ICS invites
 into the calendar and invoice-to-transaction are tracked in the
 [family mail epic](https://github.com/neiliro/neiliro/issues/30).
 
+### Mail and the family key
+
+Mail is the one place the server sees words, once. A letter arrives as plaintext — that is how e-mail works, whether it comes through the Mailgun webhook or an IMAP poll — and the server has no family key. What it has is the family's public key, so before anything is written it seals what a person would read (sender, subject, body, attachments and their names) to that key; only a browser holding the family key can open it, and plaintext exists in the server's memory for milliseconds. Arrival time, size and the Message-ID stay readable, the last because idempotent ingest and reply threading need it. A reply is written in the browser and sent by the server, which therefore sees the outgoing text — it is the one sending it — and the reply box says so; the copy it keeps is sealed like an incoming letter. «Make it a task» happens in the browser, since only the browser can read the subject. Letters from before the key are brought under it by the one-time job in Settings. The self-hosted mailbox password stays readable to the server, which has to log in with it; the ADR explains why those two decisions are a pair.
+
 ## Money
 
 ![Money: accounts per currency, spending by category, budgets and reconciliation](screenshots/money.png)
 
 Amounts are stored as integers in minor units: 1234.56 → 123456. Floating point in money produces rounding errors that accumulate in sums and eventually disagree with the bank.
+
+This is the module where the encryption boundary ([ADR 0001](adr/0001-client-side-encryption.md)) is sharpest. What people write — account and category names, a transaction's note and place, a recurring rule's title and words, a reconciliation note — is encrypted in the browser. Every amount, date, currency, kind and id stays readable, because balances, budgets, the outlook and reconciliation are the server's arithmetic and never needed a name; nothing in those calculations changes. Two visible consequences: the server no longer orders accounts and categories by name (the order is the one you arranged), and a transaction created from an encrypted recurring rule carries no words of its own — it shows the rule's, which the server joins by id and the browser opens. Reconciliation notes are written and never read back, so old ones are not rewritten by the one-time job.
 
 Currency lives on the account, and currencies are unrelated: no exchange rate, no grand total, summing happens strictly within one currency. A transfer between accounts in different currencies records two amounts — what left and what arrived.
 

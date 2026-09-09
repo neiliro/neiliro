@@ -6,6 +6,7 @@ import { env } from '../env.js';
 import { buildCalendarFeed, type FeedEvent } from '../lib/ics.js';
 import { expandOccurrences, isValidRecurrence } from '../lib/recurrence.js';
 import { daysBetween, shiftDays } from '../lib/dates.js';
+import { FieldOpener, splitTokenKey } from '../lib/envelope.js';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
@@ -22,11 +23,13 @@ const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
  * All-day event:    starts_at = 'YYYY-MM-DD'
  * Event with time:  starts_at = 'YYYY-MM-DDTHH:MM'
  */
+// Ceilings sized for envelopes (#218): an encrypted value is roughly a
+// third longer than its words
 const eventBase = z.object({
   calendar_id: z.string().uuid(),
-  title: z.string().min(1, 'The event needs a title').max(300),
-  description: z.string().max(10_000).nullable().optional(),
-  location: z.string().max(300).nullable().optional(),
+  title: z.string().min(1, 'The event needs a title').max(4_000),
+  description: z.string().max(40_000).nullable().optional(),
+  location: z.string().max(4_000).nullable().optional(),
   // The message matches due_date in tasks.ts — without one, a malformed
   // date answers with zod's bare "Invalid", which names neither the field
   // nor the shape (#86)
@@ -53,7 +56,8 @@ const eventBase = z.object({
 const endsAfterStart = (v: { starts_at?: string; ends_at?: string }) =>
   v.starts_at === undefined || v.ends_at === undefined || v.ends_at >= v.starts_at;
 
-const eventInput = eventBase.refine(endsAfterStart, {
+// The browser mints the id when it encrypts: the envelope is bound to it
+const eventInput = eventBase.extend({ id: z.string().uuid().optional() }).refine(endsAfterStart, {
   message: 'The event ends before it starts',
   path: ['ends_at'],
 });
@@ -204,7 +208,7 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
         `SELECT c.*, (SELECT count(*) FROM events e WHERE e.calendar_id = c.id) AS event_count
            FROM calendars c
           WHERE ${CALENDAR_VISIBLE}
-          ORDER BY c.shared DESC, c.position, c.name`,
+          ORDER BY c.shared DESC, c.position`,
       )
       .all(req.user?.id ?? ''),
   );
@@ -212,7 +216,8 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
   app.post('/api/calendars', (req, reply) => {
     const parsed = z
       .object({
-        name: z.string().min(1, 'Enter a calendar name').max(100),
+        id: z.string().uuid().optional(),
+        name: z.string().min(1, 'Enter a calendar name').max(4_000),
         color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         shared: z.boolean().optional(),
       })
@@ -221,7 +226,10 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Check the fields' });
     }
 
-    const calendarId = id();
+    const calendarId = parsed.data.id ?? id();
+    if (parsed.data.id && db.prepare('SELECT 1 FROM calendars WHERE id = ?').get(parsed.data.id)) {
+      return reply.code(409).send({ error: 'A calendar with this id already exists' });
+    }
     db.prepare(
       `INSERT INTO calendars (id, name, color, owner_id, shared, position)
        VALUES (?, ?, ?, ?, ?, (SELECT coalesce(max(position), 0) + 1 FROM calendars))`,
@@ -239,7 +247,7 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
     const { id: calendarId } = z.object({ id: z.string().uuid() }).parse(req.params);
     const parsed = z
       .object({
-        name: z.string().min(1).max(100).optional(),
+        name: z.string().min(1).max(4_000).optional(),
         color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         shared: z.boolean().optional(),
       })
@@ -350,7 +358,10 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
       return reply.code(400).send({ error: 'A timed event needs hours and minutes' });
     }
 
-    const eventId = id();
+    const eventId = d.id ?? id();
+    if (d.id && db.prepare('SELECT 1 FROM events WHERE id = ?').get(d.id)) {
+      return reply.code(409).send({ error: 'An event with this id already exists' });
+    }
     const run = db.transaction(() => {
       db.prepare(
         `INSERT INTO events (id, calendar_id, title, description, location, starts_at, ends_at,
@@ -525,10 +536,14 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
     return { ok: true };
   });
 
-  app.get('/api/calendar/feed/:token', (req, reply) => {
-    // Clients like a .ics suffix; the token is the part before it
+  app.get('/api/calendar/feed/:token', async (req, reply) => {
+    // Clients like a .ics suffix; the token is the part before it. After
+    // the token, the family key may follow (`~<key>`, #218): a calendar app
+    // needs words, so the link carries what opens them and the server uses
+    // it for this response only — see lib/envelope.ts.
     const raw = (req.params as { token: string }).token;
-    const token = raw.replace(/\.ics$/, '');
+    const { token, key } = splitTokenKey(raw.replace(/\.ics$/, ''));
+    const opener = new FieldOpener(key);
 
     const user = db
       .prepare('SELECT id FROM users WHERE calendar_feed_token = ? AND disabled_at IS NULL')
@@ -555,6 +570,7 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
           ORDER BY e.starts_at`,
       )
       .all(user.id, cutoff) as FeedEvent[];
+    const opened = await Promise.all(events.map((e) => opener.openRow('events', e, ['title', 'description', 'location'])));
 
     const home = db
       .prepare("SELECT value FROM settings WHERE key = 'home.name'")
@@ -564,7 +580,7 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
       .type('text/calendar; charset=utf-8')
       // Clients re-poll on their own schedule; nothing here is worth caching
       .header('cache-control', 'no-store')
-      .send(buildCalendarFeed(home?.value?.trim() || 'Neiliro', events, new Date()));
+      .send(buildCalendarFeed(home?.value?.trim() || 'Neiliro', opened, new Date()));
   });
 
   // ── The public link for one event ─────────────────────────────────────
@@ -617,27 +633,32 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
     invitation must not become a window into a household. The calendar name
     is the sharpest of those: it can itself be private ("Bob's therapy").
   */
-  const sharedEvent = (token: string) =>
-    db
+  // The link may carry the family key after the token (#218), as the feed does
+  const sharedEvent = async (raw: string) => {
+    const { token, key } = splitTokenKey(raw);
+    const event = db
       .prepare(
         `SELECT id, title, description, location, starts_at, ends_at, all_day,
                 recurrence_rule, updated_at
            FROM events WHERE share_token = ?`,
       )
       .get(token) as FeedEvent | undefined;
+    if (!event) return undefined;
+    return new FieldOpener(key).openRow('events', event, ['title', 'description', 'location']);
+  };
 
-  app.get('/api/event/:token', shareRate, (req, reply) => {
+  app.get('/api/event/:token', shareRate, async (req, reply) => {
     const { token } = z.object({ token: z.string().min(10).max(200) }).parse(req.params);
-    const event = sharedEvent(token);
+    const event = await sharedEvent(token);
     if (!event) return reply.code(404).send({ error: 'This link is no longer valid' });
     const { updated_at: _updated, ...publicFields } = event;
     return publicFields;
   });
 
   /** The same event as a file, so a stranger can put it in their own calendar. */
-  app.get('/api/event/:token/ics', shareRate, (req, reply) => {
+  app.get('/api/event/:token/ics', shareRate, async (req, reply) => {
     const { token } = z.object({ token: z.string().min(10).max(200) }).parse(req.params);
-    const event = sharedEvent(token);
+    const event = await sharedEvent(token);
     if (!event) return reply.code(404).send({ error: 'This link is no longer valid' });
 
     return reply

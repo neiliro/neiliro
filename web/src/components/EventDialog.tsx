@@ -4,6 +4,7 @@ import { api, type HouseholdMember, type Project } from '../lib/api';
 import { REMIND_OPTIONS, calendarName, type Calendar, type Occurrence } from '../lib/calendar';
 import { RECURRENCE_OPTIONS } from '../lib/tasks';
 import { onEnter } from '../lib/keys';
+import { familyKeySuffix } from '../lib/token-key';
 import { clearBlankOnBlur } from '../lib/forms';
 import { timeOf } from '../lib/format';
 import { dialogGhost, inlineDanger, Modal, useDialogs } from './Dialog';
@@ -99,7 +100,8 @@ export function EventDialog({
   async function share() {
     if (!occurrence) return;
     const res = await api.post<{ path: string }>(`/events/${occurrence.event_id}/share`, {});
-    setSharePath(res.path);
+    // The guest page needs words: the family key rides after the token (#218)
+    setSharePath(`${res.path}${await familyKeySuffix()}`);
     setShareCopied(false);
   }
 
@@ -216,7 +218,8 @@ export function EventDialog({
                     {sharePath}
                   </p>
                   <p className="mt-1.5 text-xs text-muted">
-                    {t('Anyone with this link sees this event only — not the calendar it is in.')}
+                    {t('Anyone with this link sees this event only — not the calendar it is in.')}{' '}
+                    {t('The link carries the family key for this one event: the server opens it for whoever follows the link.')}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-3">
                     <button

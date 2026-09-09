@@ -12,6 +12,24 @@ import {
 } from '../routes/attachments.js';
 import { log } from './log.js';
 import { familySlug } from './tenants.js';
+import { familyKey } from './keys.js';
+import { sealField, sealFile } from './envelope.js';
+
+/*
+  The one place the server sees words, once (#223). A letter arrives as
+  plaintext MIME — there is no other way to receive mail — and the server
+  has no family key. It has the family's X25519 public half, and seals
+  what a person would read (sender, subject, body, attachments and their
+  names) to it before anything is written; arrival time, size and the
+  Message-ID stay clear, the last because idempotency and In-Reply-To
+  need it. Plaintext exists in this process for milliseconds. A family
+  without a key yet gets plaintext rows, as before.
+*/
+async function sealer(): Promise<((column: string, id: string, value: string) => Promise<string>) | null> {
+  const key = familyKey();
+  if (!key) return null;
+  return (column, rowId, value) => sealField(key.public_key, value, { table: 'mail_messages', column, id: rowId });
+}
 
 /*
   Family mail (#30/#31), the core.
@@ -290,6 +308,9 @@ export async function ingestEmail(raw: Uint8Array | string): Promise<string | nu
   if (known()) return null;
 
   const staged: StagedAttachment[] = [];
+  const seal = await sealer();
+  const publicKey = familyKey()?.public_key ?? null;
+  const rowId = id();
   try {
     let used = attachmentBytesUsed();
     for (const part of email.attachments ?? []) {
@@ -302,12 +323,18 @@ export async function ingestEmail(raw: Uint8Array | string): Promise<string | nu
           : part.content instanceof ArrayBuffer
             ? Buffer.from(new Uint8Array(part.content))
             : Buffer.from(part.content);
+      const attachmentId = id();
+      const filename = part.filename || 'attachment';
       const s = await stageMailAttachment(
-        {
-          filename: part.filename || 'attachment',
-          mime: part.mimeType || 'application/octet-stream',
-          content,
-        },
+        publicKey
+          ? {
+              id: attachmentId,
+              filename: await sealField(publicKey, filename, { table: 'attachments', column: 'filename', id: attachmentId }),
+              mime: part.mimeType || 'application/octet-stream',
+              content: await sealFile(publicKey, content, attachmentId),
+              encryption: 2,
+            }
+          : { id: attachmentId, filename, mime: part.mimeType || 'application/octet-stream', content, encryption: 0 },
         used,
       );
       if (s) {
@@ -316,7 +343,22 @@ export async function ingestEmail(raw: Uint8Array | string): Promise<string | nu
       }
     }
 
-    const rowId = id();
+    // The words, sealed before the transaction if the family has a key
+    const words = {
+      from_address: email.from?.address?.slice(0, 300) ?? '(unknown)',
+      from_name: email.from?.name?.slice(0, 200) || null,
+      to_address: email.to?.[0]?.address?.slice(0, 300) ?? null,
+      subject: (email.subject ?? '').slice(0, 500),
+      // The text part; when a message is HTML-only, fall back to a crude
+      // tag strip so the reader is never left with an empty body
+      body_text: (email.text ?? textFromHtml(email.html)).slice(0, 100_000),
+    };
+    if (seal) {
+      for (const column of Object.keys(words) as (keyof typeof words)[]) {
+        const value = words[column];
+        if (typeof value === 'string') words[column] = await seal(column, rowId, value);
+      }
+    }
     // `immediate`: take the write lock at BEGIN, so the duplicate check and
     // the insert cannot interleave with another ingest of the same letter
     const stored = db
@@ -329,13 +371,11 @@ export async function ingestEmail(raw: Uint8Array | string): Promise<string | nu
         ).run(
           rowId,
           messageId,
-          email.from?.address?.slice(0, 300) ?? '(unknown)',
-          email.from?.name?.slice(0, 200) || null,
-          email.to?.[0]?.address?.slice(0, 300) ?? null,
-          (email.subject ?? '').slice(0, 500),
-          // The text part; when a message is HTML-only, fall back to a crude
-          // tag strip so the reader is never left with an empty body
-          (email.text ?? textFromHtml(email.html)).slice(0, 100_000),
+          words.from_address,
+          words.from_name,
+          words.to_address,
+          words.subject,
+          words.body_text,
           email.date ? email.date.replace('T', ' ').slice(0, 19) : null,
           now(),
         );
@@ -458,39 +498,42 @@ export function startMailPoller(each: (fn: () => unknown) => Promise<void>): voi
  * mailbox, which is the whole point. The sent copy becomes a mail row
  * (kind='out'), so the thread reads in one place.
  */
+/*
+  A reply is composed in the browser and sent by the server: the server
+  sees the outgoing words, inherently — it is the one sending them — and
+  the interface says so. The copy it keeps is sealed to the family public
+  key like an incoming letter, so at rest the mailbox is uniform.
+*/
 export async function sendReply(
-  original: { id: string; message_id: string | null; from_address: string; subject: string },
-  text: string,
+  original: { id: string; message_id: string | null },
+  reply: { to: string; subject: string; text: string },
   sender: { id: string; name: string },
 ): Promise<string> {
   const out = outgoing();
   if (!out) throw new Error('Mailbox is not configured');
 
-  const subject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
   await out.send({
     fromName: `${sender.name} · ${out.address}`,
-    to: original.from_address,
-    subject,
-    text,
+    to: reply.to,
+    subject: reply.subject,
+    text: reply.text,
     inReplyTo: original.message_id ?? undefined,
   });
 
   const rowId = id();
+  const seal = await sealer();
+  const kept = {
+    to_address: reply.to,
+    subject: reply.subject,
+    body_text: reply.text.slice(0, 100_000),
+  };
+  if (seal) {
+    for (const column of Object.keys(kept) as (keyof typeof kept)[]) kept[column] = await seal(column, rowId, kept[column]);
+  }
   db.prepare(
     `INSERT INTO mail_messages (id, kind, from_address, from_name, to_address, subject,
                                 body_text, received_at, read_at, in_reply_to, sent_by)
      VALUES (?, 'out', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    rowId,
-    out.address,
-    sender.name,
-    original.from_address,
-    subject,
-    text.slice(0, 100_000),
-    now(),
-    now(),
-    original.id,
-    sender.id,
-  );
+  ).run(rowId, out.address, sender.name, kept.to_address, kept.subject, kept.body_text, now(), now(), original.id, sender.id);
   return rowId;
 }
