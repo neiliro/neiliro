@@ -105,7 +105,23 @@ export async function registerInboundMailRoutes(app: FastifyInstance): Promise<v
     too: a letter that failed for a reason that can pass tomorrow (a full
     disk, a busy database) must NOT be 406, or it is dropped for good.
   */
+  /*
+    The one host this door belongs to. Fastify registers a route for every
+    Host, so without this check the webhook answered on every family's
+    subdomain as well — harmless in effect (the signature still gates it and
+    the family comes from `recipient`, never from the host), but wider than
+    the design says, and a POST endpoint no family subdomain has any use
+    for (#244). A self-hosted hub with MAIL_DOMAIN has no reserved host to
+    insist on, so the check is hosted-only.
+  */
+  const webhookHost = env.hostedMode ? `in.${env.hostedDomain}` : null;
+
   app.post(INBOUND_PATH, { bodyLimit: MAX_INBOUND_BYTES }, async (req, reply) => {
+    const host = (req.headers.host ?? '').split(':')[0]!.toLowerCase();
+    if (webhookHost && host !== webhookHost) {
+      log.warn(`mail inbound: delivery posted to ${host || '(no host)'} instead of ${webhookHost}`);
+      return reply.code(406).send({ error: 'Wrong host' });
+    }
     const form = (req.body ?? {}) as Record<string, string | undefined>;
     const { timestamp, token, signature } = form;
 
