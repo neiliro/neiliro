@@ -10,6 +10,7 @@ import { currentTenant, db } from '../db/index.js';
 import { env } from '../env.js';
 import { clearSessionCookie, consumeTotp, requireAdmin } from '../lib/auth.js';
 import { verifyPassword } from '../lib/password.js';
+import { AUTH_KEY_PATTERN } from '../lib/kdf.js';
 import { log } from '../lib/log.js';
 
 /*
@@ -69,8 +70,11 @@ function dirSize(dir: string): { files: number; bytes: number } {
   return { files, bytes };
 }
 
+// The admin proves the password as the derived auth key, like at sign-in
+// (ADR 0001, #211): a session that can delete the family is exactly the
+// session that must not be able to leak the password to the server.
 const deleteInput = z.object({
-  password: z.string().min(1).max(500),
+  auth_key: z.string().regex(AUTH_KEY_PATTERN, 'Invalid credentials'),
   code: z.string().min(6).max(10).optional(),
   confirm: z.string().min(1).max(100),
 });
@@ -332,7 +336,7 @@ export async function registerFamilyRoutes(app: FastifyInstance): Promise<void> 
         totp_confirmed_at: string | null;
       };
 
-      if (!(await verifyPassword(parsed.data.password, user.password_hash))) {
+      if (!(await verifyPassword(parsed.data.auth_key, user.password_hash))) {
         return reply.code(400).send({ error: 'The current password is incorrect' });
       }
       if (user.totp_confirmed_at && user.totp_secret) {

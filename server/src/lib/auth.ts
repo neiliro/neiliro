@@ -1,3 +1,4 @@
+import { newKdfSalt } from './kdf.js';
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { db, id } from '../db/index.js';
@@ -150,6 +151,8 @@ const PUBLIC_PATHS = new Set([
   // Home name for the sign-in screen; hosted mode answers the brand
   // only — see routes/index.ts
   '/api/home-name',
+  // Which secret to send — asked before the session exists (ADR 0001, #211)
+  '/api/auth/prelogin',
   '/api/auth/login',
   // The TOTP step of sign-in: the session does not exist yet, the
   // short-lived ticket from /login is the authorization
@@ -177,10 +180,26 @@ const PUBLIC_PATHS = new Set([
   // request step deliberately answers the same way for every address.
   '/api/auth/password-reset',
   '/api/auth/password-reset/confirm',
+  // Tells the holder of a live reset token which address it is for: the
+  // browser derives the new key from password and address (#211)
+  '/api/auth/password-reset/check',
   // Confirming an address: the link is opened wherever the mail was read,
   // often in a browser with no session. The token is the authorization.
   '/api/auth/email-verify',
 ]);
+
+/**
+ * The account's KDF salt, minted on first need for an account that has
+ * none (created outside the setup/join routes — the demo seeder, a test
+ * harness). Every real account has one from migration 032 or from the
+ * browser that created it.
+ */
+export function ensureKdfSalt(userId: string, current: string | null): string {
+  if (current) return current;
+  const salt = newKdfSalt();
+  db.prepare('UPDATE users SET kdf_salt = ? WHERE id = ?').run(salt, userId);
+  return salt;
+}
 
 export async function authenticate(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!req.url.startsWith('/api')) return;

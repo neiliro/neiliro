@@ -2,6 +2,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
+// Not test-harness: that would import app.js before the hosted flags below are set
+import { deriveAuthKey } from '../lib/kdf.js';
+// One salt for every test account: what a browser would mint, minus the randomness
+const SALT = '00112233445566778899aabbccddeeff';
+const authKey = (password: string) => deriveAuthKey(password, SALT);
 
 /*
   The founder invitation (#157): a hosted family meets its hub through a
@@ -83,7 +88,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('founders-f1a1'),
-      payload: { accept_terms: true, name: 'Squatter', email: 'squatter@example.test', password: PASSWORD },
+      payload: { accept_terms: true, kdf_salt: SALT, name: 'Squatter', email: 'squatter@example.test', auth_key: await authKey(PASSWORD) },
     });
     expect(bare.statusCode).toBe(403);
     // Word-for-word what a ghost says — see the enumeration test below
@@ -103,7 +108,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('others-f1a2'),
-      payload: { accept_terms: true, token, name: 'Sam', email: 'sam@example.test', password: PASSWORD },
+      payload: { accept_terms: true, kdf_salt: SALT, token, name: 'Sam', email: 'sam@example.test', auth_key: await authKey(PASSWORD) },
     });
     expect(elsewhere.statusCode).toBe(404);
     expect(familyDb(otherId).prepare('SELECT count(*) AS n FROM users').get()).toEqual({ n: 0 });
@@ -115,10 +120,11 @@ describe('the founder invitation', () => {
       headers: onHost('founders-f1a1'),
       payload: {
         accept_terms: true,
+        kdf_salt: SALT,
         token,
         name: 'Sam',
         email: 'sam@example.test',
-        password: PASSWORD,
+        auth_key: await authKey(PASSWORD),
         timezone: 'America/Chicago',
       },
     });
@@ -147,7 +153,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('founders-f1a1'),
-      payload: { accept_terms: true, token, name: 'Sam II', email: 'sam2@example.test', password: PASSWORD },
+      payload: { accept_terms: true, kdf_salt: SALT, token, name: 'Sam II', email: 'sam2@example.test', auth_key: await authKey(PASSWORD) },
     });
     expect(again.statusCode).toBe(404);
 
@@ -173,7 +179,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('movers-f2b1'),
-      payload: { accept_terms: true, token, name: 'Mo', email: 'other@example.test', password: PASSWORD },
+      payload: { accept_terms: true, kdf_salt: SALT, token, name: 'Mo', email: 'other@example.test', auth_key: await authKey(PASSWORD) },
     });
     expect(joined.statusCode).toBe(201);
     await new Promise((r) => setTimeout(r, 60));
@@ -205,7 +211,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('latecomers-f3c1'),
-      payload: { accept_terms: true, token: second, name: 'Lee', email: 'second@example.test', password: PASSWORD },
+      payload: { accept_terms: true, kdf_salt: SALT, token: second, name: 'Lee', email: 'second@example.test', auth_key: await authKey(PASSWORD) },
     });
     expect(joined.statusCode).toBe(201);
 
@@ -228,7 +234,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('sleepers-f4d1'),
-      payload: { accept_terms: true, token, name: 'Zed', email: 'zed@example.test', password: PASSWORD },
+      payload: { accept_terms: true, kdf_salt: SALT, token, name: 'Zed', email: 'zed@example.test', auth_key: await authKey(PASSWORD) },
     });
     expect(expired.statusCode).toBe(404);
     // And the open first run stays closed — an expired invitation is
@@ -237,7 +243,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/setup',
       headers: onHost('sleepers-f4d1'),
-      payload: { accept_terms: true, name: 'Zed', email: 'zed@example.test', password: PASSWORD },
+      payload: { accept_terms: true, kdf_salt: SALT, name: 'Zed', email: 'zed@example.test', auth_key: await authKey(PASSWORD) },
     });
     expect(bare.statusCode).toBe(403);
 
@@ -249,7 +255,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('sleepers-f4d1'),
-      payload: { accept_terms: true, token: fresh, name: 'Zed', email: 'zed@example.test', password: PASSWORD },
+      payload: { accept_terms: true, kdf_salt: SALT, token: fresh, name: 'Zed', email: 'zed@example.test', auth_key: await authKey(PASSWORD) },
     });
     expect(joined.statusCode).toBe(201);
     const cookie = joined.cookies.find((c) => c.name === 'hub_session')!.value;
@@ -276,12 +282,12 @@ describe('the founder invitation', () => {
     was never provisioned, for as long as it existed.
   */
   it('refuses the first run identically for a ghost, a waiting family and a claimed one', async () => {
-    const setup = (slug: string) =>
+    const setup = async (slug: string) =>
       app.inject({
         method: 'POST',
         url: '/api/auth/setup',
         headers: onHost(slug),
-        payload: { accept_terms: true, name: 'Squatter', email: 'squatter@example.test', password: PASSWORD },
+        payload: { accept_terms: true, kdf_salt: SALT, name: 'Squatter', email: 'squatter@example.test', auth_key: await authKey(PASSWORD) },
       });
 
     // 1. A family provisioned with an invitation, founder not yet arrived
@@ -300,7 +306,7 @@ describe('the founder invitation', () => {
       method: 'POST',
       url: '/api/auth/join',
       headers: onHost('parity-f5e1'),
-      payload: { accept_terms: true, token, name: 'Parity', email: 'parity@example.test', password: PASSWORD },
+      payload: { accept_terms: true, kdf_salt: SALT, token, name: 'Parity', email: 'parity@example.test', auth_key: await authKey(PASSWORD) },
     });
     expect(joined.statusCode).toBe(201);
     const claimed = await setup('parity-f5e1');

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { loginBody } from './credentials';
 import { ApiError, api } from './api';
 import { lang } from './i18n';
 
@@ -56,10 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * the Login page then shows the code step and calls loginMfa.
    */
   const login = useCallback(async (email: string, password: string): Promise<string | null> => {
-    const res = await api.post<User | { mfa_required: true; mfa_token: string }>('/auth/login', {
-      email,
-      password,
-    });
+    const res = await api.post<User | { mfa_required: true; mfa_token: string }>(
+      '/auth/login',
+      await loginBody(email, password),
+    );
     if ('mfa_required' in res) return res.mfa_token;
     setUser(res);
     return null;

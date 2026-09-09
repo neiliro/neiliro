@@ -33,7 +33,7 @@ Search uses FTS5 with the `trigram` tokenizer. It matches substrings, so morphol
 
 SQLite's built-in `lower()` and `LIKE` are case-insensitive only for Latin, so task-name search registers a custom `ci_contains` function — it folds case in JavaScript and knows every alphabet.
 
-Passwords are hashed with scrypt from Node's standard library. The sessions table stores a sha256 of the token, not the token itself: someone who reads the database cannot impersonate anyone.
+Passwords never reach the server. The browser stretches the password (PBKDF2-SHA256, 600 000 iterations, a random per-account salt the server hands out before sign-in) and splits the result with HKDF into an *auth key*, which is sent in place of the password and scrypt-hashed server-side, and a *wrap key*, which stays in the browser and opens the member's key envelope ([ADR 0001](adr/0001-client-side-encryption.md)). Neither half derives from the other, so a server that sees every sign-in still cannot reproduce the key that protects the family's content. Accounts from before the split cross over at their next sign-in, sending the password one last time; `users.kdf_version` says which kind a hash is. The sessions table stores a sha256 of the token, not the token itself: someone who reads the database cannot impersonate anyone.
 
 ## Time
 

@@ -1,3 +1,4 @@
+import { deriveAuthKey } from './lib/kdf.js';
 import type { Database } from 'better-sqlite3';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildApp } from './app.js';
@@ -30,6 +31,16 @@ export interface Harness {
     json<T>(): T;
   }>;
 }
+
+/**
+ * What a browser sends for this password and address (ADR 0001, #211):
+ * the derived auth key. Tests that create accounts or sign in go through
+ * this, so a payload reads like the wire and not like a plaintext password.
+ * Production iteration count on purpose — a temporary password issued by
+ * the server must round-trip through the very same derivation.
+ */
+export const SALT = '00112233445566778899aabbccddeeff';
+export const authKey = (password: string): Promise<string> => deriveAuthKey(password, SALT);
 
 export async function buildTestApp(): Promise<Harness> {
   const app = await buildApp();

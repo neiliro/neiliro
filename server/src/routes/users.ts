@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db, now } from '../db/index.js';
-import { destroyAllSessions, requireAdmin } from '../lib/auth.js';
+import { destroyAllSessions, requireAdmin, ensureKdfSalt } from '../lib/auth.js';
 import { log } from '../lib/log.js';
 import { generatePassword, hashPassword } from '../lib/password.js';
+import { deriveAuthKey } from '../lib/kdf.js';
 import { emailVerificationAvailable, sendVerificationEmail } from './email-verify.js';
 
 export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
@@ -122,16 +123,24 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     if (!requireAdmin(req, reply)) return;
     const { id: userId } = z.object({ id: z.string().uuid() }).parse(req.params);
 
-    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+    const user = db.prepare('SELECT id, kdf_salt FROM users WHERE id = ?').get(userId) as
+      | { id: string; kdf_salt: string | null }
+      | undefined;
     if (!user) return reply.code(404).send({ error: 'Member not found' });
 
     const password = generatePassword();
+    // The server picked this password, so it is the one party that can
+    // run the browser's derivation for it: what gets stored is the hash of
+    // the auth key the member's browser will produce from the same
+    // password (lib/kdf.ts). It must be changed on first login, and the
+    // change rewrites the hash with a key the server never saw.
+    const authKey = await deriveAuthKey(password, ensureKdfSalt(user.id, user.kdf_salt));
     // A reset is also the recovery path for a dead Google account,
     // so password login gets switched back on
     db.prepare(
-      `UPDATE users SET password_hash = ?, must_change_password = 1,
+      `UPDATE users SET password_hash = ?, kdf_version = 1, must_change_password = 1,
               password_login_disabled = 0 WHERE id = ?`,
-    ).run(await hashPassword(password), userId);
+    ).run(await hashPassword(authKey), userId);
     // A password reset kicks the user off every device
     destroyAllSessions(userId);
 

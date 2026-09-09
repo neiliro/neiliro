@@ -3,6 +3,7 @@ import { log } from '../lib/log.js';
 import { z } from 'zod';
 import { currentTenant, db, now } from '../db/index.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
+import { AUTH_KEY_PATTERN, decoySalt } from '../lib/kdf.js';
 import { env } from '../env.js';
 import { googleSignInAvailable } from './google.js';
 import { serviceMailAvailable } from '../lib/mail.js';
@@ -18,8 +19,7 @@ import {
   destroySession,
   hashToken,
   listSessions,
-  setSessionCookie,
-} from '../lib/auth.js';
+  setSessionCookie, ensureKdfSalt, } from '../lib/auth.js';
 
 /*
   A brake on password guessing — in two dimensions.
@@ -67,9 +67,19 @@ function registerFailure(key: string): void {
   attempts.set(key, entry);
 }
 
+/*
+  What arrives at sign-in (ADR 0001, #211). The browser stretches the
+  password and sends the derived auth key (web/src/lib/crypto/kdf.ts); the
+  other half of that derivation opens the member's key envelope and never
+  leaves the browser. The plain password is sent exactly once more, by an
+  account from before the split: the server verifies it against the old
+  hash and stores a hash of the auth key instead (migration 032).
+*/
+const authKeyField = z.string().regex(AUTH_KEY_PATTERN, 'Invalid credentials');
 const loginInput = z.object({
   email: z.string().min(1).max(200),
-  password: z.string().min(1).max(500),
+  auth_key: authKeyField,
+  password: z.string().min(1).max(500).optional(),
 });
 
 /*
@@ -93,9 +103,13 @@ setInterval(() => {
   }
 }, MFA_TTL_MS).unref();
 
+// Password strength is the browser's to check: the server sees a derived
+// key of fixed length, never the password. A legacy account still signed
+// in from before the split proves the current password the old way, once.
 const changeInput = z.object({
-  current_password: z.string().min(1).max(500),
-  new_password: z.string().min(10, 'Password must be at least 10 characters').max(500),
+  current_auth_key: authKeyField,
+  new_auth_key: authKeyField,
+  current_password: z.string().min(1).max(500).optional(),
 });
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
@@ -165,6 +179,38 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
   };
 
+  /*
+    Which secret the browser should send. An account from before the split
+    (kdf_version NULL) needs the password one last time; everyone else, the
+    auth key only. Unknown addresses answer 'v1' — the same as a migrated
+    account — so the steady state gives nothing away.
+
+    Honest about the window: while an account is still legacy, this answer
+    tells whoever asks that the address exists here. The window closes per
+    account at its next sign-in, and the route sits under the login rate
+    limit. There is no answer without the question: the server needs the
+    password exactly once, and only the client can decide to send it.
+    The ghost has no users and answers 'v1' like a migrated family.
+  */
+  app.post('/api/auth/prelogin', loginRateLimit, (req, reply) => {
+    if (env.demoMode) {
+      return reply.code(403).send({ error: 'Disabled in demo mode' });
+    }
+    const parsed = z.object({ email: z.string().min(1).max(200) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Enter a login' });
+    const email = parsed.data.email.trim().toLowerCase();
+    const row = db
+      .prepare('SELECT id, kdf_version, kdf_salt FROM users WHERE lower(email) = ? AND disabled_at IS NULL')
+      .get(email) as { id: string; kdf_version: number | null; kdf_salt: string | null } | undefined;
+    if (!row) {
+      const secret = (
+        db.prepare("SELECT value FROM settings WHERE key = 'kdf.decoy_secret'").get() as { value: string }
+      ).value;
+      return { kdf: 'v1', salt: decoySalt(secret, email) };
+    }
+    return { kdf: row.kdf_version === null ? 'legacy' : 'v1', salt: ensureKdfSalt(row.id, row.kdf_salt) };
+  });
+
   app.post('/api/auth/login', loginRateLimit, async (req, reply) => {
     // Demo is entered only through a sandbox: visitors have no passwords,
     // and a public stand has no use for guessing at other people's accounts
@@ -194,13 +240,17 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const user = db
       .prepare('SELECT * FROM users WHERE lower(email) = ? AND disabled_at IS NULL')
       .get(email) as
-      | { id: string; password_hash: string; password_login_disabled: number }
+      | { id: string; password_hash: string; password_login_disabled: number; kdf_version: number | null }
       | undefined;
 
     // The comparison runs even when the user doesn't exist: otherwise
     // response timing reveals which logins do.
     const hash = user?.password_hash ?? 'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAA';
-    const ok = await verifyPassword(parsed.data.password, hash);
+    // A legacy hash is a hash of the password; without the password sent
+    // along, an empty string is verified — and fails — so the timing of a
+    // legacy account without its password matches every other failure.
+    const legacy = user !== undefined && user.kdf_version === null;
+    const ok = await verifyPassword(legacy ? (parsed.data.password ?? '') : parsed.data.auth_key, hash);
 
     // Disabled password login answers exactly like a wrong password:
     // from outside nobody can tell who has which mode. The check comes
@@ -224,6 +274,17 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     // forever. A family's honest typos ride out the 15-minute window
     // instead — the 20-per-address threshold is sized for exactly that.
     attempts.delete(loginKey);
+
+    // The one-time migration: the old hash was just verified, so the auth
+    // key that came with it is this person's. From now on the password
+    // never travels again.
+    if (legacy) {
+      db.prepare('UPDATE users SET password_hash = ?, kdf_version = 1 WHERE id = ?').run(
+        await hashPassword(parsed.data.auth_key),
+        user.id,
+      );
+      log.info(`login: ${email} migrated to kdf v1`);
+    }
 
     // Second factor: the password alone opens nothing when TOTP is
     // confirmed — the client gets a short-lived ticket and owes a code
@@ -576,23 +637,28 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
     const session = db
       .prepare(
-        `SELECT u.id, u.password_hash FROM sessions s JOIN users u ON u.id = s.user_id
+        `SELECT u.id, u.password_hash, u.kdf_version FROM sessions s JOIN users u ON u.id = s.user_id
           WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled_at IS NULL`,
       )
       .get(hashToken(token), new Date().toISOString()) as
-      | { id: string; password_hash: string }
+      | { id: string; password_hash: string; kdf_version: number | null }
       | undefined;
 
     if (!session) return reply.code(401).send({ error: 'Sign in required' });
 
-    if (!(await verifyPassword(parsed.data.current_password, session.password_hash))) {
+    // A session that predates the split belongs to a legacy hash: the
+    // current password is proven the old way, and the account leaves the
+    // legacy state with the new hash below.
+    const current =
+      session.kdf_version === null ? (parsed.data.current_password ?? '') : parsed.data.current_auth_key;
+    if (!(await verifyPassword(current, session.password_hash))) {
       return reply.code(400).send({ error: 'The current password is incorrect' });
     }
 
     db.prepare(
-      `UPDATE users SET password_hash = ?, must_change_password = 0, password_changed_at = ?
+      `UPDATE users SET password_hash = ?, kdf_version = 1, must_change_password = 0, password_changed_at = ?
         WHERE id = ?`,
-    ).run(await hashPassword(parsed.data.new_password), now(), session.id);
+    ).run(await hashPassword(parsed.data.new_auth_key), now(), session.id);
 
     // A password change signs out every device, the current one included
     destroyAllSessions(session.id);

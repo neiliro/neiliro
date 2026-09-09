@@ -13,10 +13,11 @@ import {
   generateRecoveryCode,
   importFamilyKey,
   isEncrypted,
-  normalizeLogin,
+  newKdfSalt,
   normalizeRecoveryCode,
   readField,
   recoveryWrapKey,
+  saltFromHex,
   toBase64url,
   unwrapFamilyKey,
   wrapFamilyKey,
@@ -32,40 +33,43 @@ import {
 // Fast KDF for tests that do not test the KDF itself
 const FAST = 1_000;
 
+const SALT = saltFromHex('00112233445566778899aabbccddeeff');
+
 describe('kdf', () => {
-  it('pins the auth key for a known password and address (the server twin checks the same vector)', async () => {
-    const a = await deriveCredentialKeys('correct horse battery', 'Sam@Example.test ', FAST);
-    const b = await deriveCredentialKeys('correct horse battery', 'sam@example.test', FAST);
-    expect(a.authKey).toBe(b.authKey);
+  it('pins the auth key for a known password and salt (the server twin checks the same vector)', async () => {
+    const a = await deriveCredentialKeys('correct horse battery', SALT, FAST);
     expect(a.kdfVersion).toBe(1);
     expect(fromBase64url(a.authKey)).toHaveLength(32);
     // Frozen: a change here locks every existing account out
-    expect(a.authKey).toBe('G5OP10cR6TUCBFrXL08VLqOGRCxufqPK7SpWGzrou7M');
+    expect(a.authKey).toBe('Bz_PEeh-49Gg0LfD7432rTJ_6tsq1phgwcuEv6sWIZM');
   });
 
   it('pins the production vector at the real iteration count', async () => {
     // ~1 s on purpose: this is the exact string a browser sends for this
-    // password, and the server twin must compute the very same one.
-    const k = await deriveCredentialKeys('correct horse battery', 'sam@example.test');
-    expect(k.authKey).toBe('gQWlfqTKxEE23jsPihnHil8499MP-gW40evaIaWZBn8');
+    // password and salt, and the server twin must compute the very same one.
+    const k = await deriveCredentialKeys('correct horse battery', SALT);
+    expect(k.authKey).toBe('i1Af0j5K2J0yNEheyxajiiiJIJ_ohWSTznR5_HjRyNk');
   }, 30_000);
 
-  it('produces different keys for a different address or password', async () => {
-    const base = await deriveCredentialKeys('correct horse battery', 'sam@example.test', FAST);
-    const other = await deriveCredentialKeys('correct horse battery', 'dana@example.test', FAST);
-    const wrong = await deriveCredentialKeys('correct horse batteru', 'sam@example.test', FAST);
+  it('produces different keys for a different salt or password', async () => {
+    const base = await deriveCredentialKeys('correct horse battery', SALT, FAST);
+    const other = await deriveCredentialKeys('correct horse battery', saltFromHex(newKdfSalt()), FAST);
+    const wrong = await deriveCredentialKeys('correct horse batteru', SALT, FAST);
     expect(other.authKey).not.toBe(base.authKey);
     expect(wrong.authKey).not.toBe(base.authKey);
   });
 
   it('keeps the wrap key non-extractable and separate from the auth key', async () => {
-    const k = await deriveCredentialKeys('correct horse battery', 'sam@example.test', FAST);
+    const k = await deriveCredentialKeys('correct horse battery', SALT, FAST);
     expect(k.wrapKey.extractable).toBe(false);
     await expect(crypto.subtle.exportKey('raw', k.wrapKey)).rejects.toThrow();
   });
 
-  it('normalises the login the way the server does', () => {
-    expect(normalizeLogin('  Sam@Example.TEST ')).toBe('sam@example.test');
+  it('mints 32-hex salts and refuses anything else', () => {
+    expect(newKdfSalt()).toMatch(/^[0-9a-f]{32}$/);
+    expect(newKdfSalt()).not.toBe(newKdfSalt());
+    expect(() => saltFromHex('short')).toThrow(/Not a KDF salt/);
+    expect(() => saltFromHex('00112233445566778899AABBCCDDEEFF')).toThrow();
   });
 });
 
@@ -123,8 +127,8 @@ describe('field envelope', () => {
 describe('family key and envelopes', () => {
   it('wraps for a member and unwraps with the same password, not another', async () => {
     const family = await generateFamilyKey();
-    const sam = await deriveCredentialKeys('correct horse battery', 'sam@example.test', FAST);
-    const dana = await deriveCredentialKeys('another long password', 'dana@example.test', FAST);
+    const sam = await deriveCredentialKeys('correct horse battery', SALT, FAST);
+    const dana = await deriveCredentialKeys('another long password', saltFromHex(newKdfSalt()), FAST);
     const env = await wrapFamilyKey(family, sam.wrapKey, { kind: 'password', owner: 'u-sam' });
     expect(env.startsWith('w1:')).toBe(true);
 
@@ -143,7 +147,7 @@ describe('family key and envelopes', () => {
 
   it('a wrapped key is not a field and a field is not a wrapped key', async () => {
     const family = await generateFamilyKey();
-    const sam = await deriveCredentialKeys('correct horse battery', 'sam@example.test', FAST);
+    const sam = await deriveCredentialKeys('correct horse battery', SALT, FAST);
     const env = await wrapFamilyKey(family, sam.wrapKey, { kind: 'password', owner: 'u' });
     expect(isEncrypted(env)).toBe(false);
     await expect(unwrapFamilyKey('e1:a:b', sam.wrapKey, { kind: 'password', owner: 'u' })).rejects.toThrow(

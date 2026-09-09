@@ -5,6 +5,7 @@ import { currentTenant, db, id, invalidateTimezone, now } from '../db/index.js';
 import { isValidTimezone } from '../lib/timezone.js';
 import { createSession, setSessionCookie } from '../lib/auth.js';
 import { hashPassword } from '../lib/password.js';
+import { AUTH_KEY_PATTERN, KDF_SALT_PATTERN } from '../lib/kdf.js';
 import { sendVerificationEmail } from './email-verify.js';
 import { log } from '../lib/log.js';
 import { env } from '../env.js';
@@ -65,7 +66,13 @@ const ALREADY_SET_UP = 'The hub is already set up';
 
 const nameField = z.string().trim().min(1, 'The name cannot be empty').max(80);
 const emailField = z.string().trim().toLowerCase().email('Invalid login address').max(120);
-const passwordField = z.string().min(10, 'Password must be at least 10 characters').max(200);
+// Not the password: the key the browser derived from it (ADR 0001, #211).
+// Its length is fixed, so "at least 10 characters" is the browser's check
+// now — the server cannot see how long the password was.
+const authKeyField = z.string().regex(AUTH_KEY_PATTERN, 'Invalid credentials');
+// The salt the browser stretched the password with; public, random per
+// account, handed back at every sign-in (lib/kdf.ts)
+const kdfSaltField = z.string().regex(KDF_SALT_PATTERN, 'Invalid credentials');
 /*
   Consent to the terms and the privacy policy (migration 031). On the hosted
   service both account-creating routes refuse without it: a family that
@@ -165,7 +172,8 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       .object({
         name: nameField,
         email: emailField,
-        password: passwordField,
+        auth_key: authKeyField,
+        kdf_salt: kdfSaltField,
         // Sent by the browser, not asked of the person: the first screen is
         // not the place for a 400-entry dropdown, and the browser already
         // knows the answer. Correctable later in Settings.
@@ -180,7 +188,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: TERMS_REQUIRED });
     }
 
-    const passwordHash = await hashPassword(parsed.data.password);
+    const passwordHash = await hashPassword(parsed.data.auth_key);
     const userId = id();
     const termsAcceptedAt = termsStamp(parsed.data.accept_terms);
 
@@ -192,9 +200,18 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       // invited members distinct colors never covered the admin, so a
       // two-person household still ended up with two look-alike avatars.
       db.prepare(
-        `INSERT INTO users (id, email, name, role, password_hash, color, must_change_password, created_at, terms_accepted_at)
-         VALUES (?, ?, ?, 'admin', ?, ?, 0, ?, ?)`,
-      ).run(userId, parsed.data.email, parsed.data.name, passwordHash, nextColor(), now(), termsAcceptedAt);
+        `INSERT INTO users (id, email, name, role, password_hash, kdf_version, kdf_salt, color, must_change_password, created_at, terms_accepted_at)
+         VALUES (?, ?, ?, 'admin', ?, 1, ?, ?, 0, ?, ?)`,
+      ).run(
+        userId,
+        parsed.data.email,
+        parsed.data.name,
+        passwordHash,
+        parsed.data.kdf_salt,
+        nextColor(),
+        now(),
+        termsAcceptedAt,
+      );
       stampTimezone(parsed.data.timezone);
       return true;
     })();
@@ -294,7 +311,8 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         token: z.string().min(1),
         name: nameField,
         email: emailField,
-        password: passwordField,
+        auth_key: authKeyField,
+        kdf_salt: kdfSaltField,
         // Sent by the browser for the founder, exactly as the open first
         // run does: the hub's clock is set by whoever sets the hub up
         timezone: z.string().max(64).optional(),
@@ -322,7 +340,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(409).send({ error: 'A user with this address already exists' });
     }
 
-    const passwordHash = await hashPassword(parsed.data.password);
+    const passwordHash = await hashPassword(parsed.data.auth_key);
     const userId = id();
     const termsAcceptedAt = termsStamp(parsed.data.accept_terms);
     // The address the invitation was mailed to is proven by the arrival of
@@ -341,14 +359,15 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       // first: checked inside the transaction like the open first run is
       if (invite.role === 'admin' && userCount() > 0) return false;
       db.prepare(
-        `INSERT INTO users (id, email, name, role, password_hash, color, must_change_password, created_at, email_verified_at, terms_accepted_at)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+        `INSERT INTO users (id, email, name, role, password_hash, kdf_version, kdf_salt, color, must_change_password, created_at, email_verified_at, terms_accepted_at)
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?, 0, ?, ?, ?)`,
       ).run(
         userId,
         parsed.data.email,
         parsed.data.name,
         invite.role,
         passwordHash,
+        parsed.data.kdf_salt,
         nextColor(),
         now(),
         proven ? now() : null,

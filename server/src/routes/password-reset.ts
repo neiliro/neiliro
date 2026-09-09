@@ -3,10 +3,11 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { currentTenant, db, id, now } from '../db/index.js';
 import { env } from '../env.js';
-import { destroyAllSessions } from '../lib/auth.js';
+import { destroyAllSessions, ensureKdfSalt } from '../lib/auth.js';
 import { log } from '../lib/log.js';
 import { sendServiceEmail, serviceMailAvailable } from '../lib/mail.js';
 import { hashPassword } from '../lib/password.js';
+import { AUTH_KEY_PATTERN } from '../lib/kdf.js';
 import { familySlug } from '../lib/tenants.js';
 
 /*
@@ -61,11 +62,35 @@ export async function registerPasswordResetRoutes(app: FastifyInstance): Promise
     return reply.code(202).send({ ok: true });
   });
 
+  /*
+    The browser derives the new auth key from the password and the
+    account's salt, and the reset page knows only the token. A salt is
+    public; a dead token gets the same refusal as a dead confirmation.
+  */
+  app.get('/api/auth/password-reset/check', strictRate, (req, reply) => {
+    const parsed = z.object({ token: z.string().min(1).max(200) }).safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: 'Check the fields' });
+    const row = db
+      .prepare(
+        `SELECT r.expires_at, r.used_at, u.id AS user_id, u.kdf_salt FROM password_resets r JOIN users u ON u.id = r.user_id
+          WHERE r.token_hash = ?`,
+      )
+      .get(hashResetToken(parsed.data.token)) as
+      | { expires_at: string; used_at: string | null; user_id: string; kdf_salt: string | null }
+      | undefined;
+    if (!row || row.used_at || row.expires_at <= new Date().toISOString()) {
+      return reply.code(400).send({ error: 'This link has expired — request a new one' });
+    }
+    return { salt: ensureKdfSalt(row.user_id, row.kdf_salt) };
+  });
+
   app.post('/api/auth/password-reset/confirm', strictRate, async (req, reply) => {
     const parsed = z
       .object({
         token: z.string().min(1).max(200),
-        password: z.string().min(10, 'Password must be at least 10 characters').max(200),
+        // The derived key, never the password (ADR 0001, #211); strength
+        // is checked where the password is typed
+        auth_key: z.string().regex(AUTH_KEY_PATTERN, 'Invalid credentials'),
       })
       .safeParse(req.body);
     if (!parsed.success) {
@@ -79,10 +104,10 @@ export async function registerPasswordResetRoutes(app: FastifyInstance): Promise
       return reply.code(400).send({ error: 'This link has expired — request a new one' });
     }
 
-    const passwordHash = await hashPassword(parsed.data.password);
+    const passwordHash = await hashPassword(parsed.data.auth_key);
     db.transaction(() => {
       db.prepare(
-        'UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?',
+        'UPDATE users SET password_hash = ?, kdf_version = 1, must_change_password = 0 WHERE id = ?',
       ).run(passwordHash, row.user_id);
       db.prepare('UPDATE password_resets SET used_at = ? WHERE id = ?').run(now(), row.id);
       // Every other unused link for this person dies with it

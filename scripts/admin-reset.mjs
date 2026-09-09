@@ -21,6 +21,9 @@ if (!existsSync(dist)) {
   process.exit(1);
 }
 const { generatePassword, hashPassword } = await import(dist);
+// The browser sends a key derived from the password, not the password
+// (ADR 0001); a password picked here is stored as the hash of that key.
+const { deriveAuthKey, newKdfSalt } = await import(resolve(import.meta.dirname, '..', 'server', 'dist', 'lib', 'kdf.js'));
 
 const dataDir = resolve(process.env.DATA_DIR ?? join(homedir(), '.family-hub'));
 const dbPath = join(dataDir, 'hub.db');
@@ -37,8 +40,8 @@ db.pragma('foreign_keys = ON');
 
 const wanted = process.argv[2];
 const user = wanted
-  ? db.prepare('SELECT id, email, name, role FROM users WHERE lower(email) = ?').get(wanted.toLowerCase())
-  : db.prepare("SELECT id, email, name, role FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1").get();
+  ? db.prepare('SELECT id, email, name, role, kdf_salt FROM users WHERE lower(email) = ?').get(wanted.toLowerCase())
+  : db.prepare("SELECT id, email, name, role, kdf_salt FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1").get();
 
 if (!user) {
   const all = db.prepare('SELECT email, role FROM users ORDER BY role, email').all();
@@ -53,15 +56,17 @@ if (!user) {
 }
 
 const password = generatePassword();
-const hash = await hashPassword(password);
+// An account without a salt (never signed in since the split) gets one now
+const salt = user.kdf_salt ?? newKdfSalt();
+const hash = await hashPassword(await deriveAuthKey(password, salt));
 
 // TOTP is cleared too: this script is the lockout escape hatch, and a
 // lost authenticator is exactly the lockout it exists to escape.
 db.prepare(
-  `UPDATE users SET password_hash = ?, must_change_password = 1, disabled_at = NULL,
+  `UPDATE users SET password_hash = ?, kdf_version = 1, kdf_salt = ?, must_change_password = 1, disabled_at = NULL,
                     totp_secret = NULL, totp_confirmed_at = NULL, totp_last_step = NULL
     WHERE id = ?`,
-).run(hash, user.id);
+).run(hash, salt, user.id);
 
 // Close previous sessions: if the password is being reset, they can't be trusted
 const closed = db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id).changes;
