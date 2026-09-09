@@ -38,6 +38,10 @@ const TASKS_LIST = /^\/tasks(?:\?.*)?$/;
 const TASK = new RegExp(`^/tasks/(${UUID})$`);
 const PROJECTS_LIST = /^\/projects(?:\?.*)?$/;
 const PROJECT = new RegExp(`^/projects/(${UUID})$`);
+const EVENTS_LIST = /^\/events(?:\?.*)?$/;
+const EVENT = new RegExp(`^/events/(${UUID})$`);
+const CALENDARS_LIST = /^\/calendars(?:\?.*)?$/;
+const CALENDAR = new RegExp(`^/calendars/(${UUID})$`);
 
 const F = ENCRYPTED_FIELDS;
 
@@ -137,10 +141,11 @@ interface Join {
 }
 
 const PROJECT_TITLE: Join = { field: 'project_title', table: 'projects', column: 'title', idField: 'project_id' };
+const CALENDAR_NAME: Join = { field: 'calendar_name', table: 'calendars', column: 'name', idField: 'calendar_id' };
 
 /** Open a row's own sealed columns and the joined ones, and note plaintext for the job. */
-async function openRow(table: string, row: Row, joins: Join[] = []): Promise<Row> {
-  const id = String(row['id']);
+async function openRow(table: string, row: Row, joins: Join[] = [], idField = 'id'): Promise<Row> {
+  const id = String(row[idField]);
   const columns = F[table]!;
   markPlaintext(table, id, row[columns[0]!]);
   let out = await openFields(table, id, row, columns);
@@ -153,8 +158,12 @@ async function openRow(table: string, row: Row, joins: Join[] = []): Promise<Row
   return out;
 }
 
-const openList = (table: string, rows: Row[], joins: Join[] = []) =>
-  Promise.all(rows.map((row) => openRow(table, row, joins)));
+const openList = (table: string, rows: Row[], joins: Join[] = [], idField = 'id') =>
+  Promise.all(rows.map((row) => openRow(table, row, joins, idField)));
+
+// An occurrence is one date of an event: its id is `<event>#<date>`, its
+// ciphertext is the event's, bound to event_id
+const openOccurrences = (rows: Row[]) => openList('events', rows, [CALENDAR_NAME, PROJECT_TITLE], 'event_id');
 
 /** Seal a create body: mint the id, seal the table's columns under it. */
 async function sealCreate(table: string, b: Body): Promise<Body> {
@@ -190,6 +199,12 @@ export async function encodeRequest(method: string, path: string, body: unknown)
   if (method === 'PATCH' && (m = path.match(TASK))) return sealFields('tasks', m[1]!, b, F['tasks']!);
   if (method === 'POST' && PROJECTS_LIST.test(path)) return sealCreate('projects', b);
   if (method === 'PATCH' && (m = path.match(PROJECT))) return sealFields('projects', m[1]!, b, F['projects']!);
+
+  // Events and calendars (#218)
+  if (method === 'POST' && EVENTS_LIST.test(path)) return sealCreate('events', b);
+  if (method === 'PATCH' && (m = path.match(EVENT))) return sealFields('events', m[1]!, b, F['events']!);
+  if (method === 'POST' && CALENDARS_LIST.test(path)) return sealCreate('calendars', b);
+  if (method === 'PATCH' && (m = path.match(CALENDAR))) return sealFields('calendars', m[1]!, b, F['calendars']!);
 
   return body;
 }
@@ -265,6 +280,16 @@ export async function decodeResponse(
     return openRow('projects', data as Row);
   }
 
+  // Events and calendars
+  if (method === 'GET' && EVENTS_LIST.test(path) && Array.isArray(data)) return openOccurrences(data as Row[]);
+  if ((method === 'GET' && EVENT.test(path)) || (method === 'POST' && EVENTS_LIST.test(path)) || (method === 'PATCH' && EVENT.test(path))) {
+    return openRow('events', data as Row);
+  }
+  if (method === 'GET' && CALENDARS_LIST.test(path) && Array.isArray(data)) return openList('calendars', data as Row[]);
+  if ((method === 'POST' && CALENDARS_LIST.test(path)) || (method === 'PATCH' && CALENDAR.test(path))) {
+    return openRow('calendars', data as Row);
+  }
+
   // Aggregates
   if (method === 'GET' && path.startsWith('/dashboard')) {
     const d = data as Row;
@@ -275,35 +300,17 @@ export async function decodeResponse(
     for (const bucket of ['dueToday', 'overdue', 'upcoming']) {
       if (Array.isArray(d[bucket])) d[bucket] = await openList('tasks', d[bucket] as Row[], [PROJECT_TITLE]);
     }
-    if (Array.isArray(d['todayEvents'])) d['todayEvents'] = await openJoined(d['todayEvents'] as Row[], [PROJECT_TITLE]);
+    if (Array.isArray(d['todayEvents'])) d['todayEvents'] = await openOccurrences(d['todayEvents'] as Row[]);
+    if (Array.isArray(d['reminders'])) d['reminders'] = await openOccurrences(d['reminders'] as Row[]);
     return d;
-  }
-  if (method === 'GET' && path.startsWith('/events')) {
-    if (Array.isArray(data)) return openJoined(data as Row[], [PROJECT_TITLE]);
-    return data;
   }
   if (method === 'GET' && path.startsWith('/search/corpus')) {
     const d = data as Row;
     if (Array.isArray(d['notes'])) d['notes'] = await openNoteList(d['notes'] as Row[]);
     if (Array.isArray(d['tasks'])) d['tasks'] = await openList('tasks', d['tasks'] as Row[], [PROJECT_TITLE]);
     if (Array.isArray(d['projects'])) d['projects'] = await openList('projects', d['projects'] as Row[]);
+    if (Array.isArray(d['events'])) d['events'] = await openList('events', d['events'] as Row[], [CALENDAR_NAME]);
     return d;
   }
   return data;
-}
-
-/** Rows of a table not (yet) encrypted itself, carrying joined sealed titles. */
-async function openJoined(rows: Row[], joins: Join[]): Promise<Row[]> {
-  return Promise.all(
-    rows.map(async (row) => {
-      let out = row;
-      for (const join of joins) {
-        const joinedId = out[join.idField];
-        if (typeof out[join.field] !== 'string' || typeof joinedId !== 'string') continue;
-        const opened = await openFields(join.table, joinedId, { [join.column]: out[join.field] }, [join.column]);
-        out = { ...out, [join.field]: opened[join.column] };
-      }
-      return out;
-    }),
-  );
 }

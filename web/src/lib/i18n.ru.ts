@@ -964,8 +964,8 @@ export const ru: Record<string, string> = {
   'This device does not hold the family key — unlock it before editing':
     'На этом устройстве нет ключа семьи — откройте его перед редактированием',
   'Encrypt what was written before the key': 'Зашифровать написанное до ключа',
-  'Notes, tasks and projects from before the key existed are still readable on the server. This rewrites them under the key, here in your browser; each member does it once for their private notes.':
-    'Заметки, задачи и проекты, созданные до появления ключа, всё ещё читаются на сервере. Это перезапишет их под ключом прямо в браузере; свои приватные заметки каждый участник шифрует сам, один раз.',
+  'Notes, tasks, projects and events from before the key existed are still readable on the server. This rewrites them under the key, here in your browser; each member does it once for their private notes and calendars.':
+    'Заметки, задачи, проекты и события, созданные до появления ключа, всё ещё читаются на сервере. Это перезапишет их под ключом прямо в браузере; свои приватные заметки и календари каждый участник шифрует сам, один раз.',
   'Encrypting… {done} of {total}': 'Шифруем… {done} из {total}',
   'Nothing left to encrypt.': 'Шифровать больше нечего.',
   'Done — {n} encrypted.': 'Готово — зашифровано: {n}.',
@@ -974,6 +974,14 @@ export const ru: Record<string, string> = {
   'A note with this id already exists': 'Заметка с таким id уже есть',
   'A task with this id already exists': 'Задача с таким id уже есть',
   'A project with this id already exists': 'Проект с таким id уже есть',
+  'An event with this id already exists': 'Событие с таким id уже есть',
+  'A calendar with this id already exists': 'Календарь с таким id уже есть',
+  'The link carries the family key after the address: your calendar app needs readable events, so the server opens them for that app alone, each time it asks. A subscription added before encryption shows dots instead of words — remove it and add this link again.':
+    'После адреса в ссылке идёт ключ семьи: календарю нужны читаемые события, поэтому сервер открывает их только для этого приложения и только когда оно спрашивает. Подписка, добавленная до шифрования, покажет точки вместо слов — удалите её и добавьте эту ссылку заново.',
+  'This device does not hold the family key, so the link shown here opens no encrypted events. Open the key on this device and come back for the full link.':
+    'На этом устройстве нет ключа семьи, поэтому показанная ссылка не откроет зашифрованные события. Откройте ключ на этом устройстве и вернитесь за полной ссылкой.',
+  'The link carries the family key for this one event: the server opens it for whoever follows the link.':
+    'В ссылке едет ключ семьи для этого одного события: сервер открывает его тому, кто перейдёт по ссылке.',
 };
 
 /** one / few / many, keyed by the English singular used in plural() calls. */

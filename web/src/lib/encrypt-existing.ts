@@ -28,6 +28,9 @@ interface TextRow {
   title: string;
   description?: string | null;
   body_md?: string;
+  location?: string | null;
+  name?: string;
+  profile_user_id?: string | null;
 }
 
 /** One table: how to see all its rows, and which fields to write back. */
@@ -71,6 +74,30 @@ const MODULES: Module[] = [
     rewrite: async (id) => {
       const task = await api.get<TextRow>(`/tasks/${id}`);
       await api.patch(`/tasks/${id}`, { title: task.title, description: task.description ?? null });
+    },
+  },
+  {
+    table: 'calendars',
+    lists: ['/calendars'],
+    rewrite: async (id) => {
+      const calendar = (await api.get<TextRow[]>('/calendars')).find((c) => c.id === id);
+      if (calendar?.name) await api.patch(`/calendars/${id}`, { name: calendar.name });
+    },
+  },
+  {
+    // The search corpus is the one list of every event this person may see
+    table: 'events',
+    lists: ['/search/corpus'],
+    rewrite: async (id) => {
+      const event = await api.get<TextRow>(`/events/${id}`);
+      // A birthday is derived from a profile and re-made on every profile
+      // save, with the member's name — plaintext by design, not a leftover
+      if (event.profile_user_id) return;
+      await api.patch(`/events/${id}`, {
+        title: event.title,
+        description: event.description ?? null,
+        location: event.location ?? null,
+      });
     },
   },
 ];

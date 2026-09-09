@@ -141,7 +141,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const projects = db.prepare('SELECT id, title, description, color FROM projects').all();
     const events = db
       .prepare(
-        `SELECT e.id, e.title, e.description, e.location, e.starts_at, c.name AS calendar_name, c.color
+        `SELECT e.id, e.title, e.description, e.location, e.starts_at, e.calendar_id, e.profile_user_id,
+                c.name AS calendar_name, c.color
            FROM events e JOIN calendars c ON c.id = e.calendar_id
           WHERE (c.shared = 1 OR c.owner_id = ?)
           ORDER BY e.starts_at DESC LIMIT 5000`,

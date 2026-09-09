@@ -107,7 +107,7 @@ export function KeysSection() {
             <p className="text-sm font-medium text-ink">{t('Encrypt what was written before the key')}</p>
             <p className="text-xs text-muted">
               {job === null
-                ? t('Notes, tasks and projects from before the key existed are still readable on the server. This rewrites them under the key, here in your browser; each member does it once for their private notes.')
+                ? t('Notes, tasks, projects and events from before the key existed are still readable on the server. This rewrites them under the key, here in your browser; each member does it once for their private notes and calendars.')
                 : jobRunning
                   ? t('Encrypting… {done} of {total}', { done: job.done + job.failed, total: job.total })
                   : job.total === 0

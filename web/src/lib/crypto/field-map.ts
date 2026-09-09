@@ -20,6 +20,11 @@ export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   // calendar and the dashboard buckets are the server's queries
   tasks: ['title', 'description'],
   projects: ['title', 'description'],
+  // #218 — times and the rule stay clear so the server keeps expanding
+  // recurrence; a birthday event derived from a profile keeps the member's
+  // name in plaintext, as the users table does
+  events: ['title', 'description', 'location'],
+  calendars: ['name'],
 };
 
 /** Text columns of the tables above that stay readable, and why. */
@@ -67,5 +72,23 @@ export const CLEAR_FIELDS: Record<string, Record<string, string>> = {
     created_by: 'identifier',
     created_at: 'a timestamp',
     updated_at: 'a timestamp',
+  },
+  events: {
+    id: 'identifier',
+    calendar_id: 'identifier — visibility is enforced server-side through it',
+    starts_at: 'a wall-clock time the server expands and windows by',
+    ends_at: 'a wall-clock time',
+    recurrence_rule: 'a machine rule (RRULE subset) the server expands',
+    project_id: 'identifier',
+    profile_user_id: 'identifier — marks the birthday event a profile derives',
+    share_token: 'an unguessable token, stored in the clear by design (migration 027)',
+    created_by: 'identifier',
+    created_at: 'a timestamp',
+    updated_at: 'a timestamp',
+  },
+  calendars: {
+    id: 'identifier',
+    color: 'a hex colour',
+    owner_id: 'identifier — privacy is enforced server-side on this value',
   },
 };

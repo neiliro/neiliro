@@ -157,3 +157,29 @@ describe('tasks and projects (#217)', () => {
     expect(pendingPlaintext('tasks')).toContain(TASK_ID);
   });
 });
+
+describe('events and calendars (#218)', () => {
+  const CALENDAR_ID = '55555555-5555-4555-8555-555555555555';
+  const EVENT_ID = '66666666-6666-4666-8666-666666666666';
+
+  beforeEach(async () => setVault({ key: await generateFamilyKey(), familyHasKey: true }));
+
+  it('opens an occurrence under its event id, with the calendar name under the calendar id', async () => {
+    const calendar = (await encodeRequest('POST', '/calendars', { id: CALENDAR_ID, name: 'School' })) as Row;
+    const event = (await encodeRequest('POST', '/events', {
+      id: EVENT_ID, calendar_id: CALENDAR_ID, title: 'Concert', location: 'Hall', starts_at: '2026-09-20T18:00', ends_at: '2026-09-20T20:00',
+    })) as Row;
+    expect(isEncrypted(event['title'] as string)).toBe(true);
+    expect(event['starts_at']).toBe('2026-09-20T18:00');
+
+    const occurrences = (await decodeResponse('GET', '/events?from=a&to=b', [
+      {
+        id: `${EVENT_ID}#2026-09-20`, event_id: EVENT_ID, date: '2026-09-20',
+        title: event['title'], description: null, location: event['location'],
+        calendar_id: CALENDAR_ID, calendar_name: calendar['name'], project_id: null, project_title: null,
+      },
+    ])) as Row[];
+    expect(occurrences[0]).toMatchObject({ title: 'Concert', location: 'Hall', calendar_name: 'School' });
+    expect(pendingPlaintext('events')).not.toContain(EVENT_ID);
+  });
+});

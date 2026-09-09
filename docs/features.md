@@ -101,6 +101,8 @@ Time is stored as local wall-clock time, not UTC. "Every Tuesday at 10:00" must 
 
 Recurring events expand on the fly per requested range and are never materialised into the database: "every year" with no end date is an infinite table. A single occurrence can be cancelled without touching the series; cancelled dates are kept as an exception list.
 
+With a family key, an event's title, description and location and a calendar's name are encrypted in the browser; times, the recurrence rule and which calendar an event is in stay readable, so the server still expands series and applies calendar privacy. A birthday derived from a profile keeps the member's name readable, as the member list does.
+
 Event participants ("who is going") show as circles with the first letter of the name — in the grid, the agenda and the dashboard. Without that, picking participants produced no visible result and looked broken.
 
 A calendar is either shared (visible to all) or personal (visible only to the owner, administrator included). The set of visible layers and the chosen view are remembered per device: a kiosk wants the week, a phone prefers the agenda.
@@ -160,11 +162,15 @@ Any event can get a public link — "the party is on Saturday at three, here is 
 
 It reveals **one event and nothing around it**: not the calendar it belongs to (that name can itself be private), not who is attending, not what else is on that day. Sharing an invitation should not open a window into the household. The link is revocable, and asking for it twice returns the same one, so it can be re-sent to the second parent a week later without breaking the first copy.
 
+When the family has a key, the link carries it after the token (`/event/<token>~<key>`): a guest needs words, so the server opens that one event for whoever follows the link, for that request only. The dialog says so where the link is shown.
+
 ### In your own calendar app
 
 The family calendar can be subscribed to from Apple Calendar, Google Calendar or Outlook: **Settings → Subscribe in your calendar** issues a read-only link, and the calendar shows up next to the work one on a phone.
 
 Three properties are worth knowing. The link is **per person**, not per family — calendars can be private, so a feed shows exactly what its owner is allowed to see and nothing more. It is **read-only by construction**: there is no write path behind that URL, so the hub is not a CalDAV server and cannot be edited from outside. And it is **revocable in one click**, which is the safety story for an address that lives in someone else's app: revoke it and every subscribed device goes dark at once.
+
+Once the family has a key, the address carries it after the token (`…/feed/<token>~<key>.ics`). A calendar app expects readable events, and the person pasting the link into Google Calendar is handing those events to Google anyway; the server opens them for that request and keeps nothing — the key half is never stored, it exists only in the link, which is why a device without the key shows a link that opens no encrypted events. A subscription added before encryption keeps working but shows `••••••` in place of words until it is removed and added again from the new address.
 
 Times travel as local wall-clock, unconverted — a 9am school run stays 9am in whatever zone the reading device is in, which is the same convention the hub uses everywhere. Repeating events travel as their rule, so a weekly event is one entry that the calendar app expands, not fifty copies.
 
