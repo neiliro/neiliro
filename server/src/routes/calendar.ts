@@ -7,8 +7,8 @@ import { buildCalendarFeed, type FeedEvent } from '../lib/ics.js';
 import { expandOccurrences, isValidRecurrence } from '../lib/recurrence.js';
 import { daysBetween, shiftDays } from '../lib/dates.js';
 import { FieldOpener, splitTokenKey } from '../lib/envelope.js';
+import { dateField, dateTimeField, isRealDate } from '../lib/date-field.js';
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 
 /**
@@ -33,18 +33,8 @@ const eventBase = z.object({
   // The message matches due_date in tasks.ts — without one, a malformed
   // date answers with zod's bare "Invalid", which names neither the field
   // nor the shape (#86)
-  starts_at: z
-    .string()
-    .regex(
-      new RegExp(`${DATE.source.slice(0, -1)}(T\\d{2}:\\d{2})?$`),
-      'Date must be YYYY-MM-DD or YYYY-MM-DDTHH:MM',
-    ),
-  ends_at: z
-    .string()
-    .regex(
-      new RegExp(`${DATE.source.slice(0, -1)}(T\\d{2}:\\d{2})?$`),
-      'Date must be YYYY-MM-DD or YYYY-MM-DDTHH:MM',
-    ),
+  starts_at: dateTimeField(),
+  ends_at: dateTimeField(),
   all_day: z.boolean().optional(),
   recurrence_rule: z.string().max(100).nullable().optional(),
   project_id: z.string().uuid().nullable().optional(),
@@ -142,6 +132,10 @@ export function listOccurrences(userId: string, from: string, to: string): Occur
   const result: Occurrence[] = [];
 
   for (const event of events) {
+    // A row with a date the parser cannot place (written before #250, or by
+    // hand) is skipped, not fatal: one bad row must never take the family's
+    // calendar and dashboard down with it
+    if (!isRealDate(event.starts_at.slice(0, 10)) || !isRealDate(event.ends_at.slice(0, 10))) continue;
     const anchor = event.starts_at.slice(0, 10);
     const span = daysBetween(anchor, event.ends_at.slice(0, 10));
 
@@ -306,7 +300,7 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
 
   app.get('/api/events', (req, reply) => {
     const parsed = z
-      .object({ from: z.string().regex(DATE), to: z.string().regex(DATE) })
+      .object({ from: dateField(), to: dateField() })
       .safeParse(req.query);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'Range boundaries from and to are required' });
@@ -475,7 +469,7 @@ export async function registerCalendarRoutes(app: FastifyInstance): Promise<void
   /** Cancel a single instance of a series without touching the series itself. */
   app.delete('/api/events/:id/occurrences/:date', (req, reply) => {
     const { id: eventId, date } = z
-      .object({ id: z.string().uuid(), date: z.string().regex(DATE) })
+      .object({ id: z.string().uuid(), date: dateField() })
       .parse(req.params);
 
     const event = db

@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db, id, now } from '../db/index.js';
 import { env } from '../env.js';
+import { dateField } from '../lib/date-field.js';
 
 /*
   Family member profiles (#68): birthday, family role, preferences,
@@ -25,7 +26,6 @@ import { env } from '../env.js';
 
 const FAMILY_ROLES = ['mother', 'father', 'daughter', 'son', 'grandmother', 'grandfather'] as const;
 const SHARED_CALENDAR_ID = '00000000-0000-4000-8000-000000000201';
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Self or admin — the #64 boundary, reused verbatim. */
 function canEdit(req: FastifyRequest, userId: string): boolean {
@@ -178,7 +178,7 @@ export async function registerProfileRoutes(app: FastifyInstance): Promise<void>
     if (!canEdit(req, userId)) return forbid(reply);
     const parsed = z
       .object({
-        birthday: z.string().regex(DATE, 'Date must be YYYY-MM-DD').nullable().optional(),
+        birthday: dateField().nullable().optional(),
         family_role: z.enum(FAMILY_ROLES).nullable().optional(),
       })
       .safeParse(req.body);
