@@ -2,7 +2,7 @@ import { t } from '../lib/i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useKeys } from '../lib/family-key';
-import { familyKeySuffix } from '../lib/token-key';
+import { suffixForKey } from '../lib/token-key';
 
 /**
  * Subscribe-by-URL for the calendar.
@@ -17,7 +17,7 @@ export function CalendarFeedSection() {
   const [suffix, setSuffix] = useState('');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
-  const { status } = useKeys();
+  const { status, familyKey } = useKeys();
 
   const load = useCallback(async () => {
     const res = await api.get<{ token: string | null }>('/calendar/feed');
@@ -25,10 +25,12 @@ export function CalendarFeedSection() {
   }, []);
 
   // The key half of the link is appended on this device (#218): the server
-  // never sees it outside the requests the calendar app makes
+  // never sees it outside the requests the calendar app makes. Derived from
+  // the provider's key, not from the vault: this effect runs before the
+  // provider's own, which is how the link once shipped without it (#251).
   useEffect(() => {
-    void familyKeySuffix().then(setSuffix);
-  }, [status]);
+    void suffixForKey(familyKey).then(setSuffix);
+  }, [familyKey]);
 
   useEffect(() => {
     void load();

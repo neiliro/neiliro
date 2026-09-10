@@ -13,7 +13,16 @@ import { vaultKey } from './vault';
   for that request only (server/src/lib/envelope.ts).
 */
 export async function familyKeySuffix(): Promise<string> {
-  const key = vaultKey();
+  return suffixForKey(vaultKey());
+}
+
+/**
+ * The same, for a key a component already holds from the provider. A
+ * component's effect runs before the provider's, so at the moment the key
+ * appears `vaultKey()` may still be null — read the context's key instead
+ * (#251).
+ */
+export async function suffixForKey(key: CryptoKey | null): Promise<string> {
   if (!key) return '';
   return `~${toBase64url(await exportFamilyKey(key))}`;
 }
