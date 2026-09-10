@@ -171,6 +171,15 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     if (founderInvited()) {
       return reply.code(403).send({ error: ALREADY_SET_UP });
     }
+    // A hub that already has its admin refuses BEFORE it looks at the body,
+    // exactly as the ghost does above. Validating first gave the game away:
+    // an invalid body drew 400 from a real family and 403 from a ghost, and
+    // that one bit was enough to list the service's customers by name (#252).
+    // The transaction below keeps the check that settles two simultaneous
+    // first runs; this one only fixes what an outsider can observe.
+    if ((db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n > 0) {
+      return reply.code(403).send({ error: ALREADY_SET_UP });
+    }
     const parsed = z
       .object({
         name: nameField,
