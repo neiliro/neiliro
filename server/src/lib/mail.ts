@@ -128,6 +128,22 @@ function mimeDisplayName(name: string): string {
   return `=?UTF-8?B?${Buffer.from(name, 'utf8').toString('base64')}?=`;
 }
 
+/**
+ * The provider (or the family's own SMTP server) would not take the message.
+ * An ordinary event — a compliance hold, an unverified domain, a wrong
+ * password on a self-hosted box — that the person pressing "send" needs to
+ * read as such, not as the hub falling over (#253). The route maps it to 502.
+ */
+export class MailSendError extends Error {
+  constructor(
+    message: string,
+    readonly detail: string,
+  ) {
+    super(message);
+    this.name = 'MailSendError';
+  }
+}
+
 /** The family's own mailbox, over its own SMTP. */
 function accountSender(account: MailAccount): Outgoing {
   const transport = nodemailer.createTransport({
@@ -139,14 +155,18 @@ function accountSender(account: MailAccount): Outgoing {
   return {
     address: account.address,
     async send(message) {
-      await transport.sendMail({
-        from: { name: message.fromName, address: account.address },
-        to: message.to,
-        subject: message.subject,
-        text: message.text,
-        inReplyTo: message.inReplyTo,
-        references: message.inReplyTo,
-      });
+      try {
+        await transport.sendMail({
+          from: { name: message.fromName, address: account.address },
+          to: message.to,
+          subject: message.subject,
+          text: message.text,
+          inReplyTo: message.inReplyTo,
+          references: message.inReplyTo,
+        });
+      } catch (err) {
+        throw new MailSendError('The mail server refused the message', err instanceof Error ? err.message : String(err));
+      }
     },
   };
 }
@@ -209,7 +229,7 @@ async function postToMailgun(form: FormData): Promise<void> {
     // compliance hold — and the person pressing "send reply" is the
     // one who needs to see it.
     const detail = await res.text().catch(() => '');
-    throw new Error(`Mailgun refused the message (${res.status}) ${detail.slice(0, 200)}`.trim());
+    throw new MailSendError('The mail service refused the message', `Mailgun ${res.status} ${detail.slice(0, 200)}`.trim());
   }
 }
 

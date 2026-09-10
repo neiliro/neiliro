@@ -190,7 +190,9 @@ describe('hosted reply', () => {
       headers: { host: HOST, cookie },
       payload: { text: 'This one should not be filed.' },
     });
-    expect(res.statusCode).toBeGreaterThanOrEqual(500);
+    // A refusal is a legible 502, not the hub falling over (#253)
+    expect(res.statusCode).toBe(502);
+    expect((res.json() as { error: string }).error).toBe('The mail service refused the message');
     expect(sent).toHaveLength(before + 1);
 
     const thread = await app.inject({

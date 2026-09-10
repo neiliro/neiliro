@@ -6,10 +6,12 @@ import { isCiphertext } from '../lib/ciphertext.js';
 import {
   familyMailAddress,
   getMailAccount,
+  MailSendError,
   mailSource,
   pollMail,
   sendReply,
 } from '../lib/mail.js';
+import { log } from '../lib/log.js';
 
 /** The seeded Inbox project (migration 004) — the natural home for mail-born tasks. */
 const INBOX_PROJECT_ID = '00000000-0000-4000-8000-000000000001';
@@ -153,8 +155,16 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'The browser names the recipient and the subject for an encrypted letter' });
     }
     const user = req.user!;
-    const replyId = await sendReply(message, { to, subject, text: parsed.data.text }, { id: user.id, name: user.name });
-    return reply.code(201).send({ id: replyId });
+    try {
+      const replyId = await sendReply(message, { to, subject, text: parsed.data.text }, { id: user.id, name: user.name });
+      return reply.code(201).send({ id: replyId });
+    } catch (err) {
+      if (!(err instanceof MailSendError)) throw err;
+      // A refusal by the provider is not an outage: 502 with a sentence the
+      // person can act on, the provider's own words in the log for the operator
+      log.warn(`mail reply refused for message ${messageId}: ${err.detail}`);
+      return reply.code(502).send({ error: err.message });
+    }
   });
 
   /** Rewriting a letter's words — for the one-time job that brings old plaintext under the key (#223). */

@@ -984,6 +984,8 @@ export const ru: Record<string, string> = {
   'An item with this id already exists': 'Пункт с таким id уже есть',
   'A section with this id already exists': 'Раздел с таким id уже есть',
   'An entry with this id already exists': 'Запись с таким id уже есть',
+  'The mail service refused the message': 'Почтовый сервис отказался отправлять письмо',
+  'The mail server refused the message': 'Почтовый сервер отказался отправлять письмо',
   'An attachment with this id already exists': 'Вложение с таким id уже есть',
   'The file name is too long': 'Слишком длинное имя файла',
   'The browser creates the task for an encrypted letter': 'Задачу из зашифрованного письма создаёт браузер',
