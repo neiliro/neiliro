@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { db, id, now } from '../db/index.js';
 import { isValidRecurrence, occurrenceAfter } from '../lib/recurrence.js';
 import { isCiphertext } from '../lib/ciphertext.js';
+import { dateField } from '../lib/date-field.js';
 
 const STATUSES = ['backlog', 'todo', 'in_progress', 'done', 'cancelled'] as const;
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /*
   The list is capped, because on the hosted service one process serves
@@ -60,8 +60,8 @@ const createInput = z.object({
   description: z.string().max(40_000).nullable().optional(),
   status: z.enum(STATUSES).optional(),
   priority: z.enum(PRIORITIES).optional(),
-  due_date: z.string().regex(DATE, 'Date must be YYYY-MM-DD').nullable().optional(),
-  expected_date: z.string().regex(DATE, 'Date must be YYYY-MM-DD').nullable().optional(),
+  due_date: dateField().nullable().optional(),
+  expected_date: dateField().nullable().optional(),
   assignee_id: z.string().uuid().nullable().optional(),
   recurrence_rule: z.string().max(100).nullable().optional(),
   // Set by the browser when it spawns the next occurrence of an encrypted
@@ -120,8 +120,8 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         status: z.string().optional(),
         assignee_id: z.string().optional(),
         priority: z.enum(PRIORITIES).optional(),
-        due_before: z.string().regex(DATE).optional(),
-        due_after: z.string().regex(DATE).optional(),
+        due_before: dateField().optional(),
+        due_after: dateField().optional(),
         include_done: z.enum(['true', 'false']).optional(),
         search: z.string().max(200).optional(),
         limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).optional(),
