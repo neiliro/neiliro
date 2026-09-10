@@ -5,8 +5,8 @@ import { resolve } from 'node:path';
 import { currentTenant, db, id, now, today } from '../db/index.js';
 import { shiftDays } from '../lib/dates.js';
 import { dueOccurrences } from './budgets.js';
+import { dateField } from '../lib/date-field.js';
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * An account is visible if it is shared or belongs to the asker.
@@ -67,7 +67,7 @@ function parentProblem(parentId: string, kind: string): string | null {
 
 const txBase = z.object({
   kind: z.enum(['expense', 'income', 'transfer']),
-  occurred_on: z.string().regex(DATE, 'Date must be YYYY-MM-DD'),
+  occurred_on: dateField(),
   account_id: z.string().uuid(),
   amount: z.number().int().positive('Amount must be greater than zero'),
   to_account_id: z.string().uuid().nullable().optional(),
@@ -331,7 +331,7 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
     const { id: accountId } = z.object({ id: z.string().uuid() }).parse(req.params);
     const parsed = z
       .object({
-        checked_on: z.string().regex(DATE),
+        checked_on: dateField(),
         actual_balance: z.number().int(),
         note: z.string().max(4_000).nullable().optional(),
       })
@@ -470,8 +470,8 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/transactions', (req) => {
     const q = z
       .object({
-        from: z.string().regex(DATE).optional(),
-        to: z.string().regex(DATE).optional(),
+        from: dateField().optional(),
+        to: dateField().optional(),
         account_id: z.string().uuid().optional(),
         category_id: z.string().uuid().optional(),
         kind: z.enum(['expense', 'income', 'transfer']).optional(),
@@ -725,7 +725,7 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
   /** Totals per currency, separately: no grand total without an exchange rate. */
   app.get('/api/money/summary', (req, reply) => {
     const parsed = z
-      .object({ from: z.string().regex(DATE), to: z.string().regex(DATE) })
+      .object({ from: dateField(), to: dateField() })
       .safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: 'Period boundaries are required' });
 

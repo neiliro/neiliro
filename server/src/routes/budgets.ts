@@ -3,9 +3,8 @@ import { z } from 'zod';
 import { db, id, now, today } from '../db/index.js';
 import { expandOccurrences, isValidRecurrence } from '../lib/recurrence.js';
 import { isCiphertext } from '../lib/ciphertext.js';
+import { dateField, monthField } from '../lib/date-field.js';
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const MONTH = /^\d{4}-\d{2}$/;
 
 const ACCOUNT_VISIBLE = '(a.shared = 1 OR a.owner_id = ?)';
 
@@ -204,7 +203,7 @@ export function runAutoCreate(): number {
 const recurringInput = z.object({
   title: z.string().min(1, 'Enter a title').max(4_000),
   kind: z.enum(['expense', 'income', 'transfer']),
-  start_on: z.string().regex(DATE, 'Date must be YYYY-MM-DD'),
+  start_on: dateField(),
   recurrence_rule: z.string().min(1).max(100),
   account_id: z.string().uuid(),
   amount: z.number().int().positive('Amount must be greater than zero'),
@@ -226,7 +225,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
    * would mean duplicating the limit-selection rule there.
    */
   app.get('/api/budgets', (req, reply) => {
-    const parsed = z.object({ month: z.string().regex(MONTH) }).safeParse(req.query);
+    const parsed = z.object({ month: monthField() }).safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: 'Month must be YYYY-MM' });
 
     const { month } = parsed.data;
@@ -279,7 +278,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
       .object({
         category_id: z.string().uuid(),
         currency: z.string().regex(/^[A-Z]{3}$/),
-        month: z.string().regex(MONTH).nullable().optional(),
+        month: monthField().nullable().optional(),
         amount: z.number().int().positive('Limit must be greater than zero'),
       })
       .safeParse(req.body);
@@ -446,7 +445,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
     const { id: ruleId } = z.object({ id: z.string().uuid() }).parse(req.params);
     const parsed = z
       .object({
-        occurred_on: z.string().regex(DATE),
+        occurred_on: dateField(),
         // The actual amount may differ from the planned one: a salary with
         // a bonus, rent with a changed water bill
         amount: z.number().int().positive().optional(),
@@ -477,7 +476,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
 
   app.post('/api/recurring/:id/skip', (req, reply) => {
     const { id: ruleId } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const parsed = z.object({ occurred_on: z.string().regex(DATE) }).safeParse(req.body);
+    const parsed = z.object({ occurred_on: dateField() }).safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Occurrence date is required' });
 
     const rule = db
