@@ -1,6 +1,6 @@
 import { t } from './i18n';
 import { decryptFile, encryptFile, openSealedFile } from './crypto';
-import { hasFamilyKey, openFields, sealFields, vaultKey, VaultLockedError } from './vault';
+import { hasFamilyKey, openFields, sealFields, vaultKey, vaultReady, VaultLockedError } from './vault';
 
 /*
   Attachments under the family key (#222).
@@ -34,6 +34,7 @@ const bytesOf = async (file: Blob): Promise<Uint8Array<ArrayBuffer>> => new Uint
 
 /** Upload files to a notes or transactions attachment route, sealed when the key is here. */
 export async function uploadAttachments(path: string, files: File[]): Promise<UploadedFile[]> {
+  await vaultReady();
   const key = vaultKey();
   if (!key && hasFamilyKey()) throw new VaultLockedError();
 
@@ -78,6 +79,7 @@ export function attachmentUrl(id: string, mime?: string): Promise<string> {
     if (!res.ok) throw new Error(t('File not found'));
     const kind = Number(res.headers.get('X-Neiliro-Encryption') ?? '0');
     if (kind === 0) return `/api/attachments/${id}`;
+    await vaultReady();
     const key = vaultKey();
     if (!key) throw new VaultLockedError();
     const bytes = new Uint8Array(await res.arrayBuffer());
@@ -93,6 +95,7 @@ export function attachmentUrl(id: string, mime?: string): Promise<string> {
 
 /** The one-time job: fetch a plaintext file, seal it under its own id, put it back in place. */
 export async function encryptExistingAttachment(id: string, filename: string, mime: string): Promise<void> {
+  await vaultReady();
   const key = vaultKey();
   if (!key) throw new VaultLockedError();
   const res = await fetch(`/api/attachments/${id}`);

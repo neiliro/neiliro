@@ -24,9 +24,42 @@ import { isSealed, openSealedField } from './crypto/seal';
 let familyKey: CryptoKey | null = null;
 let familyHasKey = false;
 
-export function setVault(state: { key: CryptoKey | null; familyHasKey: boolean }): void {
+/*
+  Readiness (#249). On a fresh page load the pages ask for their data the
+  moment the session is known — in parallel with the provider reading the
+  key from IndexedDB. A response decoded in that gap has no key to open it
+  with, comes back as placeholders, and nothing re-decodes when the key
+  lands a few milliseconds later. So the codec waits, once per load, until
+  the provider says it has settled: unlocked, locked or absent — any answer
+  but "still looking". A bounded wait: offline, or a provider that never
+  reports, must not hang every request forever.
+*/
+let settled = true;
+let waiters: (() => void)[] = [];
+const READY_TIMEOUT_MS = 2_500;
+
+export function setVault(state: { key: CryptoKey | null; familyHasKey: boolean; settled?: boolean }): void {
   familyKey = state.key;
   familyHasKey = state.familyHasKey;
+  if (state.settled === false) {
+    settled = false;
+    return;
+  }
+  settled = true;
+  for (const wake of waiters) wake();
+  waiters = [];
+}
+
+/** Resolves once the provider has settled the key's state, or after a bounded wait. */
+export function vaultReady(): Promise<void> {
+  if (settled) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, READY_TIMEOUT_MS);
+    waiters.push(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
 export function vaultKey(): CryptoKey | null {

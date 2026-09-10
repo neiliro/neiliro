@@ -1,7 +1,7 @@
 import { ENCRYPTED_FIELDS } from './crypto/field-map';
 import { isEncrypted } from './crypto/envelope';
 import { excerptOf, extractLinks, normalizeWikiLinks } from './notes';
-import { openFields, openRows, sealFields } from './vault';
+import { openFields, openRows, sealFields, vaultReady } from './vault';
 
 /*
   Encrypt on the way out, decrypt on the way in (ADR 0001, phase 2).
@@ -243,6 +243,8 @@ export type Requester = (path: string, method: string, body?: unknown) => Promis
 
 export async function encodeRequest(method: string, path: string, body: unknown): Promise<unknown> {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
+  // A write racing the key's first load must not be refused as "locked" (#249)
+  await vaultReady();
   const b = body as Body;
   let m: RegExpMatchArray | null;
 
@@ -332,6 +334,9 @@ export async function decodeResponse(
   request?: Requester,
 ): Promise<unknown> {
   if (data === null || typeof data !== 'object') return data;
+  // Decoded with the key at hand, not with whatever the vault held a few
+  // milliseconds after page load (#249)
+  await vaultReady();
   let m: RegExpMatchArray | null;
 
   // Notes

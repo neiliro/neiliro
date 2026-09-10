@@ -1,5 +1,5 @@
 import { exportFamilyKey, toBase64url } from './crypto';
-import { vaultKey } from './vault';
+import { vaultKey, vaultReady } from './vault';
 
 /*
   The two links that feed other people's software — the calendar
@@ -13,6 +13,9 @@ import { vaultKey } from './vault';
   for that request only (server/src/lib/envelope.ts).
 */
 export async function familyKeySuffix(): Promise<string> {
+  // Not before the provider has settled the key (#249): a link built a few
+  // milliseconds into a fresh load would otherwise miss its key half
+  await vaultReady();
   return suffixForKey(vaultKey());
 }
 
