@@ -217,7 +217,9 @@ export function KeyProvider({ children, store }: { children: ReactNode; store?: 
   // is true for every state but `absent` — while the answer is still
   // loading a write must refuse rather than fall through to plaintext.
   useEffect(() => {
-    setVault({ key: familyKey, familyHasKey: status !== 'absent' });
+    // `settled` gates the codec: while the key is still being looked up, a
+    // response is not decoded yet rather than decoded into placeholders (#249)
+    setVault({ key: familyKey, familyHasKey: status !== 'absent', settled: status !== 'loading' });
   }, [familyKey, status]);
 
   const unlockWithRecoveryCode = useCallback(

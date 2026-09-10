@@ -339,3 +339,32 @@ describe('mail (#223)', () => {
     expect((rewritten['subject'] as string).startsWith('e1:')).toBe(true);
   });
 });
+
+describe('readiness (#249)', () => {
+  it('holds a response until the provider settles the key, then opens it with the key that arrived', async () => {
+    const family = await generateFamilyKey();
+    setVault({ key: family, familyHasKey: true });
+    const sealed = (await encodeRequest('PATCH', `/notes/${NOTE_ID}`, { title: 'Late key' })) as Row;
+
+    // A fresh page load: the provider is still looking, no key in the vault yet
+    setVault({ key: null, familyHasKey: true, settled: false });
+    let opened: Row | null = null;
+    const pending = decodeResponse('GET', `/notes/${NOTE_ID}`, { id: NOTE_ID, title: sealed['title'], body_md: '' }).then((r) => {
+      opened = r as Row;
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(opened).toBeNull();
+
+    // The key lands: the held response decodes with it, not into placeholders
+    setVault({ key: family, familyHasKey: true, settled: true });
+    await pending;
+    expect(opened!['title']).toBe('Late key');
+  });
+
+  it('does not wait when the provider has already answered', async () => {
+    setVault({ key: null, familyHasKey: false });
+    const t = performance.now();
+    await decodeResponse('GET', '/notes', []);
+    expect(performance.now() - t).toBeLessThan(50);
+  });
+});
