@@ -13,10 +13,9 @@ import { vaultKey, vaultReady } from './vault';
   for that request only (server/src/lib/envelope.ts).
 */
 export async function familyKeySuffix(): Promise<string> {
-<<<<<<< HEAD
+  // Not before the provider has settled the key (#249): a link built a few
+  // milliseconds into a fresh load would otherwise miss its key half
   await vaultReady();
-  const key = vaultKey();
-=======
   return suffixForKey(vaultKey());
 }
 
@@ -27,7 +26,6 @@ export async function familyKeySuffix(): Promise<string> {
  * (#251).
  */
 export async function suffixForKey(key: CryptoKey | null): Promise<string> {
->>>>>>> origin/master
   if (!key) return '';
   return `~${toBase64url(await exportFamilyKey(key))}`;
 }
