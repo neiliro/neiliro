@@ -236,6 +236,17 @@ async function sealCreate(table: string, b: Body): Promise<Body> {
   return sealFields(table, id, { ...b, id }, F[table]!);
 }
 
+/*
+  Which requests wait for the key (#249, #260). The provider learns whether
+  the family has a key by asking /api/keys — through this same client. If
+  that request waited for the vault to settle, and the vault settled only
+  after that request returned, every page load would deadlock until the
+  bounded wait ran out and then decode into placeholders. So the provider's
+  own routes, and sign-in, never wait; everything that may carry an envelope
+  does.
+*/
+const waitsForKey = (path: string): boolean => !path.startsWith('/keys') && !path.startsWith('/auth/');
+
 // ── The table ─────────────────────────────────────────────────────────────
 
 /** The API client, handed in so the codec can issue the odd follow-up request. */
@@ -244,7 +255,7 @@ export type Requester = (path: string, method: string, body?: unknown) => Promis
 export async function encodeRequest(method: string, path: string, body: unknown): Promise<unknown> {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
   // A write racing the key's first load must not be refused as "locked" (#249)
-  await vaultReady();
+  if (waitsForKey(path)) await vaultReady();
   const b = body as Body;
   let m: RegExpMatchArray | null;
 
@@ -335,8 +346,9 @@ export async function decodeResponse(
 ): Promise<unknown> {
   if (data === null || typeof data !== 'object') return data;
   // Decoded with the key at hand, not with whatever the vault held a few
-  // milliseconds after page load (#249)
-  await vaultReady();
+  // milliseconds after page load (#249) — except for the requests that
+  // produce that key, which must never wait for themselves (#260)
+  if (waitsForKey(path)) await vaultReady();
   let m: RegExpMatchArray | null;
 
   // Notes

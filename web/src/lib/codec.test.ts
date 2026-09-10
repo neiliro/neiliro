@@ -361,6 +361,19 @@ describe('readiness (#249)', () => {
     expect(opened!['title']).toBe('Late key');
   });
 
+  it('never holds the provider’s own requests — /keys and sign-in produce the key, they cannot wait for it', async () => {
+    setVault({ key: null, familyHasKey: true, settled: false });
+    const t = performance.now();
+    const keys = await decodeResponse('GET', '/keys', { family: null, handoffs: [] });
+    const me = await decodeResponse('GET', '/auth/me', { id: 'u1' });
+    const envelope = await encodeRequest('PUT', '/keys/envelope', { envelope: 'w1:x' });
+    expect(performance.now() - t).toBeLessThan(200);
+    expect((keys as Row)['handoffs']).toEqual([]);
+    expect((me as Row)['id']).toBe('u1');
+    expect((envelope as Row)['envelope']).toBe('w1:x');
+    setVault({ key: null, familyHasKey: false, settled: true });
+  });
+
   it('does not wait when the provider has already answered', async () => {
     setVault({ key: null, familyHasKey: false });
     const t = performance.now();
