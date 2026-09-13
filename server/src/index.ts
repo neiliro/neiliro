@@ -29,6 +29,11 @@ if (env.hostedMode) {
   // only touch the unused default database.
   const { initHosted } = await import('./lib/tenants.js');
   initHosted();
+  // Families that signed themselves up and never opened the letter go
+  // the way of self-deletion, a day after their invitation expired (#262)
+  const { reapUnclaimedFamilies } = await import('./lib/reaper.js');
+  reapUnclaimedFamilies();
+  setInterval(reapUnclaimedFamilies, 24 * 60 * 60_000).unref();
 } else {
   migrate();
 }

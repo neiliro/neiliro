@@ -43,6 +43,9 @@ const PUBLIC_SNAPSHOT = [
   // Signature-authenticated, not session-authenticated: Mailgun is not a
   // browser (routes/mail-inbound.ts refuses anything unsigned).
   '/api/mail/inbound/mime',
+  // Bearer-authenticated: the landing page's function presents the shared
+  // token, and routes/signup.ts refuses any other host (#262).
+  '/api/signup',
 ];
 
 describe('public API surface', () => {

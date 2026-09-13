@@ -71,6 +71,12 @@ function serverErrorStrings(): Map<string, string> {
       // meaning) and no person ever reads them, so they are not part of
       // the dictionary's contract.
       if (path.endsWith('mail-inbound.ts')) continue;
+      // The sign-up route answers the landing page's function on
+      // signup.<apex>, never a browser signed in to a hub: the function
+      // relays or replaces its sentences in the visitor's language on the
+      // marketing site (neiliro/www), so they are that site's contract,
+      // not this dictionary's.
+      if (path.endsWith('signup.ts')) continue;
       const text = readFileSync(path, 'utf8');
       for (const m of text.matchAll(ERROR_LITERAL)) {
         const message = m[1];

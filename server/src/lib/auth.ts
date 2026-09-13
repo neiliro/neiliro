@@ -175,6 +175,9 @@ const PUBLIC_PATHS = new Set([
   // Its authorization is the webhook signature, checked on the route
   // itself (routes/mail-inbound.ts), which refuses anything unsigned.
   '/api/mail/inbound/mime',
+  // Self-serve sign-up (#262): bearer-authenticated, answered only on
+  // signup.<apex>, and the route exists only when SIGNUP_TOKEN is set
+  '/api/signup',
   // Password reset (hosted only): both steps happen for someone who
   // cannot sign in. The authorization is the emailed token, and the
   // request step deliberately answers the same way for every address.

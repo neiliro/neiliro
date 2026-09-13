@@ -92,6 +92,14 @@ export const env = {
   // Regional endpoint: the EU and US clouds are separate, and a domain
   // belongs to exactly one of them.
   mailgunApiBase: (process.env.MAILGUN_API_BASE ?? 'https://api.eu.mailgun.net').replace(/\/$/, ''),
+  // ── Self-serve sign-up (#262, hosted only) ──────────────────────────────
+  // The bearer the landing page's function presents on signup.<apex>.
+  // Empty means the route is not registered at all.
+  signupToken: (process.env.SIGNUP_TOKEN ?? '').trim(),
+  // Process-wide ceiling on sign-ups per hour: each one is a letter
+  // through the mail provider, and a flood is a deliverability problem
+  // before it is a disk problem.
+  signupHourlyCap: Math.max(1, Number(process.env.SIGNUP_HOURLY_CAP ?? 60) || 60),
   // debug | info | warn | error | silent. Default warn:
   // in normal operation only warnings and errors are interesting.
   logLevel: process.env.LOG_LEVEL ?? 'warn',

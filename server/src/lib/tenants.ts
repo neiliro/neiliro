@@ -61,6 +61,13 @@ export function initHosted(): void {
   if (!columns.includes('renamed_at')) {
     registry.exec('ALTER TABLE families ADD COLUMN renamed_at TEXT');
   }
+  // The address a self-serve sign-up (#262) was made with: lets a repeat
+  // sign-up re-issue the invitation instead of minting a second family,
+  // and marks the family as one the reaper may remove if it is never
+  // claimed. Operator-created families leave it NULL.
+  if (!columns.includes('founder_email')) {
+    registry.exec('ALTER TABLE families ADD COLUMN founder_email TEXT');
+  }
   // Slugs a family gave up by renaming. Same rule as a deleted family's
   // slug: never re-issued, because bookmarks, PWA icons and mail addressed
   // to the old name would land with whoever took it.
@@ -312,6 +319,8 @@ const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
 const RESERVED_SLUGS = new Set([
   'www', 'app', 'api', 'demo', 'mail', 'in', 'mx', 'smtp', 'imap', 'pop',
   'admin', 'billing', 'pay', 'account', 'accounts', 'login', 'auth',
+  // Self-serve sign-up lives on signup.<apex> (#262); the rest read as it
+  'signup', 'start', 'new', 'join',
   // Service senders: the hub writes from no-reply@<mail domain>, and a
   // family holding that name would receive other families' service mail
   'no-reply', 'noreply', 'postmaster', 'hello',
@@ -360,6 +369,27 @@ export function createFamily(slug: string): { familyId: string; url: string } {
   runWithTenant(tenantFor(familyId), migrate);
   log.notice(`family created: ${slug} (${familyId})`);
   return { familyId, url: `https://${slug}.${env.hostedDomain}/` };
+}
+
+// ── Self-serve sign-up (routes/signup.ts, lib/reaper.ts) ─────────────────
+
+export function recordFounderEmail(familyId: string, email: string): void {
+  registry!.prepare('UPDATE families SET founder_email = ? WHERE id = ?').run(email.trim().toLowerCase(), familyId);
+}
+
+/** The most recent active family signed up with this address, if any. */
+export function pendingFamilyByFounderEmail(email: string): string | null {
+  const row = registry!
+    .prepare("SELECT id FROM families WHERE founder_email = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1")
+    .get(email.trim().toLowerCase()) as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
+/** Active sign-up families older than the cutoff — the reaper's candidates. */
+export function signupFamiliesCreatedBefore(cutoff: string): FamilyRow[] {
+  return registry!
+    .prepare("SELECT id, slug, status FROM families WHERE founder_email IS NOT NULL AND status = 'active' AND created_at < ?")
+    .all(cutoff) as FamilyRow[];
 }
 
 // ── Self-service rename (routes/family.ts) ───────────────────────────────
