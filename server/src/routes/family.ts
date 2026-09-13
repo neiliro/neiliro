@@ -209,6 +209,58 @@ export async function registerFamilyRoutes(app: FastifyInstance): Promise<void> 
     setup (see RENAME_WINDOW_MS); both halves are decided here so that the
     settings card and the first-sign-in offer read one answer.
   */
+  /*
+    The plan, for the Settings card and the read-only banner (#265). Any
+    member may read it — the banner is for everyone — and the checkout
+    link names the family by its internal id, which survives a rename.
+    Prices and the payment provider live on the apex page; the hub only
+    knows which plan the person picked.
+  */
+  app.get('/api/family/plan', async (req, reply) => {
+    if (!env.hostedMode) return notHosted(reply);
+    const { familyId } = currentTenant();
+    if (!familyId || !req.user) return notHosted(reply);
+    const { planRow } = await import('../lib/tenants.js');
+    const { entitlement } = await import('../lib/plan.js');
+    const row = planRow(familyId);
+    if (!row) return notHosted(reply);
+    const e = entitlement(row);
+    const lang = typeof req.query === 'object' && req.query && 'lang' in req.query ? String((req.query as { lang?: string }).lang ?? '') : '';
+    const checkout = new URL(`https://${env.hostedDomain}/checkout`);
+    checkout.searchParams.set('family', familyId);
+    if (req.user.email) checkout.searchParams.set('email', req.user.email);
+    if (lang === 'ru') checkout.searchParams.set('lang', 'ru');
+    return {
+      state: e.state,
+      read_only: e.readOnly,
+      until: e.until,
+      delete_at: e.deleteAt,
+      subscribed: e.subscribed,
+      checkout_url: checkout.toString(),
+      // The portal link is minted on demand (POST below) and only exists
+      // once there is a subscription and the API key is configured
+      portal: e.subscribed && Boolean(env.paddleApiKey),
+    };
+  });
+
+  app.post(
+    '/api/family/plan/portal',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      if (!env.hostedMode) return notHosted(reply);
+      if (!requireAdmin(req, reply)) return;
+      const { familyId } = currentTenant();
+      if (!familyId) return notHosted(reply);
+      const { planRow } = await import('../lib/tenants.js');
+      const { customerPortalUrl } = await import('./billing.js');
+      const row = planRow(familyId);
+      if (!row?.paddle_customer_id) return reply.code(404).send({ error: 'The family has no subscription yet' });
+      const url = await customerPortalUrl(row.paddle_customer_id);
+      if (!url) return reply.code(503).send({ error: 'The billing portal is not available right now' });
+      return { url };
+    },
+  );
+
   app.get('/api/family/address', async (req, reply) => {
     if (!env.hostedMode) return notHosted(reply);
     if (!requireAdmin(req, reply)) return;

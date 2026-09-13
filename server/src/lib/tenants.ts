@@ -6,6 +6,7 @@ import { migrate } from '../db/migrate.js';
 import { env } from '../env.js';
 import { initHostedStats, shutdownHostedStats } from './hosted-stats.js';
 import { log } from './log.js';
+import type { PlanRow } from './plan.js';
 
 /*
   Hosted mode: many families on one server, routed by the Host header.
@@ -68,6 +69,40 @@ export function initHosted(): void {
   if (!columns.includes('founder_email')) {
     registry.exec('ALTER TABLE families ADD COLUMN founder_email TEXT');
   }
+  // Billing facts (#265, lib/plan.ts derives the state). The first time
+  // these columns appear, every family already here predates billing —
+  // it was created before the public launch and keeps the promise made to
+  // it then: grandfathered, free, until a date the operator sets with
+  // set-plan.mjs. Families created afterwards start on the trial clock.
+  if (!columns.includes('plan')) {
+    registry.exec(`
+      ALTER TABLE families ADD COLUMN plan TEXT;
+      ALTER TABLE families ADD COLUMN plan_until TEXT;
+      ALTER TABLE families ADD COLUMN subscription_status TEXT;
+      ALTER TABLE families ADD COLUMN paddle_customer_id TEXT;
+      ALTER TABLE families ADD COLUMN paddle_subscription_id TEXT;
+      UPDATE families SET plan = 'legacy_free' WHERE plan IS NULL;
+    `);
+  }
+  // Every Paddle event exactly once: Paddle retries anything that did not
+  // answer 200, and a replayed event must not move the state twice
+  registry.exec(`
+    CREATE TABLE IF NOT EXISTS billing_events (
+      event_id    TEXT PRIMARY KEY,
+      event_type  TEXT NOT NULL,
+      family_id   TEXT,
+      received_at TEXT NOT NULL
+    )
+  `);
+  // Letters about the plan, sent once per family per occasion (#265)
+  registry.exec(`
+    CREATE TABLE IF NOT EXISTS plan_letters (
+      family_id TEXT NOT NULL,
+      kind      TEXT NOT NULL,
+      sent_at   TEXT NOT NULL,
+      PRIMARY KEY (family_id, kind)
+    )
+  `);
   // Slugs a family gave up by renaming. Same rule as a deleted family's
   // slug: never re-issued, because bookmarks, PWA icons and mail addressed
   // to the old name would land with whoever took it.
@@ -390,6 +425,73 @@ export function signupFamiliesCreatedBefore(cutoff: string): FamilyRow[] {
   return registry!
     .prepare("SELECT id, slug, status FROM families WHERE founder_email IS NOT NULL AND status = 'active' AND created_at < ?")
     .all(cutoff) as FamilyRow[];
+}
+
+// ── Billing (routes/billing.ts, routes/family.ts, lib/plan.ts) ────────────
+
+export function planRow(familyId: string): PlanRow | null {
+  return (registry!
+    .prepare(
+      `SELECT created_at, plan, plan_until, subscription_status, paddle_customer_id, paddle_subscription_id
+         FROM families WHERE id = ? AND status != 'deleted'`,
+    )
+    .get(familyId) as PlanRow | undefined) ?? null;
+}
+
+/** What Paddle last said about the family's subscription. */
+export function recordSubscription(
+  familyId: string,
+  sub: { customerId: string; subscriptionId: string; status: string; periodEnd: string | null },
+): void {
+  registry!
+    .prepare(
+      `UPDATE families
+          SET plan = 'paid', paddle_customer_id = ?, paddle_subscription_id = ?, subscription_status = ?,
+              plan_until = COALESCE(?, plan_until)
+        WHERE id = ?`,
+    )
+    .run(sub.customerId, sub.subscriptionId, sub.status, sub.periodEnd, familyId);
+}
+
+/** The operator's hand: grandfather a family (until NULL = for good), or put it back on trial. */
+export function setPlan(familyId: string, plan: 'legacy_free' | 'trial', until: string | null): void {
+  registry!
+    .prepare(`UPDATE families SET plan = ?, plan_until = ?, subscription_status = NULL WHERE id = ?`)
+    .run(plan, until, familyId);
+}
+
+/** True when the event is new; false when Paddle is retrying one we have. */
+export function recordBillingEvent(eventId: string, eventType: string, familyId: string | null): boolean {
+  try {
+    registry!
+      .prepare('INSERT INTO billing_events (event_id, event_type, family_id, received_at) VALUES (?, ?, ?, ?)')
+      .run(eventId, eventType, familyId, now());
+    return true;
+  } catch (err) {
+    if ((err as { code?: string }).code === 'SQLITE_CONSTRAINT_PRIMARYKEY') return false;
+    throw err;
+  }
+}
+
+/** True the first time; false when this letter already went out. */
+export function recordPlanLetter(familyId: string, kind: string): boolean {
+  try {
+    registry!.prepare('INSERT INTO plan_letters (family_id, kind, sent_at) VALUES (?, ?, ?)').run(familyId, kind, now());
+    return true;
+  } catch (err) {
+    if ((err as { code?: string }).code === 'SQLITE_CONSTRAINT_PRIMARYKEY') return false;
+    throw err;
+  }
+}
+
+/** Active families with their billing facts — the daily plan sweep's input. */
+export function familiesWithPlans(): (FamilyRow & PlanRow)[] {
+  return registry!
+    .prepare(
+      `SELECT id, slug, status, created_at, plan, plan_until, subscription_status, paddle_customer_id, paddle_subscription_id
+         FROM families WHERE status = 'active'`,
+    )
+    .all() as (FamilyRow & PlanRow)[];
 }
 
 // ── Self-service rename (routes/family.ts) ───────────────────────────────

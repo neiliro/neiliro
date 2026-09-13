@@ -1002,6 +1002,34 @@ export const ru: Record<string, string> = {
     'На этом устройстве нет ключа семьи, поэтому показанная ссылка не откроет зашифрованные события. Откройте ключ на этом устройстве и вернитесь за полной ссылкой.',
   'The link carries the family key for this one event: the server opens it for whoever follows the link.':
     'В ссылке едет ключ семьи для этого одного события: сервер открывает его тому, кто перейдёт по ссылке.',
+
+  // ── Plan: trial, subscription, read-only (Settings → admin, shell banner) ──
+  'Plan': 'Тариф',
+  'Free period — until {day}. No card needed until then.': 'Бесплатный период — до {day}. Карта до этого не нужна.',
+  'Free, as promised to the first families — until {day}.': 'Бесплатно, как обещано первым семьям — до {day}.',
+  'Free, as promised to the first families.': 'Бесплатно, как обещано первым семьям.',
+  'Subscribed. Next renewal on {day}.': 'Подписка оформлена. Следующее продление {day}.',
+  'Subscribed.': 'Подписка оформлена.',
+  'The last payment did not go through. The hub keeps working until {day} while the payment is retried — check the card in the billing portal.':
+    'Последний платёж не прошёл. Хаб работает до {day}, пока платёж повторяется — проверьте карту в личном кабинете плательщика.',
+  'Cancelled. The hub keeps working until {day}, the end of the paid period.': 'Подписка отменена. Хаб работает до {day}, конца оплаченного периода.',
+  'Read-only since {day}: everyone can sign in, read and export, nothing can be added or changed. The data is removed on {deleteDay} unless the family subscribes.':
+    'Только чтение с {day}: все могут войти, читать и выгружать, но ничего нельзя добавить или изменить. Данные будут удалены {deleteDay}, если семья не оформит подписку.',
+  'Subscribe — monthly': 'Подписаться — помесячно',
+  'Subscribe — yearly, three months free': 'Подписаться на год — три месяца в подарок',
+  'Manage subscription': 'Управлять подпиской',
+  'Could not open the billing portal': 'Не удалось открыть личный кабинет плательщика',
+  'One plan covers the whole family, however many of you there are. Payments are taken by Paddle; cancel anytime, refund within 14 days on request.':
+    'Один тариф на всю семью, сколько бы вас ни было. Платежи принимает Paddle; отменить можно в любой момент, возврат в течение 14 дней по просьбе.',
+  'The hub is read-only: the free period has ended. Everything can still be read and exported; subscribing brings it back.':
+    'Хаб в режиме только чтения: бесплатный период закончился. Всё по-прежнему можно читать и выгружать; подписка вернёт всё как было.',
+  'The hub is read-only: the free period has ended. Everything can still be read; the administrator can subscribe in Settings.':
+    'Хаб в режиме только чтения: бесплатный период закончился. Всё по-прежнему можно читать; администратор может оформить подписку в настройках.',
+  'Open the plan': 'Открыть тариф',
+  // Server answers
+  'The hub is read-only until the family subscribes': 'Хаб только для чтения, пока семья не оформит подписку',
+  'The family has no subscription yet': 'У семьи пока нет подписки',
+  'The billing portal is not available right now': 'Личный кабинет плательщика сейчас недоступен',
 };
 
 /** one / few / many, keyed by the English singular used in plural() calls. */
