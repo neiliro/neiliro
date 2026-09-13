@@ -178,6 +178,9 @@ const PUBLIC_PATHS = new Set([
   // Self-serve sign-up (#262): bearer-authenticated, answered only on
   // signup.<apex>, and the route exists only when SIGNUP_TOKEN is set
   '/api/signup',
+  // Paddle's webhook on billing.<apex>: signed with the destination secret,
+  // not a browser (routes/billing.ts refuses anything unsigned) (#265)
+  '/api/billing/paddle',
   // Password reset (hosted only): both steps happen for someone who
   // cannot sign in. The authorization is the emailed token, and the
   // request step deliberately answers the same way for every address.

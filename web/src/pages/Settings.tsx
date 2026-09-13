@@ -18,6 +18,7 @@ import { MailSection } from '../components/MailSection';
 import { TotpSection } from '../components/TotpSection';
 import { CalendarFeedSection } from '../components/CalendarFeedSection';
 import { FamilyDataSection } from '../components/FamilyDataSection';
+import { PlanSection } from '../components/PlanSection';
 import { useServiceState } from '../lib/service';
 import { supportLink } from '../lib/support';
 
@@ -827,6 +828,7 @@ export function Settings() {
         // spacing of its own — the last card's margin is truncated at
         // the column fragment edge, and the admin block sat glued to it
         <div className="mx-auto mt-5 max-w-md space-y-5 lg:max-w-4xl 3xl:max-w-[86rem] 4xl:max-w-[114rem]">
+          <PlanSection />
           <MailSection />
           <PeopleSection />
           <FamilyDataSection />

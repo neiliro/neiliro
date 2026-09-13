@@ -77,6 +77,9 @@ function serverErrorStrings(): Map<string, string> {
       // marketing site (neiliro/www), so they are that site's contract,
       // not this dictionary's.
       if (path.endsWith('signup.ts')) continue;
+      // The Paddle webhook answers Paddle: its refusals are a protocol, and
+      // the two sentences a browser can meet live in routes/family.ts.
+      if (path.endsWith('billing.ts')) continue;
       const text = readFileSync(path, 'utf8');
       for (const m of text.matchAll(ERROR_LITERAL)) {
         const message = m[1];

@@ -35,6 +35,7 @@ import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerMailRoutes } from './routes/mail.js';
 import { registerInboundMailRoutes } from './routes/mail-inbound.js';
 import { registerSignupRoutes } from './routes/signup.js';
+import { registerBillingRoutes } from './routes/billing.js';
 import { registerPasswordResetRoutes } from './routes/password-reset.js';
 import { registerEmailVerifyRoutes } from './routes/email-verify.js';
 import { registerMoneyRoutes } from './routes/money.js';
@@ -230,7 +231,10 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Logout and similar methods are called without a body. Fastify answers
   // that with a 400 by default — allow an empty body explicitly.
-  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    // The Paddle webhook signs the bytes as sent; JSON.parse cannot be
+    // undone, so the text is kept alongside (routes/billing.ts)
+    req.rawBody = body as string;
     const raw = (body as string).trim();
     if (raw === '') return done(null, {});
     try {
@@ -274,6 +278,34 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.addHook('preHandler', authenticate);
 
   /*
+    The read-only wall (#265). A family whose free period or subscription
+    has ended keeps every read — sign in, browse, export — and loses every
+    write, until it subscribes or the sixty days run out. Derived from the
+    registry on each request (lib/plan.ts), so a payment that lands while
+    the family is looking takes effect on the next click. Exempt: reads,
+    the sign-in and key routes (a locked-out device must still get in),
+    the ways out (export, deletion) and the way back (the plan itself).
+  */
+  if (env.hostedMode) {
+    const { currentTenant } = await import('./db/index.js');
+    const { planRow } = await import('./lib/tenants.js');
+    const { entitlement } = await import('./lib/plan.js');
+    const READ_ONLY_EXEMPT = ['/api/auth/', '/api/keys', '/api/family/export', '/api/family/delete', '/api/family/plan', '/api/billing/', '/api/signup'];
+    app.addHook('preHandler', (req, reply, done) => {
+      if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS' || !req.url.startsWith('/api')) return done();
+      const path = req.url.split('?')[0]!;
+      if (READ_ONLY_EXEMPT.some((prefix) => path.startsWith(prefix))) return done();
+      const { familyId } = currentTenant();
+      if (!familyId) return done();
+      const row = planRow(familyId);
+      if (row && entitlement(row).readOnly) {
+        return reply.code(402).send({ error: 'The hub is read-only until the family subscribes', code: 'read_only' });
+      }
+      done();
+    });
+  }
+
+  /*
     Hosted activity counters (lib/hosted-stats.ts). Registered after
     authenticate on purpose: the user id is part of the count (distinct
     active users per day), and requests authenticate rejects never get
@@ -305,6 +337,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerMailRoutes(app);
   await registerInboundMailRoutes(app);
   await registerSignupRoutes(app);
+  await registerBillingRoutes(app);
   await registerPasswordResetRoutes(app);
   await registerEmailVerifyRoutes(app);
   await registerMoneyRoutes(app);

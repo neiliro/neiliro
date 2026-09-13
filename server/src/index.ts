@@ -34,6 +34,11 @@ if (env.hostedMode) {
   const { reapUnclaimedFamilies } = await import('./lib/reaper.js');
   reapUnclaimedFamilies();
   setInterval(reapUnclaimedFamilies, 24 * 60 * 60_000).unref();
+  // The plan's letters and its last consequence (#265): once at boot,
+  // then daily. Letters are remembered per occasion, so a restart is safe.
+  const { sweepPlans } = await import('./lib/plan-letters.js');
+  void sweepPlans();
+  setInterval(() => void sweepPlans(), 24 * 60 * 60_000).unref();
 } else {
   migrate();
 }

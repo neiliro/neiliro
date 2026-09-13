@@ -100,6 +100,18 @@ export const env = {
   // through the mail provider, and a flood is a deliverability problem
   // before it is a disk problem.
   signupHourlyCap: Math.max(1, Number(process.env.SIGNUP_HOURLY_CAP ?? 60) || 60),
+  // ── Billing through Paddle (#265, hosted only) ──────────────────────────
+  // Paddle is the merchant of record: it sells the subscription, holds the
+  // card, issues the receipt and tells us what happened through webhooks
+  // on billing.<apex>. The secret signs those; empty = the route is not
+  // registered, and every family stays on the trial clock.
+  paddleWebhookSecret: (process.env.PADDLE_WEBHOOK_SECRET ?? '').trim(),
+  // Server-side API key, used for one thing: minting the customer-portal
+  // link a family manages its subscription with. Empty = no portal link.
+  paddleApiKey: (process.env.PADDLE_API_KEY ?? '').trim(),
+  // sandbox | live — sandbox and live are separate Paddle accounts with
+  // separate keys, prices and API hosts.
+  paddleEnv: (process.env.PADDLE_ENV ?? 'sandbox').trim().toLowerCase() === 'live' ? 'live' : 'sandbox',
   // debug | info | warn | error | silent. Default warn:
   // in normal operation only warnings and errors are interesting.
   logLevel: process.env.LOG_LEVEL ?? 'warn',

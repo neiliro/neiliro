@@ -46,6 +46,9 @@ const PUBLIC_SNAPSHOT = [
   // Bearer-authenticated: the landing page's function presents the shared
   // token, and routes/signup.ts refuses any other host (#262).
   '/api/signup',
+  // Signature-authenticated: Paddle signs each event with the destination
+  // secret, and routes/billing.ts checks it on the raw bytes (#265).
+  '/api/billing/paddle',
 ];
 
 describe('public API surface', () => {

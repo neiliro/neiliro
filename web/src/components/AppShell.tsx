@@ -1,11 +1,12 @@
 import { t } from '../lib/i18n';
 import { BUILD_SHA, REPO_URL, VERSION } from '../lib/build';
 import { homeName } from '../lib/home-name';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ADDRESS_ANCHOR } from './FamilyDataSection';
 import { Modal, dialogGhost, dialogPrimary } from './Dialog';
 import { useFamilyAddress, familyUrl } from '../lib/family-address';
+import { usePlan } from '../lib/plan';
 import { loadLocal, saveLocal } from '../lib/storage';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -404,6 +405,7 @@ export function AppShell() {
       <main className="flex-1 pb-20 md:pb-0">
         <ConfirmAddressNotice />
         <LockedKeyNotice />
+        <ReadOnlyNotice />
         <Outlet key={refreshKey} />
       </main>
 
@@ -590,6 +592,36 @@ function LockedKeyNotice() {
         ×
       </button>
       {entering && <RecoveryCodeDialog onClose={() => setEntering(false)} />}
+    </div>
+  );
+}
+
+/*
+  The plan's wall, said in words (#265): a family whose free period or
+  subscription ended keeps reading and loses writing. Everyone sees the
+  banner — a member would otherwise meet a bare 402 on the first click —
+  and only the administrator gets the door, which is the Plan card in
+  Settings. Not dismissable: it is the state of the hub, not a notice.
+*/
+function ReadOnlyNotice() {
+  const { user } = useAuth();
+  const { state: service } = useServiceState();
+  const location = useLocation();
+  const plan = usePlan(Boolean(service?.hosted) && !service?.demo);
+  if (!plan?.read_only) return null;
+  const admin = user?.role === 'admin';
+  return (
+    <div className="mx-4 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-urgent/40 bg-surface-2 px-4 py-2.5 text-sm md:mx-6">
+      <span className="text-ink">
+        {admin
+          ? t('The hub is read-only: the free period has ended. Everything can still be read and exported; subscribing brings it back.')
+          : t('The hub is read-only: the free period has ended. Everything can still be read; the administrator can subscribe in Settings.')}
+      </span>
+      {admin && location.pathname !== '/settings' && (
+        <Link to="/settings" className="font-medium text-accent underline">
+          {t('Open the plan')}
+        </Link>
+      )}
     </div>
   );
 }
