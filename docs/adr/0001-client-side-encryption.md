@@ -80,6 +80,10 @@ down in full.
   passphrase*, asked for once per device. The alternative — a device-held
   key with member re-admission as the only recovery — is on the table for
   the implementing issue.
+  *Amended 2026-09-09 (#213, PR #243): the alternative won. There is no
+  data passphrase; disabling the password retires the member's envelope,
+  the key stays on the devices that hold it, and a new device is admitted
+  by re-admission or the recovery code.*
 - **Recovery is the family's, not ours.** `admin-reset` and the e-mail
   password reset restore *access*, not *data*: a new password cannot open
   the old envelope. Two doors remain, and both must exist before the first

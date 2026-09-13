@@ -142,6 +142,16 @@ is not privacy. If you add a route that takes an id, the guard is part of
 the route, not an afterthought — a missing one is the single most likely
 way to introduce a serious bug here.
 
+**The server never processes text a person wrote.** Titles, bodies,
+names, notes and places arrive as `e1:` envelopes the server cannot open
+([ADR 0001](docs/adr/0001-client-side-encryption.md)); dates, amounts,
+ids and statuses stay in the clear so its arithmetic keeps working. A
+feature that needs the server to read, match, render or derive something
+from those words is a feature that has to be redesigned to do it in the
+browser — not an exception. `web/src/lib/crypto/field-map.ts` says which
+columns are encrypted, and its test reads the migrations so a new TEXT
+column must be declared either encrypted or clear-with-a-reason.
+
 ## Traps this codebase has already fallen into
 
 Learned the hard way, each one more than once.
@@ -241,9 +251,12 @@ does not follow it. The harness binds the database with an `onRequest`
 hook instead, exactly the way demo mode binds a request to a visitor's
 sandbox. Use the harness rather than rediscovering this.
 
-**Whole-repository checks.** A couple of tests read the source rather
-than call it: every `t()` key exists in the Russian dictionary, every
-migration applies to an empty database. They catch the class of mistake
+**Whole-repository checks.** A few tests read the source rather than
+call it: every `t()` key exists in the Russian dictionary, every
+migration applies to an empty database, every variable `env.ts` reads is
+documented in `.env.example`, every public route prefix is listed in the
+`authenticate` snapshot, every TEXT column is declared in the field map.
+They catch the class of mistake
 that no individual test would, because nothing is wrong at any one call
 site.
 

@@ -59,6 +59,13 @@ selected letters to it.
 
 - The password is stored on the server and is write-only in the UI: the
   settings screen never shows it back.
+- A letter is sealed to the family's key the moment it is ingested: the
+  server sees the plaintext once on arrival (that is how e-mail works),
+  encrypts subject, body, sender and attachments to the family's public
+  key, and stores nothing readable but the arrival time, the size and the
+  `Message-ID` it needs to skip duplicates. A reply is written in the
+  browser and handed to the server for sending, so the server sees that
+  text at that moment too ([ADR 0001](adr/0001-client-side-encryption.md)).
 - The poller checks the folder every few minutes and marks fetched
   letters as read upstream; the "Synced …" line under the list shows
   the last successful pass, and sync errors surface at the top of the

@@ -149,8 +149,15 @@ docker compose -f docker-compose.prod.yml up -d --build
 The first build takes a couple of minutes (better-sqlite3 compiles
 natively). Then simply open `https://hub.example.com` — a hub with an
 empty database offers to create the first account, which becomes the
-administrator. Add family members from the People section with
-single-use invitation links. Passwords are never written to server logs.
+administrator. Right after that the hub shows the family's **recovery
+code** once and waits for you to acknowledge it: what the family writes is
+encrypted in the browser with a key the server never holds, and for a
+family of one that code is the only way back to the words after a lost
+password — write it down before going further ([features.md](features.md),
+"The family key"). Add family members from the People section with
+single-use invitation links; made on a device that holds the key, the
+link carries the key in its `#` fragment, so send it to one person over a
+channel you trust. Passwords are never written to server logs.
 Caddy obtains the certificate by itself — if the browser complains, wait
 a minute and check `logs caddy`: it is almost always a DNS record that
 has not propagated yet.
@@ -177,16 +184,27 @@ sudo chown -R 1000:1000 /srv/family-hub/data
 docker compose -f docker-compose.prod.yml start app
 ```
 
-Accounts, sessions, notes, finances — everything moves as-is.
-The alternative without SSH acrobatics is export/import from the app's
-settings.
+Accounts, sessions, notes, finances — everything moves as-is, the
+family key included: it lives in each member's envelope inside the
+database, so everyone signs in on the new machine with the password they
+had. The alternative without SSH acrobatics is export/import from the
+app's settings — same contents, same caveat that the archive holds
+ciphertext for anything written since the key existed (#224 tracks a
+readable copy).
 
 ## 6. Backups
 
 On rented hardware a backup is not optional: a VPS disk dies together
 with the machine. The `scripts/backup.sh` script already does everything
-needed: a consistent database snapshot, notes exported to markdown,
-age encryption and, optionally, a push to a private git repository.
+needed: a consistent database snapshot, `age` encryption and,
+optionally, a push to a private git repository. Attachments are **not**
+in it (the single-family script leaves them to a machine-level backup,
+which a VPS does not have) — include `/srv/family-hub/data/attachments`
+in whatever takes the archives off the machine below. The script also
+still writes each note as a markdown file; since the words are encrypted
+in the browser those files are ciphertext for anything written after the
+key was created, so treat the database as the backup and the markdown as
+a leftover.
 
 The encryption key — once, on your own machine (not on the server):
 
@@ -215,8 +233,10 @@ access is mounted into the container — though at family scale a daily
 `rsync` of the backups to a home machine is simpler and just as good).
 
 Every couple of months, pull a random archive and verify that it
-decrypts and opens: a backup that has never been restored is a backup
-only nominally.
+decrypts and opens — and since the words inside are encrypted with the
+family key, "opens" means restoring the database into a hub and signing
+in, not reading the file: a backup that has never been restored is a
+backup only nominally.
 
 ## 7. Monitoring
 
@@ -298,7 +318,10 @@ Once, in the [Google Cloud Console](https://console.cloud.google.com/):
 Then each person on their own: sign in with the password → Settings →
 "Signing in" → Link → optionally disable password sign-in. The
 administrator's password cannot be disabled — that is deliberate, see
-[features.md](features.md), "Signing in".
+[features.md](features.md), "Signing in". Disabling the password also
+retires that member's password envelope for the family key: from then on
+the key lives only on devices they have signed in from, and a new device
+is let in by another member (Re-admit) or by the recovery code.
 
 ## 9. Public demo (optional)
 
@@ -379,8 +402,8 @@ the image is shared, so shipping a new image updates both.
 ## 10. Auto-deploy from GitHub
 
 Once configured, every push to `master` deploys itself
-(`.github/workflows/deploy.yml`): Actions checks types, **builds the
-Docker image on its own runner** and delivers it to the server ready-made
+(`.github/workflows/deploy.yml`): Actions checks types, runs the tests,
+**builds the Docker image on its own runner** and delivers it to the server ready-made
 (`docker save → ssh → docker load`). The server compiles nothing — a
 1 GB machine cannot handle a Vite build; it used to drown in swap until
 SSH dropped. Push to `master` = production deploy; unfinished work lives
@@ -454,7 +477,10 @@ one, make sure the swap from the "Machine" section is configured, and do
 not be alarmed that it takes several minutes.
 
 Migrations apply themselves at startup. Data is untouched — it lives
-outside the code folder.
+outside the code folder. One upgrade asks something of the family: from
+1.9.0 the words are encrypted, and a calendar subscription added before
+that shows `••••••` until it is removed and added again from the new
+address in Settings, which carries the key.
 
 Base images and dependencies: rebuild with `--pull` every month or two
 (`docker compose -f docker-compose.prod.yml build --pull app`) and
