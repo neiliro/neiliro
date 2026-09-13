@@ -37,7 +37,8 @@ const EMPTY = {
 };
 
 /** The family mailbox connection — Settings, administrator only. */
-export function MailSection() {
+export function MailSection({ startCollapsed = false }: { startCollapsed?: boolean } = {}) {
+  const [open, setOpen] = useState(!startCollapsed);
   const [info, setInfo] = useState<AccountInfo | null>(null);
   const [form, setForm] = useState(EMPTY);
   const [status, setStatus] = useState<string | null>(null);
@@ -97,7 +98,15 @@ export function MailSection() {
 
   return (
     <section className="rounded-card border border-line bg-surface p-5">
-      <h2 className="eyebrow mb-2">{t('Family mailbox')}</h2>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="eyebrow">{t('Family mailbox')}</h2>
+        <button type="button" onClick={() => setOpen((o) => !o)} className="text-sm font-medium text-accent underline">
+          {open ? t('Hide') : t('Show settings')}
+        </button>
+      </div>
+      {!open && info.service_address && <p className="font-mono text-sm text-muted">{info.service_address}</p>}
+      {open && (
+        <>
 
       {info.service_address ? (
         <div className="mb-4 rounded-card border border-line bg-surface-2 p-4">
@@ -199,6 +208,8 @@ export function MailSection() {
           <span className="text-sm text-urgent">{info.last_error}</span>
         )}
       </div>
+        </>
+      )}
     </section>
   );
 }
