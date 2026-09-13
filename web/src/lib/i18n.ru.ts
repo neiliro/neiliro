@@ -1021,10 +1021,12 @@ export const ru: Record<string, string> = {
   'Could not open the billing portal': 'Не удалось открыть личный кабинет плательщика',
   'One plan covers the whole family, however many of you there are. Payments are taken by Paddle; cancel anytime, refund within 14 days on request.':
     'Один тариф на всю семью, сколько бы вас ни было. Платежи принимает Paddle; отменить можно в любой момент, возврат в течение 14 дней по просьбе.',
-  'The hub is read-only: the free period has ended. Everything can still be read and exported; subscribing brings it back.':
-    'Хаб в режиме только чтения: бесплатный период закончился. Всё по-прежнему можно читать и выгружать; подписка вернёт всё как было.',
-  'The hub is read-only: the free period has ended. Everything can still be read; the administrator can subscribe in Settings.':
-    'Хаб в режиме только чтения: бесплатный период закончился. Всё по-прежнему можно читать; администратор может оформить подписку в настройках.',
+  'the free period has ended': 'бесплатный период закончился',
+  'the subscription has ended': 'подписка закончилась',
+  'The hub is read-only: {reason}. Everything can still be read and exported; subscribing brings it back.':
+    'Хаб в режиме только чтения: {reason}. Всё по-прежнему можно читать и выгружать; подписка вернёт всё как было.',
+  'The hub is read-only: {reason}. Everything can still be read; the administrator can subscribe in Settings.':
+    'Хаб в режиме только чтения: {reason}. Всё по-прежнему можно читать; администратор может оформить подписку в настройках.',
   'Open the plan': 'Открыть тариф',
   // Server answers
   'The hub is read-only until the family subscribes': 'Хаб только для чтения, пока семья не оформит подписку',

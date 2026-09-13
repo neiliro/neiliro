@@ -610,12 +610,16 @@ function ReadOnlyNotice() {
   const plan = usePlan(Boolean(service?.hosted) && !service?.demo);
   if (!plan?.read_only) return null;
   const admin = user?.role === 'admin';
+  // Why it is read-only is a different sentence for a family whose free
+  // period ran out and one whose subscription ended — the second has paid
+  // before and should not be told it never did
+  const reason = plan.subscribed ? t('the subscription has ended') : t('the free period has ended');
   return (
     <div className="mx-4 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-urgent/40 bg-surface-2 px-4 py-2.5 text-sm md:mx-6">
       <span className="text-ink">
         {admin
-          ? t('The hub is read-only: the free period has ended. Everything can still be read and exported; subscribing brings it back.')
-          : t('The hub is read-only: the free period has ended. Everything can still be read; the administrator can subscribe in Settings.')}
+          ? t('The hub is read-only: {reason}. Everything can still be read and exported; subscribing brings it back.', { reason })
+          : t('The hub is read-only: {reason}. Everything can still be read; the administrator can subscribe in Settings.', { reason })}
       </span>
       {admin && location.pathname !== '/settings' && (
         <Link to="/settings" className="font-medium text-accent underline">
