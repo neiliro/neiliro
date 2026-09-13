@@ -1,5 +1,4 @@
 import { lang, setLang, t, type Lang } from '../lib/i18n';
-import { BUILD_SHA, REPO_URL, VERSION } from '../lib/build';
 import { formatStamp, setWeekStart, weekStart } from '../lib/format';
 import { dayIn, knownTimezones, setFamilyTimezone, TIMEZONE_KEY } from '../lib/timezone';
 import { useEffect, useRef, useState } from 'react';
@@ -20,7 +19,6 @@ import { CalendarFeedSection } from '../components/CalendarFeedSection';
 import { FamilyDataSection } from '../components/FamilyDataSection';
 import { PlanSection } from '../components/PlanSection';
 import { useServiceState } from '../lib/service';
-import { supportLink } from '../lib/support';
 
 /**
  * Own name and avatar colour, self-service (#64). Colour is the whole
@@ -472,7 +470,6 @@ export function Settings() {
   const [goalTarget, setGoalTarget] = useState('');
   /* Same link as the sidebar footer, repeated for phones. */
   const { state: service } = useServiceState();
-  const help = supportLink(service ? service.hosted : null, window.location.hostname);
 
   /*
     In the demo the sample family's own content is seeded per language and
@@ -673,93 +670,17 @@ export function Settings() {
         </div>
       </div>
 
-      <section className="mb-5 break-inside-avoid rounded-card border border-line bg-surface p-5">
-        {/* The English word is kept alongside the translation so the setting
-            is findable in a language you do not read — but only when the two
-            actually differ, or English shows "Language / Language". */}
-        <h2 className="eyebrow mb-4">
-          {t('Language')}
-          {t('Language') !== 'Language' && ' / Language'}
-        </h2>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => void chooseLang('en')}
-            className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
-              lang === 'en' ? 'border-accent bg-accent-soft text-accent' : 'border-line text-muted hover:text-ink'
-            }`}
-          >
-            English
-          </button>
-          <button
-            type="button"
-            onClick={() => void chooseLang('ru')}
-            className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
-              lang === 'ru' ? 'border-accent bg-accent-soft text-accent' : 'border-line text-muted hover:text-ink'
-            }`}
-          >
-            Русский
-          </button>
-        </div>
-        <p className="mt-3 text-xs text-muted">
-          {t('A per-device setting: a phone and the shared kiosk can speak different languages.')}
-          {service?.demo && ` ${t('In the demo, switching also starts a fresh sample family in that language.')}`}
-        </p>
-
-        <h2 className="eyebrow mt-6 mb-4">{t('Week starts on')}</h2>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => weekStart !== 'mon' && setWeekStart('mon')}
-            className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
-              weekStart === 'mon' ? 'border-accent bg-accent-soft text-accent' : 'border-line text-muted hover:text-ink'
-            }`}
-          >
-            {t('Monday')}
-          </button>
-          <button
-            type="button"
-            onClick={() => weekStart !== 'sun' && setWeekStart('sun')}
-            className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
-              weekStart === 'sun' ? 'border-accent bg-accent-soft text-accent' : 'border-line text-muted hover:text-ink'
-            }`}
-          >
-            {t('Sunday')}
-          </button>
-        </div>
-
-        <h2 className="eyebrow mt-6 mb-4">{t('Time zone')}</h2>
-        <select
-          value={values[TIMEZONE_KEY] ?? ''}
-          onChange={(e) => setValues({ ...values, [TIMEZONE_KEY]: e.target.value })}
-          aria-label={t('Time zone')}
-          className="w-full max-w-sm rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
-        >
-          <option value="">{t('Follow the server clock')}</option>
-          {knownTimezones().map((tz) => (
-            <option key={tz} value={tz}>
-              {tz}
-            </option>
-          ))}
-        </select>
-        <p className="mt-3 text-xs text-muted">
-          {t('Shared by the whole family, unlike the two settings above: it decides when today becomes tomorrow for due tasks, budget periods and recurring payments.')}
-          {(values[TIMEZONE_KEY] ?? '').trim() !== '' &&
-            ` ${t('Today there:')} ${dayIn((values[TIMEZONE_KEY] ?? '').trim(), new Date())}`}
-        </p>
-      </section>
 
       <div className="mb-5 break-inside-avoid">
         <ProfileSection />
       </div>
 
       <div className="mb-5 break-inside-avoid">
-        <PaletteSection />
+        <SignInSection />
       </div>
 
       <div className="mb-5 break-inside-avoid">
-        <SignInSection />
-          <KeysSection />
+        <KeysSection />
       </div>
 
       <div className="mb-5 break-inside-avoid">
@@ -789,51 +710,109 @@ export function Settings() {
         </section>
       )}
 
-      <section className="mb-5 break-inside-avoid rounded-card border border-line bg-surface p-5">
-        <h2 className="eyebrow mb-4">{t('About')}</h2>
-        <p className="font-mono text-sm text-ink">Neiliro v{VERSION}</p>
-        {BUILD_SHA && (
-          <p className="mt-1 font-mono text-xs text-muted">{t('Build {sha}', { sha: BUILD_SHA })}</p>
-        )}
-        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
-          <a
-            href={REPO_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-accent underline decoration-line underline-offset-2 hover:opacity-80"
-          >
-            {t('Source code')}
-          </a>
-          {/* Absent, not guessed, until the answer says which door this is */}
-          {help && (
-            <a
-              href={help.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent underline decoration-line underline-offset-2 hover:opacity-80"
-            >
-              {help.label === 'Support' ? t('Support') : t('Report a bug')}
-            </a>
-          )}
-        </div>
-      </section>
 
       </div>
 
-      {/* Admin blocks stay full-width below the columns: wide lists
-          inside, and user feedback asked for them here rather than in
-          a dedicated navigation section */}
-      {user?.role === 'admin' && (
-        // Explicit mt-5: the columns block above provides no bottom
-        // spacing of its own — the last card's margin is truncated at
-        // the column fragment edge, and the admin block sat glued to it
-        <div className="mx-auto mt-5 max-w-md space-y-5 lg:max-w-4xl 3xl:max-w-[86rem] 4xl:max-w-[114rem]">
-          <PlanSection />
-          <MailSection />
-          <PeopleSection />
-          <FamilyDataSection />
+      {/* Below the columns, full-width and in a fixed order — the columns
+          above reflow, these do not. Personal-but-rare settings (palette,
+          language, week, time zone) sit under the family's people; the
+          administrator's blocks frame them: the plan and the people first,
+          the mailbox and the archive last. */}
+      <div className="mx-auto mt-5 max-w-md space-y-5 lg:max-w-4xl 3xl:max-w-[86rem] 4xl:max-w-[114rem]">
+        {user?.role === 'admin' && (
+          <>
+            <PlanSection />
+            <PeopleSection />
+          </>
+        )}
+        <div className="grid gap-5 lg:grid-cols-2">
+          <PaletteSection />
+        <section className="rounded-card border border-line bg-surface p-5">
+          {/* The English word is kept alongside the translation so the setting
+              is findable in a language you do not read — but only when the two
+              actually differ, or English shows "Language / Language". */}
+          <h2 className="eyebrow mb-4">
+            {t('Language')}
+            {t('Language') !== 'Language' && ' / Language'}
+          </h2>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void chooseLang('en')}
+              className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
+                lang === 'en' ? 'border-accent bg-accent-soft text-accent' : 'border-line text-muted hover:text-ink'
+              }`}
+            >
+              English
+            </button>
+            <button
+              type="button"
+              onClick={() => void chooseLang('ru')}
+              className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
+                lang === 'ru' ? 'border-accent bg-accent-soft text-accent' : 'border-line text-muted hover:text-ink'
+              }`}
+            >
+              Русский
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-muted">
+            {t('A per-device setting: a phone and the shared kiosk can speak different languages.')}
+            {service?.demo && ` ${t('In the demo, switching also starts a fresh sample family in that language.')}`}
+          </p>
+
+          <h2 className="eyebrow mt-6 mb-4">{t('Week starts on')}</h2>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => weekStart !== 'mon' && setWeekStart('mon')}
+              className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
+                weekStart === 'mon' ? 'border-accent bg-accent-soft text-accent' : 'border-line text-muted hover:text-ink'
+              }`}
+            >
+              {t('Monday')}
+            </button>
+            <button
+              type="button"
+              onClick={() => weekStart !== 'sun' && setWeekStart('sun')}
+              className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
+                weekStart === 'sun' ? 'border-accent bg-accent-soft text-accent' : 'border-line text-muted hover:text-ink'
+              }`}
+            >
+              {t('Sunday')}
+            </button>
+          </div>
+
+          <h2 className="eyebrow mt-6 mb-4">{t('Time zone')}</h2>
+          <select
+            value={values[TIMEZONE_KEY] ?? ''}
+            onChange={(e) => setValues({ ...values, [TIMEZONE_KEY]: e.target.value })}
+            aria-label={t('Time zone')}
+            className="w-full max-w-sm rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+          >
+            <option value="">{t('Follow the server clock')}</option>
+            {knownTimezones().map((tz) => (
+              <option key={tz} value={tz}>
+                {tz}
+              </option>
+            ))}
+          </select>
+          <p className="mt-3 text-xs text-muted">
+            {t('Shared by the whole family, unlike the two settings above: it decides when today becomes tomorrow for due tasks, budget periods and recurring payments.')}
+            {(values[TIMEZONE_KEY] ?? '').trim() !== '' &&
+              ` ${t('Today there:')} ${dayIn((values[TIMEZONE_KEY] ?? '').trim(), new Date())}`}
+          </p>
+        </section>
         </div>
-      )}
+        {user?.role === 'admin' && (
+          <>
+            {/* On the hosted service the mailbox needs no setting up, so
+                its card opens on demand; a self-hosted family connects
+                its own account here and sees the form at once */}
+            <MailSection startCollapsed={Boolean(service?.hosted)} />
+            <FamilyDataSection />
+          </>
+        )}
+      </div>
     </Page>
   );
 }

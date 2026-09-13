@@ -1028,6 +1028,7 @@ export const ru: Record<string, string> = {
   'The hub is read-only: {reason}. Everything can still be read; the administrator can subscribe in Settings.':
     'Хаб в режиме только чтения: {reason}. Всё по-прежнему можно читать; администратор может оформить подписку в настройках.',
   'Open the plan': 'Открыть тариф',
+  'Show settings': 'Показать настройки',
   // Server answers
   'The hub is read-only until the family subscribes': 'Хаб только для чтения, пока семья не оформит подписку',
   'The family has no subscription yet': 'У семьи пока нет подписки',
