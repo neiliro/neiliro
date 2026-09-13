@@ -33,10 +33,13 @@ interface Letter {
   text: string;
 }
 
-function letterFor(e: Entitlement, slug: string, nowMs: number): Letter | null {
+function letterFor(e: Entitlement, family: { id: string; slug: string }, nowMs: number): Letter | null {
+  const { slug } = family;
   const apex = env.hostedDomain;
   const hub = `https://${slug}.${apex}/settings`;
-  const checkout = `https://${apex}/checkout?family=${encodeURIComponent(slug)}`;
+  // The checkout names the family by its internal id — the webhook looks
+  // the id up, and a slug there would leave a paid family read-only
+  const checkout = `https://${apex}/checkout?family=${encodeURIComponent(family.id)}`;
   const day = (iso: string) => iso.slice(0, 10);
   const closing = [
     '',
@@ -101,7 +104,7 @@ export async function sweepPlans(nowMs = Date.now()): Promise<{ letters: number;
       removed += 1;
       continue;
     }
-    const letter = letterFor(e, family.slug, nowMs);
+    const letter = letterFor(e, family, nowMs);
     if (!letter) continue;
     if (!serviceMailAvailable()) {
       if (!mailWarned) log.warn('plan: letters are due but service mail is not configured');

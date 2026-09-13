@@ -20,12 +20,12 @@ process.env.MAILGUN_SIGNING_KEY = 'test-signing-key';
 process.env.MAILGUN_API_KEY = 'test-api-key';
 process.env.PADDLE_WEBHOOK_SECRET = 'pdl_ntfset_test_secret';
 
-const sent: { to: string; subject: string }[] = [];
+const sent: { to: string; subject: string; text: string }[] = [];
 vi.stubGlobal(
   'fetch',
   vi.fn(async (_url: string, init: { body: FormData }) => {
     const f = (k: string) => String(init.body.get(k) ?? '');
-    sent.push({ to: f('to'), subject: f('subject') });
+    sent.push({ to: f('to'), subject: f('subject'), text: f('text') });
     return { ok: true, status: 200, json: async () => ({ id: '<sent@mail.neiliro.test>' }) };
   }),
 );
@@ -210,6 +210,9 @@ describe('the plan letters and the last consequence', () => {
     const first = await sweepPlans();
     expect(first.letters).toBe(1);
     expect(sent[0]).toMatchObject({ to: 'eve@ending.test', subject: 'Your free period ends in a week' });
+    // The link the letter offers must name the family the way the webhook looks it up
+    expect(sent[0]!.text).toContain(`https://neiliro.test/checkout?family=${familyId}`);
+    expect(sent[0]!.text).not.toContain('checkout?family=ending-e1a1');
     const again = await sweepPlans();
     expect(again.letters).toBe(0);
 
