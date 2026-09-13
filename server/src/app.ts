@@ -355,6 +355,23 @@ export async function buildApp(): Promise<FastifyInstance> {
     );
   }
 
+  /*
+    A family's hub is not a web page for the world. Sign-in screens on
+    *.<apex> carry the family's name in the address, and a search engine
+    that indexed them would publish the list of families the ghost exists
+    to hide (#269); a self-hosted hub is a household's private tool just
+    the same. Every response says noindex, and robots.txt says stay out.
+    Only the public demo is meant to be found — it is the one hub that
+    exists to be looked at.
+  */
+  if (!env.demoMode) {
+    app.addHook('onSend', (_req, reply, _payload, done) => {
+      reply.header('X-Robots-Tag', 'noindex, nofollow');
+      done();
+    });
+    app.get('/robots.txt', async (_req, reply) => reply.type('text/plain').send('User-agent: *\nDisallow: /\n'));
+  }
+
   // In production the same process serves the built frontend.
   // In dev the frontend lives on Vite and proxies /api here.
   if (env.isProd && existsSync(env.webDist)) {
