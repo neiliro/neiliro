@@ -72,11 +72,12 @@ export async function issueFounderInvite(familyId: string, email: string): Promi
     return { url, mailed: false };
   }
   // The letter is the onboarding — there is no separate welcome document
-  // (decided 2026-09-09). It says what the family should do first, what a
-  // beta means, and repeats the one promise made to beta families, which
-  // the terms of service state authoritatively: the letter must never say
-  // more than /terms does. The beta paragraph is service policy, not
-  // product behaviour — rewrite it at the public launch.
+  // (decided 2026-09-09). It says what the family should do first, what to
+  // expect from a young service, and what it costs — in the words of the
+  // terms of service, which state it authoritatively: the letter must never
+  // say more than /terms does. Pricing (decided 2026-09-13): 30 days free
+  // without a card, then €4.99 a month or €44.99 a year per family; until
+  // payment exists in the app the trial simply continues.
   const apex = env.hostedDomain;
   await sendServiceEmail(
     address,
@@ -106,13 +107,16 @@ export async function issueFounderInvite(familyId: string, email: string): Promi
       `  4. Your family mailbox is ${slug}@${env.mailDomain}. Send the school`,
       '     and the bills there — a letter becomes a task in one click.',
       '',
-      'What the beta means. Neiliro is in closed beta: it runs with monitoring',
-      'and nightly encrypted backups, but the honest word is best effort —',
-      'something may break, and when it does we want to hear about it.',
-      'Everything you put in stays yours: the complete archive is one click',
-      'away in Settings, on any plan, always. Families who join during the',
-      'beta get the paid plan free for a year from the public launch; that',
-      `promise is written into the terms, not only this letter: https://${apex}/terms`,
+      'What to expect. Neiliro is young: it runs with monitoring and nightly',
+      'encrypted backups, but the honest word is best effort — something may',
+      'break, and when it does we want to hear about it. Everything you put in',
+      'stays yours: the complete archive is one click away in Settings, always.',
+      '',
+      'What it costs. The first 30 days are free, no card needed. After that',
+      'one plan covers the whole family: €4.99 a month or €44.99 a year, cancel',
+      'anytime. Until paying is possible inside the hub the free period simply',
+      'continues, and we will write to you before the first charge. The terms',
+      `say the same, authoritatively: https://${apex}/terms`,
       '',
       `Questions, or something broke: https://support.${apex} — the form there`,
       `reaches a person — or write to hello@${apex}.`,
