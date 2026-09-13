@@ -34,6 +34,7 @@ import { MAX_FILE_BYTES, registerAttachmentRoutes } from './routes/attachments.j
 import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerMailRoutes } from './routes/mail.js';
 import { registerInboundMailRoutes } from './routes/mail-inbound.js';
+import { registerSignupRoutes } from './routes/signup.js';
 import { registerPasswordResetRoutes } from './routes/password-reset.js';
 import { registerEmailVerifyRoutes } from './routes/email-verify.js';
 import { registerMoneyRoutes } from './routes/money.js';
@@ -303,6 +304,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerCalendarRoutes(app);
   await registerMailRoutes(app);
   await registerInboundMailRoutes(app);
+  await registerSignupRoutes(app);
   await registerPasswordResetRoutes(app);
   await registerEmailVerifyRoutes(app);
   await registerMoneyRoutes(app);
