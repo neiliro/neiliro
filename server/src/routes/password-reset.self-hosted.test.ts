@@ -30,5 +30,7 @@ describe('password reset on a self-hosted hub', () => {
     // The frontend hides "forgot password?" on this flag, so a hub that
     // cannot send must not claim it can
     expect(state.json()).toMatchObject({ password_reset: false });
+    // Nor is there anything to announce: a self-hosted hub has no terms (#229)
+    expect(state.json().policy_notice).toBeNull();
   });
 });

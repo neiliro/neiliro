@@ -130,12 +130,26 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   */
   const passwordResetAvailable = () => env.hostedMode && serviceMailAvailable();
 
+  /*
+    A pending change to the terms or the privacy policy (#229): the date
+    it takes effect and where to read what changes. A property of the
+    process — the same notice on every family and on the ghost, so it
+    reveals nothing about which subdomains exist — and null wherever there
+    are no documents to change (self-hosted, demo). The browser shows it to
+    administrators, who are the ones that agreed to the documents and can
+    export and delete; members see nothing.
+  */
+  const policyNotice = () =>
+    env.hostedMode && env.policyNoticeUrl
+      ? { url: env.policyNoticeUrl, effective: env.policyNoticeEffective }
+      : null;
+
   app.get('/api/auth/state', () => {
     // In demo the answer is fixed: the main database is empty (life
     // happens in sandboxes), but the initial setup screen must not be
     // shown, and there is one way in — the "Try the demo" button.
     if (env.demoMode) {
-      return { initialized: true, google: false, demo: true, hosted: false, password_reset: false, apex: null };
+      return { initialized: true, google: false, demo: true, hosted: false, password_reset: false, apex: null, policy_notice: null };
     }
     // A hosted subdomain that doesn't exist claims to be set up: showing
     // the first-run screen only on real families would let anyone map
@@ -157,6 +171,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         // enumerate families all by itself.
         password_reset: passwordResetAvailable(),
         apex: env.hostedDomain,
+        policy_notice: policyNotice(),
       };
     }
     const n = (db.prepare('SELECT count(*) AS n FROM users').get() as { n: number }).n;
@@ -178,6 +193,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       // 031). A property of the process, so the ghost states it too. Null
       // on a self-hosted hub: there are no documents to agree to.
       apex: env.hostedMode ? env.hostedDomain : null,
+      // A pending change to the documents above, or null (#229)
+      policy_notice: policyNotice(),
     };
   });
 

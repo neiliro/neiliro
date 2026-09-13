@@ -17,6 +17,12 @@ export interface ServiceState {
   password_reset: boolean;
   /** The hosted service's apex domain (terms and privacy live there); null when self-hosted. */
   apex: string | null;
+  /**
+   * A pending change to the terms or the privacy policy (#229): when it
+   * takes effect (YYYY-MM-DD) and where to read what changes. Null when
+   * nothing is pending, and always null off the hosted service.
+   */
+  policy_notice: { url: string; effective: string } | null;
 }
 
 let pending: Promise<ServiceState> | null = null;
