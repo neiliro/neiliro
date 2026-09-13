@@ -6,9 +6,11 @@
 [![License](https://img.shields.io/github/license/neiliro/neiliro?style=flat-square&labelColor=131c24&color=1f6e8c)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/neiliro/neiliro?style=flat-square&labelColor=131c24&color=1f6e8c)](https://github.com/neiliro/neiliro/stargazers)
 
-A self-hosted family hub: tasks, notes, calendar and money in one place. Built for a household, not a corporation: one Docker container, one SQLite file, no external services required. Runs on a home machine over the local network or on a cheap VPS with a real domain.
+A family hub: tasks, notes, calendar, money and a shared mailbox in one place. Built for a household, not a corporation: one Docker container, one SQLite file, no external services required. Run it yourself on a home machine or a cheap VPS, or let us run it for you at [neiliro.com](https://neiliro.com) — same code, same file per family.
 
-The core is complete and battle-tested by daily family use: accounts and sign-in (password and Google, with optional two-factor codes), projects and tasks with a kanban board, notes with attachments and wiki-links, a calendar with recurring events, shared lists for the shopping run, a shared family mailbox that turns letters into tasks, full-text search, a home screen you arrange yourself out of widgets, and a money section — accounts with balances, expenses, income, transfers, bank reconciliation, categories, budgets, recurring transactions, receipts. It installs to the home screen as an app and keeps working read-only when the Wi-Fi does not.
+The core is complete and battle-tested by daily family use: accounts and sign-in (password and Google, with optional two-factor codes), projects and tasks with a kanban board, notes with attachments and wiki-links, a calendar with recurring events, shared lists for the shopping run, a shared family mailbox that turns letters into tasks, search, a home screen you arrange yourself out of widgets, and a money section — accounts with balances, expenses, income, transfers, bank reconciliation, categories, budgets, recurring transactions, receipts. It installs to the home screen as an app and keeps working read-only when the Wi-Fi does not.
+
+What the family writes is encrypted in the browser with a family key the server never holds: the content of notes, tasks, events, list items, money notes, attachments and letters is stored as ciphertext, while dates, amounts and links stay readable so budgets, recurrence and reconciliation keep running on the server. Whoever holds a copy of the database — the operator of a hosted family included — sees who, when and how much, not what was written. The exceptions are deliberate and listed in [ADR 0001](docs/adr/0001-client-side-encryption.md): a letter is seen once on arrival before it is sealed, a wishlist is public by design, member names stay readable.
 
 ## A quick look
 
@@ -82,7 +84,7 @@ The hub comes up on `http://localhost:8787` and is reachable from other devices 
 Tagged releases publish a prebuilt multi-arch image (amd64 + arm64, so Raspberry Pi works) to GitHub Container Registry — point `image:` in the compose file at it to skip building:
 
 ```bash
-docker pull ghcr.io/neiliro/neiliro:latest   # or a pinned release: :1.6.0
+docker pull ghcr.io/neiliro/neiliro:latest   # or a pinned release: :2.0.1
 ```
 
 For development:
@@ -111,6 +113,20 @@ Frontend on `http://localhost:5173`, API on `http://localhost:8787`. Vite listen
 - **[Architecture](docs/architecture.md)** — the technical decisions:
   SQLite and migrations, local wall-clock time, money as integers,
   logging, how the demo sandboxes work.
+- **[ADR 0001 — client-side encryption](docs/adr/0001-client-side-encryption.md)** —
+  why the words are encrypted and the structure is not, what the family
+  key is, and the honest list of what stays visible.
+
+## Hosted
+
+The same image with `HOSTED_MODE=true` runs [neiliro.com](https://neiliro.com):
+one subdomain and one SQLite file per family, nothing shared between
+families. A family signs itself up from the landing page, gets 30 days
+free without a card, then pays €4.99 a month or €44.99 a year; the
+self-hosted version is free for good and ships from the same tag. The
+control plane (Caddy with a wildcard certificate, backups, the operator
+runbook) lives in a separate repository and is not needed to run the hub
+at home.
 
 ## Demo mode
 

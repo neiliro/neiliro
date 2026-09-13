@@ -17,6 +17,8 @@ An empty database offers to create the first account — that one becomes the ad
 
 ![The first-run screen: name, login and password for the administrator](screenshots/first-run.png)
 
+Right after that the hub shows the family's **recovery code** once. What the family writes is encrypted in the browser with a key the server never holds; the code is the way back to the words when a password is lost and nobody else in the family can let you in — for a family of one it is the only way. Write it down before going further ([features.md](features.md), "The family key").
+
 ## HTTPS
 
 Browsers require HTTPS for secure session cookies, and installing the hub to a phone's home screen (it is a PWA) needs it as well:
@@ -76,7 +78,7 @@ The machine should wake up for the morning (macOS):
 sudo pmset repeat wakeorpoweron MTWRFSU 06:30:00
 ```
 
-Nightly backup at 03:00 — a database snapshot, notes exported to markdown, `age` encryption, a push to a private repository:
+Nightly backup at 03:00 — a database snapshot, `age` encryption, a push to a private repository (the script also writes notes as markdown files, but those are ciphertext for anything written since the family key exists — the database is the backup):
 
 ```bash
 crontab -e
@@ -85,7 +87,7 @@ crontab -e
 
 Attachments do not go to git — a machine-level backup (e.g. Time Machine) covers them.
 
-Once a quarter, unpack a backup into a separate folder and make sure it opens. A backup that has never been restored is a backup only nominally.
+Once a quarter, restore a backup into a separate hub and sign in — the words are encrypted with the family key, so "it opens" means you can read your notes there, not that the file unpacks. A backup that has never been restored is a backup only nominally.
 
 ## Moving to another machine
 
@@ -97,7 +99,7 @@ npm run export -- ~/Desktop
 
 This produces `neiliro-YYYY-MM-DD.tar.gz`: the database, attachments and a manifest. No need to stop the server — the database is exported via `VACUUM INTO`, i.e. opened as a database rather than copied as a file. A plain copy of `hub.db` would lose fresh writes: they live in the WAL journal next to it.
 
-Transfer the archive however you like. It contains everything, private notes and personal accounts included.
+Transfer the archive however you like. It contains everything, private notes and personal accounts included — as the hub stores them, which since 1.9.0 means encrypted: the words open again once each member signs in on the new machine with their password. Outside the app the archive is not readable (#224 tracks a readable copy).
 
 On the new machine:
 
