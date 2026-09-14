@@ -1,6 +1,6 @@
 # ADR 0002 — More than one machine: a gateway, a control node, shards
 
-**Status:** proposed 2026-09-14 · **Epic:** to be opened once accepted
+**Status:** accepted 2026-09-14 · **Epic:** #295 (issues #296–#307, `neiliro/cloud` #28–#33, `neiliro/infra` #8–#11)
 
 ## Context
 
@@ -189,7 +189,7 @@ nothing a family notices beyond signing in again.
 
 Three phases; the first has no second machine and no visible change.
 
-**Phase 0 — the beachhead (one node, zero behaviour change).**
+**Phase 0 — the beachhead (one node, zero behaviour change).** #296, #297, #298, cloud#28, cloud#29, infra#8.
 `families.node`, the `nodes` table, `NODE_NAME` in env, the local-only
 predicates and the `tenantFor` guard; the route-map export with control
 as the only entry and Caddy importing it; the reserved IP in front of
@@ -197,7 +197,7 @@ hosted01; `registry-<node>` in backups; the incremental backup run; the
 internal secret in env. Each of these is a small PR that ships on its
 own.
 
-**Phase 1 — the second node.** The internal API and the four proxies;
+**Phase 1 — the second node.** #299–#306, cloud#30, cloud#31, infra#9. The internal API and the four proxies;
 rename and deletion reporting to control; a two-instance test harness
 (two real listeners in one vitest run); the shard compose profile (no
 Caddy, VPC bind); the firewall rule; `node-up` in infra;
@@ -206,7 +206,7 @@ Caddy, VPC bind); the firewall rule; `node-up` in infra;
 sign-up form lands on a second range droplet and receives mail, pays and
 signs in with Google.
 
-**Phase 2 — moving and rebuilding.** The bundle export/import;
+**Phase 2 — moving and rebuilding.** #307, cloud#32, cloud#33, infra#10, infra#11. The bundle export/import;
 `move-family`; restore-a-node from R2; stats and the weekly report across
 nodes; a gateway failover drill (assign the reserved IP to a rebuilt
 node) on the range, timed.
