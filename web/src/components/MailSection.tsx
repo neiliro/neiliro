@@ -37,6 +37,71 @@ const EMPTY = {
 };
 
 /** The family mailbox connection — Settings, administrator only. */
+/*
+  How long letters stay (#30, retention). A household desk is not an
+  archive: handled bills and school letters become clutter that names
+  people. The administrator picks an age; a daily sweep on the server
+  removes older letters with their replies and files. Default is forever —
+  a family that never chose must not be surprised by a disappearance. The
+  value is one settings key, like the home name.
+*/
+const RETENTION_KEY = 'mail.retention_days';
+const RETENTION_CHOICES: { days: number; label: () => string }[] = [
+  { days: 0, label: () => t('Keep forever') },
+  { days: 90, label: () => t('3 months') },
+  { days: 180, label: () => t('6 months') },
+  { days: 365, label: () => t('1 year') },
+  { days: 730, label: () => t('2 years') },
+];
+
+function RetentionControl() {
+  const [days, setDays] = useState<number | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api
+      .get<Record<string, string>>('/settings')
+      .then((s) => setDays(Math.max(0, Number(s[RETENTION_KEY] ?? 0) || 0)))
+      .catch(() => setDays(0));
+  }, []);
+
+  if (days === null) return null;
+
+  async function choose(next: number) {
+    setDays(next);
+    setStatus(null);
+    try {
+      await api.patch('/settings', { [RETENTION_KEY]: String(next) });
+      setStatus(next === 0 ? t('Letters are kept until someone deletes them.') : t('Older letters are removed once a day, replies and files included.'));
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t('Could not save'));
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-line pt-4">
+      <label className="block">
+        <span className={label}>{t('Keep letters for')}</span>
+        <select
+          value={days}
+          onChange={(e) => void choose(Number(e.target.value))}
+          className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+        >
+          {RETENTION_CHOICES.map((c) => (
+            <option key={c.days} value={c.days}>
+              {c.label()}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="mt-1 text-xs text-muted">
+        {t('A paperwork desk is not an archive: handled letters name people and pile up. A task made from a letter stays when the letter goes.')}
+      </p>
+      {status && <p className="mt-1 text-xs text-muted">{status}</p>}
+    </div>
+  );
+}
+
 export function MailSection({ startCollapsed = false }: { startCollapsed?: boolean } = {}) {
   const [open, setOpen] = useState(!startCollapsed);
   const [info, setInfo] = useState<AccountInfo | null>(null);
@@ -208,6 +273,7 @@ export function MailSection({ startCollapsed = false }: { startCollapsed?: boole
           <span className="text-sm text-urgent">{info.last_error}</span>
         )}
       </div>
+          <RetentionControl />
         </>
       )}
     </section>
