@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { isRealDate } from './lib/date-field.js';
 
 /**
  * By default the data lives outside the project folder.
@@ -112,6 +113,15 @@ export const env = {
   // sandbox | live — sandbox and live are separate Paddle accounts with
   // separate keys, prices and API hosts.
   paddleEnv: (process.env.PADDLE_ENV ?? 'sandbox').trim().toLowerCase() === 'live' ? 'live' : 'sandbox',
+  // ── A pending change to the terms or the privacy policy (#229, hosted only) ──
+  // Both documents promise notice before a material change takes effect.
+  // The e-mail half is the operator's script (neiliro/cloud); this is the
+  // in-app half: while both values are set, every administrator sees a
+  // dismissable line naming the date and linking to what changes. Set from
+  // the control plane so a notice never waits for an app release; unset
+  // both once the date has passed.
+  policyNoticeUrl: (process.env.POLICY_NOTICE_URL ?? '').trim(),
+  policyNoticeEffective: (process.env.POLICY_NOTICE_EFFECTIVE ?? '').trim(),
   // debug | info | warn | error | silent. Default warn:
   // in normal operation only warnings and errors are interesting.
   logLevel: process.env.LOG_LEVEL ?? 'warn',
@@ -134,6 +144,23 @@ if (env.mailDomain && !env.mailgunSigningKey) {
 }
 if (env.mailgunSigningKey && !env.mailDomain) {
   throw new Error('MAILGUN_SIGNING_KEY requires MAIL_DOMAIN (the domain family addresses live on)');
+}
+
+// The notice is one thing or nothing: a date with no link sends people
+// looking for a change they cannot read, a link with no date says nothing
+// about when. Self-hosted hubs have no terms to change, so there it is a
+// misconfiguration rather than a feature.
+if ((env.policyNoticeUrl === '') !== (env.policyNoticeEffective === '')) {
+  throw new Error('POLICY_NOTICE_URL and POLICY_NOTICE_EFFECTIVE are set together or not at all');
+}
+if (env.policyNoticeUrl && !env.hostedMode) {
+  throw new Error('POLICY_NOTICE_* is for the hosted service — a self-hosted hub has no terms to announce');
+}
+if (env.policyNoticeUrl && !/^https:\/\/[^\s]+$/.test(env.policyNoticeUrl)) {
+  throw new Error('POLICY_NOTICE_URL must be an https:// address');
+}
+if (env.policyNoticeEffective && !isRealDate(env.policyNoticeEffective)) {
+  throw new Error('POLICY_NOTICE_EFFECTIVE must be a real date, YYYY-MM-DD');
 }
 
 export const paths = {

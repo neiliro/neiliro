@@ -1003,6 +1003,14 @@ export const ru: Record<string, string> = {
   'The link carries the family key for this one event: the server opens it for whoever follows the link.':
     'В ссылке едет ключ семьи для этого одного события: сервер открывает его тому, кто перейдёт по ссылке.',
 
+  // ── A pending change to the terms or the privacy policy (shell banner, admin only) ──
+  'The Terms of Service and Privacy Policy change on {date}. If you do not agree, export the archive and delete the family before then.':
+    'Условия использования и политика конфиденциальности меняются {date}. Если вы не согласны — до этого дня можно выгрузить архив и удалить семью.',
+  'The Terms of Service and Privacy Policy changed on {date}.':
+    'Условия использования и политика конфиденциальности изменились {date}.',
+  'See what changes': 'Что меняется',
+  Dismiss: 'Скрыть',
+
   // ── Plan: trial, subscription, read-only (Settings → admin, shell banner) ──
   'Plan': 'Тариф',
   'Free period — until {day}. No card needed until then.': 'Бесплатный период — до {day}. Карта до этого не нужна.',

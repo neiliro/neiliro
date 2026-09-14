@@ -20,6 +20,7 @@ import { applyTheme, initialDark, persistTheme } from '../lib/theme';
 import { useServiceState } from '../lib/service';
 import { supportLink } from '../lib/support';
 import { setFamilyTimezone, TIMEZONE_KEY } from '../lib/timezone';
+import { formatDate } from '../lib/format';
 
 interface NavItem {
   to: string;
@@ -404,6 +405,7 @@ export function AppShell() {
       {/* Content */}
       <main className="flex-1 pb-20 md:pb-0">
         <ConfirmAddressNotice />
+        <PolicyChangeNotice />
         <LockedKeyNotice />
         <ReadOnlyNotice />
         <Outlet key={refreshKey} />
@@ -592,6 +594,59 @@ function LockedKeyNotice() {
         ×
       </button>
       {entering && <RecoveryCodeDialog onClose={() => setEntering(false)} />}
+    </div>
+  );
+}
+
+/*
+  The promise in the terms and the privacy policy, kept in the hub (#229):
+  a material change is announced before it takes effect, and the
+  administrator — the person who agreed to the documents and can export
+  and delete — is the one told. Members are not: they did not sign, and a
+  line about legal text on every screen of the household would be noise.
+
+  The notice is the process's, not the family's (lib/service.ts), so a
+  new one appears on every hub with the next deploy and disappears the
+  same way. Dismissal is per device and per notice, keyed by the date it
+  is about: a later change is a new sentence, not the old one resurfacing.
+*/
+const POLICY_NOTICE_KEY = 'policy-notice-dismissed';
+
+function PolicyChangeNotice() {
+  const { user } = useAuth();
+  const { state: service } = useServiceState();
+  const notice = service?.policy_notice ?? null;
+  const [dismissedFor, setDismissedFor] = useState(() => loadLocal<string>(POLICY_NOTICE_KEY, ''));
+
+  if (!notice || user?.role !== 'admin' || dismissedFor === notice.effective) return null;
+
+  // The date is wall-clock: "2026-10-15" means that day everywhere, so it
+  // is parsed as local midnight rather than UTC (which would show the 14th
+  // west of Greenwich).
+  const when = formatDate(`${notice.effective}T00:00:00`);
+  const past = notice.effective < new Date().toISOString().slice(0, 10);
+
+  return (
+    <div className="mx-4 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-line bg-surface-2 px-4 py-2.5 text-sm md:mx-6">
+      <span className="text-ink">
+        {past
+          ? t('The Terms of Service and Privacy Policy changed on {date}.', { date: when })
+          : t('The Terms of Service and Privacy Policy change on {date}. If you do not agree, export the archive and delete the family before then.', { date: when })}
+      </span>
+      <a href={notice.url} target="_blank" rel="noopener noreferrer" className="font-medium text-accent underline">
+        {t('See what changes')}
+      </a>
+      <button
+        type="button"
+        onClick={() => {
+          saveLocal(POLICY_NOTICE_KEY, notice.effective);
+          setDismissedFor(notice.effective);
+        }}
+        className="ml-auto text-muted hover:text-ink"
+        aria-label={t('Dismiss')}
+      >
+        ✕
+      </button>
     </div>
   );
 }
