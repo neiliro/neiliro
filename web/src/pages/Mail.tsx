@@ -1,5 +1,6 @@
 import { t } from '../lib/i18n';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { htmlWorthShowing, sanitizeHtml } from '../lib/sanitize-html';
 import { Link } from 'react-router-dom';
 import { AttachmentLink } from '../components/AttachmentMedia';
 import { api } from '../lib/api';
@@ -37,6 +38,8 @@ interface MailReply {
 interface MailFull extends MailStub {
   to_address: string | null;
   body_text: string;
+  /** The HTML part as sent, or null for text-only and pre-#30 letters; rendered through the sanitizer */
+  body_html: string | null;
   sent_at: string | null;
   attachments: MailAttachment[];
   replies: MailReply[];
@@ -55,6 +58,59 @@ interface MailList {
 
 function sender(m: MailStub): string {
   return m.from_name || m.from_address;
+}
+
+/*
+  The letter's body (#30). HTML is shown when it carries more than the
+  text part does — a table of charges, a link, an image — and only after
+  the sanitizer has rebuilt it from an allowlist (lib/sanitize-html.ts);
+  the result is attached as nodes, never as a string. Remote images are
+  never fetched: each is a sender learning that the letter was opened and
+  from where, so they are counted and named instead. The plain-text part
+  is one click away and is what a letter without HTML shows.
+*/
+function LetterBody({ text, html }: { text: string; html: string | null }) {
+  const [view, setView] = useState<'html' | 'text'>(() => (htmlWorthShowing(html) ? 'html' : 'text'));
+  const [blocked, setBlocked] = useState(0);
+  const [emptyHtml, setEmptyHtml] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (view !== 'html' || !html || !box.current) return;
+    const out = sanitizeHtml(html);
+    box.current.replaceChildren(out.fragment);
+    setBlocked(out.blockedImages);
+    setEmptyHtml(out.empty);
+  }, [view, html]);
+
+  const showingHtml = view === 'html' && html && !emptyHtml;
+  return (
+    <div className="px-5 py-4">
+      {showingHtml ? (
+        <div ref={box} className="letter-html max-h-[60vh] overflow-auto text-sm text-ink" />
+      ) : (
+        <pre className="max-h-[50vh] overflow-y-auto font-sans text-sm whitespace-pre-wrap text-ink">
+          {text || t('(empty message)')}
+        </pre>
+      )}
+      {html && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 text-xs text-muted">
+          {showingHtml && blocked > 0 && (
+            <span>{t('{n} remote images were not loaded — they would tell the sender you opened this.', { n: blocked })}</span>
+          )}
+          {htmlWorthShowing(html) && !emptyHtml && (
+            <button
+              type="button"
+              onClick={() => setView(view === 'html' ? 'text' : 'html')}
+              className="underline underline-offset-2 hover:text-ink"
+            >
+              {view === 'html' ? t('Show as plain text') : t('Show formatted')}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function Mail() {
@@ -285,9 +341,7 @@ export function Mail() {
               </div>
             </div>
 
-            <pre className="max-h-[50vh] overflow-y-auto px-5 py-4 font-sans text-sm whitespace-pre-wrap text-ink">
-              {message.body_text || t('(empty message)')}
-            </pre>
+            <LetterBody text={message.body_text} html={message.body_html} />
 
             {message.attachments.length > 0 && (
               <div className="border-t border-line px-5 py-3">

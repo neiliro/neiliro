@@ -230,8 +230,16 @@ mailbox, so the whole thread stays in one place. There is no
 compose-from-scratch: a paperwork desk answers letters, it does not
 start correspondence.
 
-v1 renders the plain-text part of a message; HTML rendering, ICS invites
-into the calendar and invoice-to-transaction are tracked in the
+A letter's HTML part is shown when it says more than the text does — a
+table of charges, a link to the portal, an inline image — and only after
+the browser has rebuilt it from an allowlist: scripts, styles, forms,
+frames and every attribute but a safe link target never exist in what
+is shown. **Remote images are never loaded**; each one is the sender
+learning that the letter was opened and from where, so they are counted
+and named instead. The plain-text part is one click away. Like every
+attachment, the HTML arrives sealed and is opened only in the browser.
+
+Invoice-to-transaction is tracked in the
 [family mail epic](https://github.com/neiliro/neiliro/issues/30).
 
 ### Mail and the family key

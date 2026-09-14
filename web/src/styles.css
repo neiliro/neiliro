@@ -306,3 +306,17 @@ select {
   outline: 2px solid var(--c-accent);
   outline-offset: 2px;
 }
+
+/* A letter's HTML part after the sanitizer (pages/Mail.tsx). The sender's
+   styling is gone by design; this is the minimum that keeps a bill readable:
+   tables with borders, links in the accent, images inside the column. */
+.letter-html a { color: var(--c-accent); text-decoration: underline; text-underline-offset: 2px; }
+.letter-html p, .letter-html div, .letter-html blockquote, .letter-html pre { margin: 0 0 0.6em; }
+.letter-html h1, .letter-html h2, .letter-html h3, .letter-html h4, .letter-html h5, .letter-html h6 { margin: 0.8em 0 0.4em; font-weight: 600; }
+.letter-html ul, .letter-html ol { margin: 0 0 0.6em 1.4em; }
+.letter-html blockquote { border-left: 2px solid var(--c-border); padding-left: 0.8em; color: var(--c-text-muted); }
+.letter-html pre, .letter-html code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+.letter-html table { border-collapse: collapse; margin: 0 0 0.6em; max-width: 100%; }
+.letter-html td, .letter-html th { border: 1px solid var(--c-border); padding: 0.25em 0.5em; vertical-align: top; text-align: left; }
+.letter-html img { max-width: 100%; height: auto; }
+.letter-html hr { border: 0; border-top: 1px solid var(--c-border); margin: 0.8em 0; }

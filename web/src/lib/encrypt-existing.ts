@@ -192,7 +192,7 @@ const MODULES: Module[] = [
       return out;
     },
     rewrite: (id, row) =>
-      api.patch(`/mail/${id}`, pick(row, ['from_address', 'from_name', 'to_address', 'subject', 'body_text'].filter((f) => row[f] !== undefined))),
+      api.patch(`/mail/${id}`, pick(row, ['from_address', 'from_name', 'to_address', 'subject', 'body_html', 'body_text'].filter((f) => row[f] !== undefined))),
   },
   {
     table: 'transactions',
