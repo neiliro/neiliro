@@ -1003,6 +1003,27 @@ export const ru: Record<string, string> = {
   'The link carries the family key for this one event: the server opens it for whoever follows the link.':
     'В ссылке едет ключ семьи для этого одного события: сервер открывает его тому, кто перейдёт по ссылке.',
 
+  // ── My data: a readable copy and the door out (Settings); removing a member (People) ──
+  'My data': 'Мои данные',
+  'A readable copy of everything this account can see, as one JSON file: your account, your notes, tasks, events, money and lists, opened on this device. Files are not included.':
+    'Читаемая копия всего, что видит этот аккаунт, одним JSON-файлом: аккаунт, заметки, задачи, события, деньги и списки, расшифрованные на этом устройстве. Файлы не включены.',
+  'Download my data': 'Скачать мои данные',
+  'Collecting…': 'Собираем…',
+  'Leave the family': 'Покинуть семью',
+  'Removes your account for good: your private notes, personal calendars and personal accounts, your profile, your sessions and your key. What you added to shared spaces stays with the family without your name. There is no undo.':
+    'Удаляет аккаунт навсегда: личные заметки, личные календари и личные счета, профиль, сессии и ключ. Что вы добавили в общие разделы, остаётся у семьи без вашего имени. Отменить нельзя.',
+  'Delete my account…': 'Удалить мой аккаунт…',
+  'Delete my account forever': 'Удалить мой аккаунт навсегда',
+  'Remove {name} for good?': 'Удалить {name} навсегда?',
+  'Their private notes, personal calendars and personal accounts, profile, sessions and key are deleted. What they added to shared spaces stays without their name. There is no undo.':
+    'Личные заметки, личные календари и личные счета, профиль, сессии и ключ будут удалены. Что они добавили в общие разделы, останется без их имени. Отменить нельзя.',
+  'Remove for good': 'Удалить навсегда',
+  'You cannot remove yourself here — use "Delete my account"': 'Себя здесь удалить нельзя — используйте «Удалить мой аккаунт»',
+  'The last administrator cannot leave — delete the family, or make someone else an administrator first':
+    'Последний администратор не может уйти — удалите семью или сначала сделайте администратором кого-то другого',
+  'This is health information. Like everything else here it is encrypted with the family key and readable only inside your family; writing it down is your choice, and it goes with the profile if the account is ever removed.':
+    'Это сведения о здоровье. Как и всё здесь, они зашифрованы ключом семьи и читаются только внутри семьи; записывать их — ваш выбор, и они удаляются вместе с профилем, если аккаунт когда-нибудь будет удалён.',
+
   // ── A pending change to the terms or the privacy policy (shell banner, admin only) ──
   'The Terms of Service and Privacy Policy change on {date}. If you do not agree, export the archive and delete the family before then.':
     'Условия использования и политика конфиденциальности меняются {date}. Если вы не согласны — до этого дня можно выгрузить архив и удалить семью.',

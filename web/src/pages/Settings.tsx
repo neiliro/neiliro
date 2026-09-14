@@ -18,6 +18,7 @@ import { TotpSection } from '../components/TotpSection';
 import { CalendarFeedSection } from '../components/CalendarFeedSection';
 import { FamilyDataSection } from '../components/FamilyDataSection';
 import { PlanSection } from '../components/PlanSection';
+import { MyDataSection } from '../components/MyDataSection';
 import { useServiceState } from '../lib/service';
 
 /**
@@ -689,6 +690,10 @@ export function Settings() {
 
       <div className="mb-5 break-inside-avoid">
         <CalendarFeedSection />
+      </div>
+
+      <div className="mb-5 break-inside-avoid">
+        <MyDataSection />
       </div>
 
       {usage && (

@@ -307,6 +307,11 @@ function MemberDetail({ userId, onChanged }: { userId: string; onChanged: () => 
       {/* Allergies — first and loud: the block a babysitter must find */}
       <section className="rounded-card border border-urgent/40 bg-surface p-5">
         <h2 className="eyebrow mb-3">{t('Allergies and medical notes')}</h2>
+        {canEdit && (
+          <p className="mb-3 text-xs text-muted">
+            {t('This is health information. Like everything else here it is encrypted with the family key and readable only inside your family; writing it down is your choice, and it goes with the profile if the account is ever removed.')}
+          </p>
+        )}
         {allergies.length === 0 && (
           <p className="text-sm text-muted">{t('None known — good.')}</p>
         )}

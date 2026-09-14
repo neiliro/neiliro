@@ -1,0 +1,12 @@
+-- A member can leave for good (GDPR art. 17; neiliro/neiliro#229 follow-up).
+--
+-- The row itself stays: tasks, events, transactions and versions point at
+-- it through created_by / author_id / assignee_id, and half of those are
+-- ON DELETE SET NULL — dropping the row would silently turn a personal
+-- account or a personal calendar into a shared one (owner_id → NULL).
+-- Instead lib/erase-member.ts removes everything only this person could
+-- see, strips their words from what the family keeps, and turns the row
+-- into a tombstone: no name, an address nobody can receive at, no
+-- credentials. deleted_at marks it so lists skip it and nothing is ever
+-- "re-enabled".
+ALTER TABLE users ADD COLUMN deleted_at TEXT;
