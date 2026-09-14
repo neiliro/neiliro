@@ -1,6 +1,9 @@
 import { t } from '../lib/i18n';
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { attachmentUrl } from '../lib/files';
+import { looksLikeIcs, parseIcs } from '../lib/ics';
+import { useDialogs } from '../components/Dialog';
 import { AttachmentLink } from '../components/AttachmentMedia';
 import { api } from '../lib/api';
 import { INBOX_ID } from '../lib/tasks';
@@ -8,7 +11,6 @@ import { useAuth } from '../lib/auth';
 import { formatStamp } from '../lib/format';
 import { clearBlankOnBlur } from '../lib/forms';
 import { Empty, Page } from '../components/Page';
-import { useDialogs } from '../components/Dialog';
 
 interface MailStub {
   id: string;
@@ -67,6 +69,42 @@ export function Mail() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const dialogs = useDialogs();
+  const navigate = useNavigate();
+
+  /*
+    An invitation becomes an event (#29, #30). The .ics is opened here —
+    it is sealed like every attachment, and only the browser can read it —
+    parsed, and handed to the calendar as a prefilled dialog: the person
+    still picks the calendar and confirms. A recurring invitation is named
+    as such and saved as a single event; a file with several events offers
+    the first and says how many there were.
+  */
+  async function addToCalendar(att: MailAttachment) {
+    setError(null);
+    try {
+      const url = await attachmentUrl(att.id, att.mime);
+      const text = await (await fetch(url)).text();
+      const events = parseIcs(text);
+      const first = events[0];
+      if (!first) {
+        setError(t('No event found in this file.'));
+        return;
+      }
+      if (first.rrule || events.length > 1) {
+        const ok = await dialogs.confirm({
+          title: t('Add to calendar'),
+          message: first.rrule
+            ? t('This invitation repeats ({rule}). It is added as a single event on the first date; set the repetition yourself if you want it.', { rule: first.rrule })
+            : t('This file holds {n} events. The first one is added; open the file for the rest.', { n: events.length }),
+          confirmLabel: t('Continue'),
+        });
+        if (!ok) return;
+      }
+      void navigate('/calendar', { state: { prefill: first } });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('Could not save'));
+    }
+  }
 
   const load = useCallback(async () => {
     setList(await api.get<MailList>('/mail'));
@@ -344,7 +382,7 @@ export function Mail() {
                 <p className="eyebrow mb-2">{t('Attachments')}</p>
                 <ul className="flex flex-wrap gap-2">
                   {message.attachments.map((a) => (
-                    <li key={a.id}>
+                    <li key={a.id} className="flex items-center gap-1">
                       <AttachmentLink
                         id={a.id}
                         mime={a.mime}
@@ -354,6 +392,16 @@ export function Mail() {
                       >
                         📎 {a.filename}
                       </AttachmentLink>
+                      {looksLikeIcs(a.mime, a.filename) && (
+                        <button
+                          type="button"
+                          onClick={() => void addToCalendar(a)}
+                          className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:opacity-90"
+                          title={t('Open the invitation as a new event in the calendar')}
+                        >
+                          {t('Add to calendar')}
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>

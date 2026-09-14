@@ -239,8 +239,17 @@ letters for** sets an age (3 months to 2 years, or forever, the default):
 a daily sweep removes older letters the same way, because a paperwork
 desk is not an archive and handled letters name people.
 
-v1 renders the plain-text part of a message; HTML rendering, ICS invites
-into the calendar and invoice-to-transaction are tracked in the
+An invitation attached to a letter (`.ics`, as schools, doctors and
+booking systems send them) gets an **Add to calendar** button: the file
+is opened in the browser — it is sealed like every attachment — and the
+calendar opens a new event already written, title, place, description
+and time, on the invitation's day; you pick the calendar and save. A
+recurring invitation is added as a single event and says so; a file
+with several events offers the first. Times in UTC are moved to your
+wall-clock; a time with a named zone is taken as written.
+
+v1 renders the plain-text part of a message; HTML rendering and
+invoice-to-transaction are tracked in the
 [family mail epic](https://github.com/neiliro/neiliro/issues/30).
 
 ### Mail and the family key

@@ -1045,6 +1045,15 @@ export const ru: Record<string, string> = {
   'This is health information. Like everything else here it is encrypted with the family key and readable only inside your family; writing it down is your choice, and it goes with the profile if the account is ever removed.':
     'Это сведения о здоровье. Как и всё здесь, они зашифрованы ключом семьи и читаются только внутри семьи; записывать их — ваш выбор, и они удаляются вместе с профилем, если аккаунт когда-нибудь будет удалён.',
 
+  // ── Mail: an invitation becomes an event (#29, #30) ──
+  'Add to calendar': 'В календарь',
+  'Open the invitation as a new event in the calendar': 'Открыть приглашение как новое событие в календаре',
+  'No event found in this file.': 'В этом файле нет события.',
+  'This invitation repeats ({rule}). It is added as a single event on the first date; set the repetition yourself if you want it.':
+    'Это приглашение повторяется ({rule}). Оно добавится одним событием на первую дату; повторение при желании задайте сами.',
+  'This file holds {n} events. The first one is added; open the file for the rest.':
+    'В файле {n} событий. Добавится первое; остальные — в самом файле.',
+
   // ── A pending change to the terms or the privacy policy (shell banner, admin only) ──
   'The Terms of Service and Privacy Policy change on {date}. If you do not agree, export the archive and delete the family before then.':
     'Условия использования и политика конфиденциальности меняются {date}. Если вы не согласны — до этого дня можно выгрузить архив и удалить семью.',
