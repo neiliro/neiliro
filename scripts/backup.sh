@@ -94,7 +94,12 @@ if [ -d "$DATA_DIR/families" ]; then
     # RCLONE_CONFIG_R2_ACCESS_KEY_ID, RCLONE_CONFIG_R2_SECRET_ACCESS_KEY
     # (compose passes them; nothing is written to disk). One directory per
     # day in the bucket, same layout as here; the bucket expires them.
-    rclone copy --s3-no-check-bucket --retries 3 --low-level-retries 5 --stats-one-line \
+    # --s3-no-head: skip the HEAD rclone makes after each upload to read the
+    # object back. On R2 that HEAD answered 501 intermittently (first run in
+    # production, 2026-09-14: every file failed attempt 1 and passed on
+    # attempt 2); the PUT itself carries Content-MD5, so the server already
+    # verified what it stored, and the response ETag is what rclone needs.
+    rclone copy --s3-no-check-bucket --s3-no-head --retries 3 --low-level-retries 5 --stats-one-line \
       "$DAY_DIR" "r2:$R2_BUCKET/$STAMP" || { echo "off-site copy to R2 failed" >&2; exit 1; }
     echo "Off-site: $STAMP copied to R2 bucket $R2_BUCKET."
   fi
