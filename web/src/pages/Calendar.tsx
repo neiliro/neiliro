@@ -1,6 +1,7 @@
 import { t } from '../lib/i18n';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import type { EventPrefill } from '../components/EventDialog';
 import { api, type HouseholdMember, type Project, type Task } from '../lib/api';
 import {
   VIEW_LABEL,
@@ -64,6 +65,9 @@ export function Calendar() {
 
   const [editing, setEditing] = useState<Occurrence | null>(null);
   const [creatingOn, setCreatingOn] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState<EventPrefill | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
   const [editingCalendar, setEditingCalendar] = useState<CalendarModel | null>(null);
   const [creatingCalendar, setCreatingCalendar] = useState(false);
 
@@ -110,6 +114,19 @@ export function Calendar() {
     setAnchor(date);
     setParams({}, { replace: true });
   }, [params, setParams]);
+
+  // Arriving from Mail with an invitation (#30): the dialog opens already
+  // written, on the invitation's day; the person picks the calendar and
+  // saves. Carried in router state, not the URL — it is words, and the
+  // URL is what ends up in history and screenshots.
+  useEffect(() => {
+    const incoming = (location.state as { prefill?: EventPrefill } | null)?.prefill;
+    if (!incoming) return;
+    setPrefill(incoming);
+    setAnchor(incoming.start_date);
+    setCreatingOn(incoming.start_date);
+    void navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate]);
 
   useEffect(() => saveLocal('view', view), [view]);
   useEffect(() => saveLocal('hidden', hidden), [hidden]);
@@ -330,6 +347,7 @@ export function Calendar() {
         <EventDialog
           occurrence={editing}
           defaultDate={creatingOn ?? today}
+          prefill={editing ? null : prefill}
           calendars={calendars}
           members={members}
           projects={projects}
@@ -337,6 +355,7 @@ export function Calendar() {
           onClose={() => {
             setEditing(null);
             setCreatingOn(null);
+            setPrefill(null);
           }}
         />
       )}
