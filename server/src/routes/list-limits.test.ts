@@ -142,13 +142,13 @@ describe('GET /api/notes is capped', () => {
     expect((await h.as(alice.cookie, 'GET', '/api/notes?limit=999999')).statusCode).toBe(400);
   });
 
-  it('still finds a note by title through search, which the cap must not hide', async () => {
+  it('still finds a note by title through the search corpus, which the cap does not apply to', async () => {
+    // Search moved to the browser (#226): /api/notes no longer takes a `q`,
+    // the corpus endpoint is where a note past the list cap is found.
     await h.as(alice.cookie, 'POST', '/api/notes', { title: 'ZZ unique wiki target', content: '' });
-    const found = await h.as(
-      alice.cookie,
-      'GET',
-      `/api/notes?q=${encodeURIComponent('ZZ unique wiki target')}`,
+    const corpus = await h.as(alice.cookie, 'GET', '/api/search/corpus');
+    expect(corpus.json<{ notes: { title: string }[] }>().notes.map((n) => n.title)).toContain(
+      'ZZ unique wiki target',
     );
-    expect(found.json<{ title: string }[]>().map((n) => n.title)).toContain('ZZ unique wiki target');
   });
 });

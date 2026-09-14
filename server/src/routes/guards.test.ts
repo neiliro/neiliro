@@ -61,11 +61,20 @@ describe('a private note', () => {
     expect((await as(bobCookie, 'DELETE', `/api/notes/${noteId}`)).statusCode).toBe(404);
   });
 
-  it('is not in his search results', async () => {
-    const found = (await as(bobCookie, 'GET', '/api/search?q=surprise')).json<{
-      results: unknown[];
+  it('is not in his search corpus', async () => {
+    // Search moved to the browser (#226): the server no longer matches a
+    // query, it only decides who may see which row. So the guard here is
+    // that the corpus itself omits the note for Bob and carries it for
+    // Alice — not that a query for its words comes up empty.
+    const bobCorpus = (await as(bobCookie, 'GET', '/api/search/corpus')).json<{
+      notes: { id: string }[];
     }>();
-    expect(found.results).toEqual([]);
+    expect(bobCorpus.notes.map((n) => n.id)).not.toContain(noteId);
+
+    const aliceCorpus = (await as(aliceCookie, 'GET', '/api/search/corpus')).json<{
+      notes: { id: string }[];
+    }>();
+    expect(aliceCorpus.notes.map((n) => n.id)).toContain(noteId);
   });
 
   it('has no readable version history', async () => {
@@ -213,9 +222,16 @@ describe('an attachment on a private note', () => {
     expect((await as(bobCookie, 'DELETE', `/api/attachments/${attachmentId}`)).statusCode).toBe(404);
   });
 
-  it('does not surface in his search', async () => {
-    const found = (await as(bobCookie, 'GET', '/api/search?q=secret')).json<{ results: unknown[] }>();
-    expect(found.results).toEqual([]);
+  it('does not surface in his search corpus', async () => {
+    const bobCorpus = (await as(bobCookie, 'GET', '/api/search/corpus')).json<{
+      attachments: { id: string }[];
+    }>();
+    expect(bobCorpus.attachments.map((a) => a.id)).not.toContain(attachmentId);
+
+    const aliceCorpus = (await as(aliceCookie, 'GET', '/api/search/corpus')).json<{
+      attachments: { id: string }[];
+    }>();
+    expect(aliceCorpus.attachments.map((a) => a.id)).toContain(attachmentId);
   });
 });
 

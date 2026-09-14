@@ -123,7 +123,6 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         due_before: dateField().optional(),
         due_after: dateField().optional(),
         include_done: z.enum(['true', 'false']).optional(),
-        search: z.string().max(200).optional(),
         limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).optional(),
       })
       .parse(req.query);
@@ -161,10 +160,6 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
     if (q.due_after) {
       where.push('coalesce(t.expected_date, t.due_date) >= ?');
       args.push(q.due_after);
-    }
-    if (q.search) {
-      where.push('ci_contains(t.title, ?)');
-      args.push(q.search);
     }
 
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';

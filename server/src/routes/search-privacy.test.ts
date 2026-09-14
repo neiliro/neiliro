@@ -67,13 +67,18 @@ function receiptOn(opts: { shared: boolean; owner: string; filename: string }): 
   });
 }
 
-async function searchFilenames(cookie: string, q: string): Promise<string[]> {
-  const res = await h.as(cookie, 'GET', `/api/search?q=${encodeURIComponent(q)}`);
+/*
+  Search moved to the browser (#226): /api/search/corpus hands back every
+  attachment the caller may see, unfiltered by any query, and the browser
+  does the matching client-side. So this helper no longer filters by
+  substring either — it returns every filename the caller can see, and
+  each test below checks inclusion/exclusion against that full list,
+  same as it checked against a query-filtered one before.
+*/
+async function searchFilenames(cookie: string): Promise<string[]> {
+  const res = await h.as(cookie, 'GET', '/api/search/corpus');
   expect(res.statusCode).toBe(200);
-  return res
-    .json<{ results: { kind: string; title: string }[] }>()
-    .results.filter((r) => r.kind === 'attachment')
-    .map((r) => r.title);
+  return res.json<{ attachments: { filename: string }[] }>().attachments.map((a) => a.filename);
 }
 
 beforeAll(async () => {
@@ -87,10 +92,10 @@ describe('search does not leak attachments across owner_id', () => {
     const mine = receiptOn({ shared: false, owner: alice.userId, filename: 'PRIVATEDOC-alice.pdf' });
 
     // The owner finds her own receipt — otherwise this test proves nothing
-    expect(await searchFilenames(alice.cookie, 'PRIVATEDOC')).toContain('PRIVATEDOC-alice.pdf');
+    expect(await searchFilenames(alice.cookie)).toContain('PRIVATEDOC-alice.pdf');
 
     // The other member does not, on any surface
-    expect(await searchFilenames(bob.cookie, 'PRIVATEDOC')).toEqual([]);
+    expect(await searchFilenames(bob.cookie)).not.toContain('PRIVATEDOC-alice.pdf');
     const direct = await h.as(bob.cookie, 'GET', `/api/attachments/${mine.attachmentId}`);
     expect(direct.statusCode).toBe(404);
   });
@@ -100,13 +105,13 @@ describe('search does not leak attachments across owner_id', () => {
     // plays no part, so Bob-as-admin is the sharpest test of it
     const listed = await h.as(bob.cookie, 'GET', '/api/accounts');
     expect(listed.json<{ name: string }[]>().map((a) => a.name)).not.toContain('Personal');
-    expect(await searchFilenames(bob.cookie, 'PRIVATEDOC')).toEqual([]);
+    expect(await searchFilenames(bob.cookie)).not.toContain('PRIVATEDOC-alice.pdf');
   });
 
   it('still shows a receipt on a shared account to everyone', async () => {
     receiptOn({ shared: true, owner: alice.userId, filename: 'SHAREDDOC-joint.pdf' });
-    expect(await searchFilenames(alice.cookie, 'SHAREDDOC')).toContain('SHAREDDOC-joint.pdf');
-    expect(await searchFilenames(bob.cookie, 'SHAREDDOC')).toContain('SHAREDDOC-joint.pdf');
+    expect(await searchFilenames(alice.cookie)).toContain('SHAREDDOC-joint.pdf');
+    expect(await searchFilenames(bob.cookie)).toContain('SHAREDDOC-joint.pdf');
   });
 
   it("still hides an attachment on another member's private note", async () => {
@@ -127,8 +132,8 @@ describe('search does not leak attachments across owner_id', () => {
         )
         .run(attachmentId, `attachments/2026-09/${attachmentId}.bin`, noteId, alice.userId, now());
     });
-    expect(await searchFilenames(alice.cookie, 'NOTEDOC')).toContain('NOTEDOC-secret.pdf');
-    expect(await searchFilenames(bob.cookie, 'NOTEDOC')).toEqual([]);
+    expect(await searchFilenames(alice.cookie)).toContain('NOTEDOC-secret.pdf');
+    expect(await searchFilenames(bob.cookie)).not.toContain('NOTEDOC-secret.pdf');
   });
 
   it('keeps family mail attachments visible — mail has no owner', async () => {
@@ -153,7 +158,7 @@ describe('search does not leak attachments across owner_id', () => {
         )
         .run(attachmentId, `attachments/2026-09/${attachmentId}.bin`, messageId, now());
     });
-    expect(await searchFilenames(alice.cookie, 'MAILDOC')).toContain('MAILDOC-forms.pdf');
-    expect(await searchFilenames(bob.cookie, 'MAILDOC')).toContain('MAILDOC-forms.pdf');
+    expect(await searchFilenames(alice.cookie)).toContain('MAILDOC-forms.pdf');
+    expect(await searchFilenames(bob.cookie)).toContain('MAILDOC-forms.pdf');
   });
 });

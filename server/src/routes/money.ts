@@ -475,7 +475,6 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
         account_id: z.string().uuid().optional(),
         category_id: z.string().uuid().optional(),
         kind: z.enum(['expense', 'income', 'transfer']).optional(),
-        search: z.string().max(200).optional(),
         limit: z.coerce.number().int().min(1).max(500).optional(),
       })
       .parse(req.query);
@@ -506,10 +505,6 @@ export async function registerMoneyRoutes(app: FastifyInstance): Promise<void> {
     if (q.kind) {
       where.push('t.kind = ?');
       args.push(q.kind);
-    }
-    if (q.search) {
-      where.push("(ci_contains(coalesce(t.note, ''), ?) OR ci_contains(coalesce(t.place, ''), ?))");
-      args.push(q.search, q.search);
     }
 
     const rows = db
