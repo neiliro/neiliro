@@ -16,6 +16,16 @@ STAMP=$(date +%Y-%m-%d)
 # one failure mode a nightly cron hides best. The app container ships no
 # curl; node is always there.
 PING_URL="${BACKUP_PING_URL:-}"
+# How many daily sets stay on this disk. Fourteen is right for a
+# self-hosted machine whose disk is the backup; a hosted server that ships
+# every set off-site (below) keeps two — enough for a restore of
+# "yesterday" without a download, not enough to matter when the disk goes.
+KEEP_DAYS="${BACKUP_KEEP_DAYS:-14}"
+# Off-site copy (hosted): an S3-compatible bucket, Cloudflare R2 in
+# production. The bucket's own lifecycle rule is the retention there; this
+# script only uploads. All-or-nothing with the ping: a failed upload fails
+# the run, and the dead-man switch reports it.
+R2_BUCKET="${BACKUP_R2_BUCKET:-}"
 report() {
   [ -z "$PING_URL" ] && return 0
   node -e "fetch(process.argv[1], { signal: AbortSignal.timeout(10000) }).catch(() => {})" \
@@ -79,8 +89,20 @@ if [ -d "$DATA_DIR/families" ]; then
   # together with the plaintext snapshot.
   rm -f "$DAY_DIR/registry.db" "$DAY_DIR/registry.db-wal" "$DAY_DIR/registry.db-shm"
 
-  # Keep two weeks of daily directories, like the single-family path
-  find "$BACKUP_DIR" -maxdepth 1 -type d -name '20*' -mtime +14 -exec rm -rf {} + 2>/dev/null || true
+  if [ -n "$R2_BUCKET" ]; then
+    # rclone reads its remote from env: RCLONE_CONFIG_R2_TYPE=s3,
+    # RCLONE_CONFIG_R2_PROVIDER=Cloudflare, RCLONE_CONFIG_R2_ENDPOINT,
+    # RCLONE_CONFIG_R2_ACCESS_KEY_ID, RCLONE_CONFIG_R2_SECRET_ACCESS_KEY
+    # (compose passes them; nothing is written to disk). One directory per
+    # day in the bucket, same layout as here; the bucket expires them.
+    rclone copy --s3-no-check-bucket --retries 3 --low-level-retries 5 --stats-one-line \
+      "$DAY_DIR" "r2:$R2_BUCKET/$STAMP" || { echo "off-site copy to R2 failed" >&2; exit 1; }
+    echo "Off-site: $STAMP copied to R2 bucket $R2_BUCKET."
+  fi
+
+  # Local retention (KEEP_DAYS): two weeks without an off-site copy, two
+  # days with one — the operator sets it next to the bucket
+  find "$BACKUP_DIR" -maxdepth 1 -type d -name '20*' -mtime +"$KEEP_DAYS" -exec rm -rf {} + 2>/dev/null || true
 
   echo "Hosted backup $STAMP is ready: $count families."
   exit 0
@@ -130,7 +152,7 @@ if [ -d "$REPO_DIR/.git" ]; then
 fi
 
 # 5. Keep two weeks locally
-find "$BACKUP_DIR" -name 'hub-*.db' -mtime +14 -delete
-find "$BACKUP_DIR" -name 'notes-*' -type d -mtime +14 -exec rm -rf {} + 2>/dev/null || true
+find "$BACKUP_DIR" -name 'hub-*.db' -mtime +"$KEEP_DAYS" -delete
+find "$BACKUP_DIR" -name 'notes-*' -type d -mtime +"$KEEP_DAYS" -exec rm -rf {} + 2>/dev/null || true
 
 echo "Backup $STAMP is ready."

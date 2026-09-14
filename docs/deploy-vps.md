@@ -231,6 +231,12 @@ to any cloud, `rsync` to a home machine on a schedule, or a git
 repository (the script pushes by itself if a clone with configured
 access is mounted into the container — though at family scale a daily
 `rsync` of the backups to a home machine is simpler and just as good).
+The script can also do the cloud copy itself: set `BACKUP_R2_BUCKET` and
+the `RCLONE_CONFIG_R2_*` variables from `.env.example` to any
+S3-compatible bucket (the image ships `rclone`), give the bucket a
+lifecycle rule for how long to keep, and set `BACKUP_KEEP_DAYS` to a
+couple of days so the local disk is no longer the backup. A failed upload
+fails the run, and the dead-man switch below reports it.
 
 Every couple of months, pull a random archive and verify that it
 decrypts and opens — and since the words inside are encrypted with the
