@@ -1,7 +1,7 @@
 import { t } from '../lib/i18n';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { uploadAttachments } from '../lib/files';
+import { attachmentUrl, uploadAttachments } from '../lib/files';
 import { AttachmentImage, AttachmentLink } from './AttachmentMedia';
 import {
   Modal,
@@ -26,9 +26,21 @@ import {
   type TxKind,
 } from '../lib/money';
 
+/** What a letter brings to a new transaction (pages/Mail.tsx, #30): words, an amount to confirm, the bill itself as the receipt. */
+export interface TransactionPrefill {
+  note?: string;
+  place?: string;
+  /** Minor units, already detected from the letter; the person confirms it */
+  amount?: number | null;
+  occurred_on?: string;
+  /** A mail attachment to copy onto the transaction as its receipt once it exists */
+  receipt?: { attachmentId: string; filename: string; mime: string } | null;
+}
+
 interface Props {
   transaction: Transaction | null;
   defaultAccountId: string;
+  prefill?: TransactionPrefill | null;
   defaultKind?: TxKind;
   accounts: Account[];
   categories: Category[];
@@ -40,6 +52,7 @@ interface Props {
 export function TransactionDialog({
   transaction,
   defaultAccountId,
+  prefill = null,
   defaultKind = 'expense',
   accounts,
   categories,
@@ -51,14 +64,14 @@ export function TransactionDialog({
 
   const [kind, setKind] = useState<TxKind>(transaction?.kind ?? defaultKind);
   const [draft, setDraft] = useState({
-    occurred_on: transaction?.occurred_on ?? today,
+    occurred_on: transaction?.occurred_on ?? prefill?.occurred_on ?? today,
     account_id: transaction?.account_id ?? defaultAccountId,
-    amount: transaction ? formatAmountInput(transaction.amount) : '',
+    amount: transaction ? formatAmountInput(transaction.amount) : prefill?.amount ? formatAmountInput(prefill.amount) : '',
     to_account_id: transaction?.to_account_id ?? '',
     to_amount: transaction?.to_amount ? formatAmountInput(transaction.to_amount) : '',
     category_id: transaction?.category_id ?? '',
-    note: transaction?.note ?? '',
-    place: transaction?.place ?? '',
+    note: transaction?.note ?? prefill?.note ?? '',
+    place: transaction?.place ?? prefill?.place ?? '',
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -147,7 +160,26 @@ export function TransactionDialog({
         place: draft.place || null,
       };
       if (editing) await api.patch(`/transactions/${transaction.id}`, payload);
-      else await api.post('/transactions', payload);
+      else {
+        const created = await api.post<{ id: string }>('/transactions', payload);
+        // The bill that came with the letter becomes the receipt (#30): the
+        // sealed attachment is opened here and uploaded again, sealed again,
+        // under the transaction — a copy the mailbox's retention cannot take
+        if (prefill?.receipt && created?.id) {
+          try {
+            const url = await attachmentUrl(prefill.receipt.attachmentId, prefill.receipt.mime);
+            const blob = await (await fetch(url)).blob();
+            const file = new File([blob], prefill.receipt.filename, { type: prefill.receipt.mime });
+            await uploadAttachments(`/transactions/${created.id}/attachments`, await shrinkAll([file]));
+          } catch (err) {
+            // The transaction exists; the receipt can be attached by hand
+            setError(err instanceof Error ? err.message : t('Could not upload the receipt'));
+            setBusy(false);
+            onSaved();
+            return;
+          }
+        }
+      }
       onSaved();
       onClose();
     } catch (err) {

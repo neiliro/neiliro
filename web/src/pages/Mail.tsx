@@ -1,6 +1,7 @@
 import { t } from '../lib/i18n';
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { detectAmount, looksLikeReceipt } from '../lib/invoice';
 import { AttachmentLink } from '../components/AttachmentMedia';
 import { api } from '../lib/api';
 import { INBOX_ID } from '../lib/tasks';
@@ -65,6 +66,32 @@ export function Mail() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  /*
+    A bill becomes a transaction (#30). Everything the money form can be
+    told is read here, from the letter the browser has already opened: the
+    subject as the note, the sender as the place, the letter's date, the
+    amount next to a currency if there is one, and the attached document as
+    the receipt. The person picks the account and category and confirms —
+    a detected amount is a suggestion, never a fact.
+  */
+  function makeTransaction() {
+    if (!message) return;
+    const detected = detectAmount(`${message.subject}\n${message.body_text}`);
+    const receipt = message.attachments.find((a) => looksLikeReceipt(a.mime, a.filename));
+    void navigate('/money', {
+      state: {
+        prefill: {
+          note: (message.subject || '').slice(0, 300),
+          place: (message.from_name || message.from_address).slice(0, 200),
+          amount: detected?.minor ?? null,
+          occurred_on: (message.sent_at ?? message.received_at).slice(0, 10),
+          receipt: receipt ? { attachmentId: receipt.id, filename: receipt.filename, mime: receipt.mime } : null,
+        },
+      },
+    });
+  }
 
   const load = useCallback(async () => {
     setList(await api.get<MailList>('/mail'));
@@ -282,6 +309,15 @@ export function Mail() {
                     {t('Make it a task')}
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={makeTransaction}
+                  disabled={busy}
+                  className="rounded-lg border border-line px-3 py-1.5 text-sm text-ink hover:bg-surface-3 disabled:opacity-50"
+                  title={t("Open a new transaction with this letter's amount, sender and document filled in")}
+                >
+                  {t('Make it a transaction')}
+                </button>
               </div>
             </div>
 
