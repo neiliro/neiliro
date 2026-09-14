@@ -338,7 +338,6 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
       .object({
         folder_id: z.string().optional(),
         templates: z.enum(['true', 'false']).optional(),
-        q: z.string().max(200).optional(),
         limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).optional(),
       })
       .parse(req.query);
@@ -352,10 +351,6 @@ export async function registerNoteRoutes(app: FastifyInstance): Promise<void> {
     } else if (q.folder_id) {
       where.push('n.folder_id = ?');
       args.push(q.folder_id);
-    }
-    if (q.q) {
-      where.push('(ci_contains(n.title, ?) OR ci_contains(n.body_md, ?))');
-      args.push(q.q, q.q);
     }
 
     const rows = db

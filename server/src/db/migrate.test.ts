@@ -176,6 +176,67 @@ describe('migrations', () => {
   });
 
   /*
+    039 drops the FTS5 search_index and its nine sync triggers (search
+    moved to the browser, #226). The risk here is not the DROP statements
+    themselves — it's whether removing an index that piggybacks on every
+    notes/tasks/projects write leaves the tables it was triggered from
+    untouched. An empty-database run can't exercise that: the triggers
+    only fire, and the index only fills, once there is a row to insert.
+  */
+  it('039 drops search_index and its triggers without touching notes or tasks', () => {
+    const db = openDatabase(':memory:');
+    const TARGET = '039_drop_search_index.sql';
+    applyBefore(db, TARGET);
+
+    const project = db.prepare('SELECT id FROM projects LIMIT 1').get() as { id: string };
+    db.prepare(
+      `INSERT INTO tasks (id, project_id, level, title, status, priority, position)
+       VALUES ('t1', ?, 0, 'Legacy task', 'todo', 'normal', 1)`,
+    ).run(project.id);
+    db.prepare(
+      `INSERT INTO notes (id, title, body_md, created_at, updated_at)
+       VALUES ('n1', 'Note', 'body', '2026-01-01', '2026-01-01')`,
+    ).run();
+
+    // Precondition: the triggers actually populated the index, or dropping
+    // it later proves nothing about a hub that had ever written anything
+    const indexedBefore = (
+      db.prepare('SELECT count(*) AS n FROM search_index').get() as { n: number }
+    ).n;
+    expect(indexedBefore).toBeGreaterThan(0);
+
+    applyOnly(db, TARGET);
+
+    // The table and every one of its nine triggers are gone
+    const gone = (name: string) =>
+      db.prepare(`SELECT name FROM sqlite_master WHERE name = ?`).get(name);
+    expect(gone('search_index')).toBeUndefined();
+    for (const trigger of [
+      'notes_ai', 'notes_ad', 'notes_au',
+      'tasks_ai', 'tasks_ad', 'tasks_au',
+      'projects_ai', 'projects_ad', 'projects_au',
+    ]) {
+      expect(gone(trigger), `${trigger} should be gone`).toBeUndefined();
+    }
+
+    // The rows the (now-gone) triggers used to mirror are untouched
+    expect(db.prepare(`SELECT id, title FROM notes WHERE id = 'n1'`).get()).toEqual({
+      id: 'n1',
+      title: 'Note',
+    });
+    expect(db.prepare(`SELECT id, title FROM tasks WHERE id = 't1'`).get()).toEqual({
+      id: 't1',
+      title: 'Legacy task',
+    });
+
+    // And the chain is complete — nothing was left pending by the two-step run
+    expect(
+      (db.prepare('SELECT count(*) AS n FROM _migrations').get() as { n: number }).n,
+    ).toBe(migrationFiles().length);
+    db.close();
+  });
+
+  /*
     022 renames settings keys and rescales amounts. Both are destructive
     edits to rows a family has typed into, so what matters is a database
     already in use: an untouched seed and a customized one behave

@@ -57,8 +57,7 @@ mkdirSync(paths.backups, { recursive: true });
 /**
  * Opening the database is a function because there can be more than one:
  * demo mode keeps a sandbox per visitor, and each must get the same
- * pragmas and the same registered functions as the main one — otherwise
- * queries using ci_contains would fail only inside sandboxes.
+ * pragmas as the main one.
  */
 export function openDatabase(file: string): Database.Database {
   const d = new Database(file);
@@ -69,14 +68,6 @@ export function openDatabase(file: string): Database.Database {
   d.pragma('foreign_keys = ON');
   d.pragma('synchronous = NORMAL');
   d.pragma('busy_timeout = 5000');
-
-  // SQLite's built-in lower() and LIKE are case-insensitive only for Latin:
-  // «Справка» is not found by the query «справ». We register our own function
-  // that folds case in JavaScript and therefore knows every alphabet.
-  d.function('ci_contains', (haystack: unknown, needle: unknown) => {
-    if (typeof haystack !== 'string' || typeof needle !== 'string') return 0;
-    return haystack.toLocaleLowerCase().includes(needle.toLocaleLowerCase()) ? 1 : 0;
-  });
 
   return d;
 }

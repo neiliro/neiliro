@@ -108,7 +108,8 @@ down in full.
 - **Search.** FTS5 (migration 002) and `ci_contains` cannot index what they
   cannot read. Search moves to the client: it fetches the family's records
   once, decrypts, and searches locally. A family's data is thousands of
-  rows, not millions. The server-side index is dropped once nothing reads it.
+  rows, not millions. The server-side index was dropped once nothing read
+  it (migration 039, #226).
 - **Wiki-links between notes** are keyed by title today. Resolution moves to
   the client, which is the only place that knows the titles.
 - **Calendar feed and the single-event link.** Google Calendar polls a URL
