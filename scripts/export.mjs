@@ -39,6 +39,23 @@ function countRows(db, table) {
   }
 }
 
+function keyFacts(db) {
+  try {
+    return {
+      family_key: Boolean(db.prepare('SELECT 1 FROM family_key WHERE id = 1').get()),
+      password_envelopes: db
+        .prepare("SELECT count(*) AS n FROM key_envelopes WHERE kind = 'password' AND retired_at IS NULL")
+        .get().n,
+      recovery_envelope: Boolean(
+        db.prepare("SELECT 1 FROM key_envelopes WHERE kind = 'recovery' AND retired_at IS NULL").get(),
+      ),
+    };
+  } catch {
+    // Before migration 033 there were no key tables — and no key
+    return { family_key: false, password_envelopes: 0, recovery_envelope: false };
+  }
+}
+
 function dirSize(dir) {
   if (!existsSync(dir)) return { files: 0, bytes: 0 };
   let files = 0;
@@ -60,6 +77,10 @@ try {
   const manifest = {
     exported_at: new Date().toISOString(),
     source_data_dir: dataDir,
+    // The doors the archive carries (#224): the words are ciphertext under
+    // the family key, which travels only wrapped — a password envelope per
+    // member and the recovery envelope. Same shape as the settings export.
+    key: keyFacts(source),
     migrations: source
       .prepare('SELECT name FROM _migrations ORDER BY name')
       .all()
