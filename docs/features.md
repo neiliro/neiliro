@@ -218,7 +218,13 @@ function, so everything below works identically. Setup:
 
 A letter becomes a task in one click; the task lands in the Inbox project
 and links back to the message. Attachments ride the regular attachments
-pipeline and storage budget.
+pipeline and storage budget. A bill becomes a **transaction** in one click
+too: the money form opens with the subject as the note, the sender as the
+place, the letter's date, the amount found next to a currency in the text
+(a suggestion to confirm, never a fact), and the attached PDF or scan
+copied onto the transaction as its receipt — sealed again under the
+transaction, so the mailbox's retention cannot take the family's proof of
+payment with it. Account and category are yours to pick.
 
 Replies always go out **from the family address** — the member's name
 travels in the display name and is recorded in the hub. A connected

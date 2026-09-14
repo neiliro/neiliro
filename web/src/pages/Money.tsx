@@ -1,6 +1,7 @@
 import { t } from '../lib/i18n';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import type { TransactionPrefill } from '../components/TransactionDialog';
 import { api } from '../lib/api';
 import { useDialogs } from '../components/Dialog';
 import { EntityDialog, PALETTE } from '../components/EntityDialog';
@@ -56,6 +57,20 @@ export function Money() {
 
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [creatingTx, setCreatingTx] = useState(false);
+  const [txPrefill, setTxPrefill] = useState<TransactionPrefill | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Arriving from Mail with a bill (#30): the transaction dialog opens
+  // already written; the person picks the account and category and
+  // confirms the amount. Router state, not the URL — these are words.
+  useEffect(() => {
+    const incoming = (location.state as { prefill?: TransactionPrefill } | null)?.prefill;
+    if (!incoming) return;
+    setTxPrefill(incoming);
+    setCreatingTx(true);
+    void navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate]);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [newCurrency, setNewCurrency] = useState('EUR');
@@ -855,6 +870,7 @@ export function Money() {
         <TransactionDialog
           transaction={editingTx}
           defaultAccountId={quickAccount || accounts[0]!.id}
+          prefill={editingTx ? null : txPrefill}
           accounts={accounts}
           categories={categories}
           today={today}
@@ -862,6 +878,7 @@ export function Money() {
           onClose={() => {
             setCreatingTx(false);
             setEditingTx(null);
+            setTxPrefill(null);
           }}
         />
       )}
