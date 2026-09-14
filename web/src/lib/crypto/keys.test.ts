@@ -48,6 +48,16 @@ describe('the X25519 pair derived from the family key', () => {
   });
 });
 
+describe('the demo key minted on the server (#225)', () => {
+  // The same vector server/src/lib/demo-key.test.ts pins: the server derives
+  // the public half for family_key from the raw key it hands the guest, and
+  // the browser must arrive at the same point from the same bytes
+  it('derives the public half the server recorded', async () => {
+    const raw = new Uint8Array(Array.from({ length: 32 }, (_, i) => i + 1));
+    expect(await familyPublicKey(await importFamilyKey(raw))).toBe('FYQ_1hZiYk01kDsJUM8qrRt3QbEw4Hp3cCEAvfYO8lU');
+  });
+});
+
 describe('handing the key on through a link', () => {
   it('the secret rides in the fragment, opens the handoff, and nothing else does', async () => {
     const family = await generateFamilyKey();

@@ -2,10 +2,11 @@ import { randomBytes } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
-import { openDatabase, runWithDb } from '../db/index.js';
+import { now, openDatabase, runWithDb } from '../db/index.js';
 import { migrate } from '../db/migrate.js';
 import { env } from '../env.js';
 import { seedDemo } from './demo.js';
+import { encryptSandbox, generateGuestKey } from './demo-key.js';
 import { DEMO_LANGS, type DemoLang } from './demo.strings.js';
 import {
   type EndReason,
@@ -71,6 +72,8 @@ export interface Sandbox {
   /** Which template this sandbox came from; a visitor who switches
    *  language is given a new sandbox rather than a translated one. */
   lang: DemoLang;
+  /** The guest's family key, base64url of 32 bytes — GET /api/keys hands it to the browser (#225). */
+  guestKey: string;
   requests: number;
   writes: number;
   modules: Set<string>;
@@ -152,13 +155,21 @@ export function createSandbox(
   const file = join(sandboxesDir, `${id}.db`);
   copyFileSync(templatePath(lang), file);
 
+  // The template is plaintext and shared; the copy becomes this guest's
+  // hub, so its words go under a key that exists only for this sandbox
+  const db = openDatabase(file);
+  const raw = generateGuestKey();
+  const admin = db.prepare(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`).get() as { id: string };
+  encryptSandbox(db, raw, admin.id, now());
+
   const sandbox: Sandbox = {
     id,
-    db: openDatabase(file),
+    db,
     file,
     lastSeen: Date.now(),
     statsId: statsSessionStarted(meta.referrer, meta.userAgent),
     lang,
+    guestKey: raw.toString('base64url'),
     requests: 0,
     writes: 0,
     modules: new Set(),

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db, now } from '../db/index.js';
+import { env } from '../env.js';
 import { log } from '../lib/log.js';
 import {
   ENVELOPE_PATTERN,
@@ -34,6 +35,17 @@ const envelopeField = z.string().regex(ENVELOPE_PATTERN, 'Not a key envelope');
 const publicKeyField = z.string().regex(PUBLIC_KEY_PATTERN, 'Not a public key');
 
 export async function registerKeyRoutes(app: FastifyInstance): Promise<void> {
+  // In the demo the key is the sandbox's, minted at hand-out and held next
+  // to it (lib/demo-key.ts); the guest's browser receives it here in the
+  // clear and stores it like a key it unwrapped itself. Nowhere else does
+  // this route carry a bare key, and the demo is its own process.
+  const demo = env.demoMode ? await import('../lib/sandbox.js') : null;
+  const demoKeyFor = (cookies: Record<string, string | undefined>): string | undefined => {
+    if (!demo) return undefined;
+    const id = cookies[demo.SANDBOX_COOKIE];
+    return id ? demo.getSandbox(id)?.guestKey : undefined;
+  };
+
   /** What this browser needs to open the key, or to learn that it cannot. */
   app.get('/api/keys', (req) => {
     const me = req.user!.id;
@@ -50,6 +62,7 @@ export async function registerKeyRoutes(app: FastifyInstance): Promise<void> {
       password_envelope: liveEnvelope(me, 'password'),
       recovery_envelope: liveEnvelope(null, 'recovery'),
       handoffs,
+      ...(demo ? { demo_key: demoKeyFor(req.cookies) ?? null } : {}),
     };
   });
 
