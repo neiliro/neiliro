@@ -178,7 +178,7 @@ describe('suspension and deletion', () => {
       });
   });
 
-  it('never re-issues the slug of a deleted family', () => {
+  it('holds the slug of a deleted family for a year, frees it by hand or after the year', () => {
     const family = tenants.createFamily('gone-g1h2');
     tenants.deleteFamilyData(family.familyId);
 
@@ -188,6 +188,22 @@ describe('suspension and deletion', () => {
     // A stranger inheriting the slug would inherit bookmarks and mail
     // addressed to the family that left
     expect(() => tenants.createFamily('gone-g1h2')).toThrow(/already taken/);
+
+    // The daily sweep leaves a fresh deletion alone...
+    expect(tenants.sweepRetiredSlugs()).toBe(0);
+    expect(() => tenants.createFamily('gone-g1h2')).toThrow(/already taken/);
+    // ...and frees it once the year is over; the row keeps its history under a tombstone name
+    // (at least: the registry is shared with the other tests' deletions)
+    expect(tenants.sweepRetiredSlugs(Date.now() + tenants.SLUG_RETIREMENT_MS + 60_000)).toBeGreaterThanOrEqual(1);
+    const reborn = tenants.createFamily('gone-g1h2');
+    expect(reborn.familyId).not.toBe(family.familyId);
+    expect(tenants.familySlug(family.familyId)).toMatch(/^~gone-g1h2~/);
+
+    // The operator frees one by hand for a family that comes back
+    tenants.deleteFamilyData(reborn.familyId);
+    expect(tenants.releaseSlug('gone-g1h2')).toBe('deleted-family');
+    expect(tenants.createFamily('gone-g1h2').familyId).not.toBe(reborn.familyId);
+    expect(tenants.releaseSlug('nobody-ever')).toBeNull();
   });
 });
 
