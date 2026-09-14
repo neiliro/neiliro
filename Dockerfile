@@ -28,7 +28,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      sqlite3 age ca-certificates git && rm -rf /var/lib/apt/lists/*
+      sqlite3 age ca-certificates git rclone && rm -rf /var/lib/apt/lists/*
 
 # Dependencies live only at the root: npm with workspaces hoists them
 # there, and server/node_modules does not exist at all. Node still finds
