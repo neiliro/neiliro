@@ -39,6 +39,10 @@ if (env.hostedMode) {
   const { sweepPlans } = await import('./lib/plan-letters.js');
   void sweepPlans();
   setInterval(() => void sweepPlans(), 24 * 60 * 60_000).unref();
+  // A deleted or renamed-away slug is held for a year, then freed
+  const { sweepRetiredSlugs } = await import('./lib/tenants.js');
+  sweepRetiredSlugs();
+  setInterval(sweepRetiredSlugs, 24 * 60 * 60_000).unref();
 } else {
   migrate();
 }

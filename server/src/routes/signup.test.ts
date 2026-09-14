@@ -181,6 +181,8 @@ describe('the reaper', () => {
 
     expect(reapUnclaimedFamilies()).toBe(1);
     expect(status(unclaimed)).toBe('deleted');
+    // The founder's address leaves with the family: nothing personal stays in the row
+    expect((registry().prepare('SELECT founder_email FROM families WHERE id = ?').get(unclaimed) as { founder_email: string | null }).founder_email).toBeNull();
     expect(status(claimed)).toBe('active');
     expect(status(young)).toBe('active');
     expect(status(operators)).toBe('active');

@@ -84,6 +84,14 @@ export function initHosted(): void {
       UPDATE families SET plan = 'legacy_free' WHERE plan IS NULL;
     `);
   }
+  // When a family was deleted (2026-09-14). Its slug stays out of reach for
+  // a year from this stamp - long enough for the family to move its mail
+  // address everywhere it gave it - then sweepRetiredSlugs frees it. Rows
+  // deleted before the column existed start their year now.
+  if (!columns.includes('deleted_at')) {
+    registry.exec('ALTER TABLE families ADD COLUMN deleted_at TEXT');
+  }
+  registry.prepare("UPDATE families SET deleted_at = ? WHERE status = 'deleted' AND deleted_at IS NULL").run(now());
   // Every Paddle event exactly once: Paddle retries anything that did not
   // answer 200, and a replayed event must not move the state twice
   registry.exec(`
@@ -104,8 +112,9 @@ export function initHosted(): void {
     )
   `);
   // Slugs a family gave up by renaming. Same rule as a deleted family's
-  // slug: never re-issued, because bookmarks, PWA icons and mail addressed
-  // to the old name would land with whoever took it.
+  // slug: out of reach for a year, because bookmarks, PWA icons and mail
+  // addressed to the old name would land with whoever took it; after a
+  // year that is the family's own lookout (decided 2026-09-14).
   registry.exec(`
     CREATE TABLE IF NOT EXISTS retired_slugs (
       slug       TEXT PRIMARY KEY,
@@ -588,9 +597,10 @@ export function familySlug(familyId: string): string | null {
  * 500 — acceptable for an action this final.
  *
  * The row stays in the registry as status='deleted' rather than being
- * removed: the slug must never be re-registered by strangers (bookmarks
- * and mail addressed to it would land in their hands), and the control
- * plane reads the status to finish its own bookkeeping. The nightly
+ * removed: the slug stays out of strangers' reach for a year (bookmarks
+ * and mail addressed to it would land in their hands; see
+ * sweepRetiredSlugs and releaseSlug), and the control plane reads the
+ * status to finish its own bookkeeping. The nightly
  * archives under DATA_DIR/backups are deliberately left alone — they are
  * encrypted and expire on their own, exactly as the privacy policy
  * promises. The family's own directory goes entirely, per-family backups/
@@ -600,7 +610,12 @@ export function familySlug(familyId: string): string | null {
  * were alive (seen 2026-09-14).
  */
 export function deleteFamilyData(familyId: string): void {
-  registry!.prepare(`UPDATE families SET status = 'deleted' WHERE id = ?`).run(familyId);
+  // founder_email existed to re-issue an unclaimed sign-up's letter; a
+  // deleted family will never need that, and an address is personal data
+  // the row has no reason to keep for the year the slug is held
+  registry!
+    .prepare(`UPDATE families SET status = 'deleted', deleted_at = ?, founder_email = NULL WHERE id = ?`)
+    .run(now(), familyId);
   for (const [slug, entry] of slugCache) {
     if (entry.familyId === familyId) slugCache.delete(slug);
   }
@@ -608,4 +623,61 @@ export function deleteFamilyData(familyId: string): void {
 
   rmSync(join(familiesDir, familyId), { recursive: true, force: true });
   log.notice(`family deleted: ${familyId}`);
+}
+
+// ── Retired slugs: a year out of reach, then free ────────────────────────
+
+/** How long a deleted or renamed family's slug stays out of strangers' reach. */
+export const SLUG_RETIREMENT_MS = 365 * 24 * 60 * 60_000;
+
+/**
+ * A retired slug's tombstone: the row keeps its history (billing events,
+ * letters, the fact of the deletion) under a name no real slug can equal —
+ * '~' is outside the slug alphabet — so the UNIQUE index lets the real
+ * name be registered again.
+ */
+function tombstoneSlug(slug: string, familyId: string): string {
+  return `~${slug}~${familyId.slice(0, 8)}`;
+}
+
+/**
+ * Free a slug the registry is holding back — by the operator's hand, for a
+ * family that comes back and wants its old name (the mail addressed to it
+ * lands with the same people, so the reason for the hold does not apply).
+ * Returns what was released, or null when the slug is not held at all.
+ */
+export function releaseSlug(slug: string): 'deleted-family' | 'renamed-away' | null {
+  const dead = registry!
+    .prepare("SELECT id FROM families WHERE slug = ? AND status = 'deleted'")
+    .get(slug) as { id: string } | undefined;
+  if (dead) {
+    registry!.prepare('UPDATE families SET slug = ? WHERE id = ?').run(tombstoneSlug(slug, dead.id), dead.id);
+    slugCache.delete(slug);
+    log.notice(`slug released: ${slug} (deleted family ${dead.id})`);
+    return 'deleted-family';
+  }
+  const retired = registry!.prepare('DELETE FROM retired_slugs WHERE slug = ?').run(slug);
+  if (retired.changes > 0) {
+    slugCache.delete(slug);
+    log.notice(`slug released: ${slug} (retired by rename)`);
+    return 'renamed-away';
+  }
+  return null;
+}
+
+/** Daily: slugs whose year of retirement is over become available again. Returns how many. */
+export function sweepRetiredSlugs(nowMs = Date.now()): number {
+  const cutoff = new Date(nowMs - SLUG_RETIREMENT_MS).toISOString().replace('T', ' ').slice(0, 19);
+  let freed = 0;
+  const dead = registry!
+    .prepare("SELECT id, slug FROM families WHERE status = 'deleted' AND deleted_at < ? AND slug NOT LIKE '~%'")
+    .all(cutoff) as { id: string; slug: string }[];
+  for (const row of dead) {
+    registry!.prepare('UPDATE families SET slug = ? WHERE id = ?').run(tombstoneSlug(row.slug, row.id), row.id);
+    slugCache.delete(row.slug);
+    freed += 1;
+  }
+  freed += registry!.prepare('DELETE FROM retired_slugs WHERE retired_at < ?').run(cutoff).changes;
+  if (freed > 0) log.notice(`retired slugs: ${freed} freed after a year`);
+  return freed;
 }
