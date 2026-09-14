@@ -61,11 +61,11 @@ if [ -d "$DATA_DIR/families" ]; then
     [ -f "$family_dir/hub.db" ] || continue
     family_id=$(basename "$family_dir")
 
-    # The slug in the filename is ops convenience (which archive is whose);
-    # the id is the stable truth — restores match by id.
-    slug=$(sqlite3 "$DAY_DIR/registry.db" \
-      "SELECT slug FROM families WHERE id = '$family_id';" 2>/dev/null || true)
-    name="${slug:-unknown}.$family_id"
+    # Archives are named by the family's id alone. The slug is often a
+    # surname, and these names travel to the off-site bucket; the id is the
+    # stable truth anyway (renames never move files), and which id is whose
+    # is one query on registry.db.age next to it.
+    name="$family_id"
 
     snap_dir="$DAY_DIR/$family_id.snap"
     mkdir -p "$snap_dir"
@@ -84,9 +84,8 @@ if [ -d "$DATA_DIR/families" ]; then
   done
 
   age -r "$AGE_RECIPIENT" -o "$DAY_DIR/registry.db.age" "$DAY_DIR/registry.db"
-  # The slug SELECTs above open the snapshot and, since WAL mode is
-  # persisted in the file, leave empty -wal/-shm companions — sweep them
-  # together with the plaintext snapshot.
+  # WAL mode is persisted in the file, so the snapshot may leave -wal/-shm
+  # companions — sweep them together with the plaintext snapshot.
   rm -f "$DAY_DIR/registry.db" "$DAY_DIR/registry.db-wal" "$DAY_DIR/registry.db-shm"
 
   if [ -n "$R2_BUCKET" ]; then
