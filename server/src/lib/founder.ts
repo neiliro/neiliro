@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { db, id, now, runWithTenant } from '../db/index.js';
 import { env } from '../env.js';
-import { hashInviteToken, INVITE_TTL_MS } from '../routes/setup.js';
+import { hashInviteToken } from '../routes/setup.js';
 import { sendServiceEmail, serviceMailAvailable } from './mail.js';
 import { renderLetterHtml, renderLetterText, type Letter } from './letter.js';
 import { log } from './log.js';
@@ -25,6 +25,16 @@ import { familySlug, tenantForFamily } from './tenants.js';
   closed (routes/setup.ts), and the account created through it starts out
   with the address confirmed — receiving the link is the proof.
 */
+
+/**
+ * How long the founder's link lives. Shorter than a member invitation's
+ * week (routes/setup.ts): this link opens an empty hub to whoever holds
+ * it, it was mailed to the one person who asked for a family minutes
+ * ago, and a re-issue is one request (sign-up form) or one command
+ * (invite-admin.mjs) away. Decided 2026-09-14 after a family sat
+ * unclaimed for twelve days.
+ */
+export const FOUNDER_INVITE_TTL_MS = 48 * 60 * 60_000;
 
 export interface FounderInvite {
   url: string;
@@ -62,7 +72,7 @@ export async function issueFounderInvite(familyId: string, email: string): Promi
         hashInviteToken(token),
         address,
         now(),
-        new Date(Date.now() + INVITE_TTL_MS).toISOString().replace('T', ' ').slice(0, 19),
+        new Date(Date.now() + FOUNDER_INVITE_TTL_MS).toISOString().replace('T', ' ').slice(0, 19),
       );
     })();
   });
@@ -91,7 +101,7 @@ export async function issueFounderInvite(familyId: string, email: string): Promi
       { kind: 'button', label: 'Set up your family', url },
       {
         kind: 'muted',
-        text: 'It works once and for a week. Use this address as your login and it is already confirmed for password recovery; you can pick another, and we will ask you to confirm that one instead.',
+        text: 'It works once and for two days; if it has expired, ask for the family again from the website and a fresh link arrives. Use this address as your login and it is already confirmed for password recovery; you can pick another, and we will ask you to confirm that one instead.',
       },
       { kind: 'p', text: 'First steps, in the order they pay off:' },
       {

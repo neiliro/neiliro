@@ -5,9 +5,9 @@ import { deleteFamilyData, signupFamiliesCreatedBefore, tenantForFamily } from '
 /*
   A family that signed itself up (#262) and never opened the letter is an
   empty hub.db with a retired slug's worth of namespace. The founder
-  invitation lives a week (INVITE_TTL_MS); a day after it could last have
-  expired, a family that still has no user and no live invitation is
-  removed the way self-deletion removes one. Only families created by
+  invitation lives two days (FOUNDER_INVITE_TTL_MS); a day after it could
+  last have expired, a family that still has no user and no live
+  invitation is removed the way self-deletion removes one. Only families created by
   sign-up are considered — the registry remembers the founder's address
   for exactly this — so an operator-created family waiting on a mistyped
   address is left for the operator to re-issue.
@@ -16,7 +16,7 @@ import { deleteFamilyData, signupFamiliesCreatedBefore, tenantForFamily } from '
   derived slugs carry a random suffix, so the retired names cost nothing.
 */
 
-const GRACE_MS = 8 * 24 * 60 * 60_000;
+const GRACE_MS = 3 * 24 * 60 * 60_000;
 
 export function reapUnclaimedFamilies(): number {
   const cutoff = new Date(Date.now() - GRACE_MS).toISOString().replace('T', ' ').slice(0, 19);
