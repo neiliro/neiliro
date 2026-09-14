@@ -850,6 +850,8 @@ export const ru: Record<string, string> = {
   'Family archive': 'Семейный архив',
   'The complete archive: the database plus every attachment, as one tar.gz. It restores into a self-hosted hub with the import script — your data is never locked in.': 'Полный архив: база данных и все вложения одним tar.gz. Восстанавливается в self-hosted-хабе скриптом импорта — ваши данные никогда не заперты.',
   'Download the archive': 'Скачать архив',
+  'Download a readable copy': 'Скачать читаемую копию',
+  'The archive holds the words encrypted; a restored hub opens them at sign-in with each member’s password or the recovery code. The readable copy is a JSON of everything this account can see, decrypted in this browser — words only, files stay in the archive.': 'В архиве слова зашифрованы; восстановленный хаб откроет их при входе паролем каждого участника или recovery-кодом. Читаемая копия — JSON со всем, что видит этот аккаунт, расшифрованный в этом браузере: только слова, файлы остаются в архиве.',
   'On a large family this takes a moment — the download starts once the archive is ready.': 'На большой семье это занимает время — скачивание начнётся, когда архив будет готов.',
   'Danger zone': 'Опасная зона',
   'This deletes the family for everyone: the database, every attachment, every account. There is no undo. Encrypted backups expire on their own within 14 days.': 'Это удалит семью для всех: базу данных, все вложения, все аккаунты. Отменить нельзя. Зашифрованные резервные копии истекут сами в течение 14 дней.',

@@ -99,7 +99,7 @@ npm run export -- ~/Desktop
 
 This produces `neiliro-YYYY-MM-DD.tar.gz`: the database, attachments and a manifest. No need to stop the server — the database is exported via `VACUUM INTO`, i.e. opened as a database rather than copied as a file. A plain copy of `hub.db` would lose fresh writes: they live in the WAL journal next to it.
 
-Transfer the archive however you like. It contains everything, private notes and personal accounts included — as the hub stores them, which since 1.9.0 means encrypted: the words open again once each member signs in on the new machine with their password. Outside the app the archive is not readable (#224 tracks a readable copy).
+Transfer the archive however you like. It contains everything, private notes and personal accounts included — as the hub stores them, which since 1.9.0 means encrypted: the key travels inside, wrapped in each member's password envelope and in the recovery envelope, so the words open again once each member signs in on the new machine (the import script says how many such doors the archive carries). Outside the app the archive is not readable; for words on disk, Settings → Family archive → **Download a readable copy** produces a JSON of everything the administrator can see, decrypted in the browser.
 
 On the new machine:
 

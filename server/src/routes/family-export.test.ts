@@ -65,11 +65,22 @@ describe('family export, single-family mode', () => {
 
     // The real import script into a fresh DATA_DIR — the self-hosted
     // restore path, exactly as the docs describe it
+    // The manifest says which doors open the words (#224): this harness
+    // family has no key yet, so it says so — and the import script must
+    // not pretend otherwise
+    const manifest = JSON.parse(
+      execFileSync('tar', ['-xOzf', archive, 'manifest.json'], { encoding: 'utf8' }),
+    ) as { key: { family_key: boolean; password_envelopes: number; recovery_envelope: boolean } };
+    expect(manifest.key).toEqual({ family_key: false, password_envelopes: 0, recovery_envelope: false });
+
     const restored = join(work, 'restored');
-    execFileSync('node', [join(repoRoot, 'scripts', 'import.mjs'), archive], {
+    const report = execFileSync('node', [join(repoRoot, 'scripts', 'import.mjs'), archive], {
       env: { ...process.env, DATA_DIR: restored },
       stdio: 'pipe',
+      encoding: 'utf8',
     });
+    expect(report).toContain('Passwords and accounts came along');
+    expect(report).not.toContain('Family key:');
 
     const imported = new Database(join(restored, 'hub.db'), { readonly: true });
     try {
@@ -82,6 +93,39 @@ describe('family export, single-family mode', () => {
       imported.close();
     }
     expect(existsSync(join(restored, 'attachments', '2026-08', 'receipt.bin'))).toBe(true);
+  });
+
+  it('names the doors that open an encrypted archive (#224)', async () => {
+    // A family with a key: the manifest counts the live envelopes and the
+    // import script tells the person restoring what will open the words —
+    // before they discover it the hard way
+    const A = 'A'.repeat(16);
+    const created = await h.as(admin.cookie, 'POST', '/api/keys', {
+      public_key: 'B'.repeat(43),
+      envelope: `w1:${A}:${'D'.repeat(64)}`,
+      recovery_envelope: `w1:${A}:${'R'.repeat(64)}`,
+    });
+    expect(created.statusCode).toBe(201);
+
+    const res = await h.as(admin.cookie, 'GET', '/api/family/export');
+    expect(res.statusCode).toBe(200);
+    const work = mkdtempSync(join(tmpdir(), 'hub-keyed-'));
+    const archive = join(work, 'neiliro-export.tar.gz');
+    writeFileSync(archive, (res as unknown as { rawPayload: Buffer }).rawPayload);
+
+    const manifest = JSON.parse(
+      execFileSync('tar', ['-xOzf', archive, 'manifest.json'], { encoding: 'utf8' }),
+    ) as { key: unknown };
+    expect(manifest.key).toEqual({ family_key: true, password_envelopes: 1, recovery_envelope: true });
+
+    const report = execFileSync('node', [join(repoRoot, 'scripts', 'import.mjs'), archive], {
+      env: { ...process.env, DATA_DIR: join(work, 'restored') },
+      stdio: 'pipe',
+      encoding: 'utf8',
+    });
+    expect(report).toContain('Family key: the words in this database are encrypted');
+    expect(report).toContain('1 member password and the recovery code');
+    expect(report).not.toContain('WARNING');
   });
 
   it('is for the administrator only', async () => {

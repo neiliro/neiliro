@@ -3,7 +3,9 @@
  * Import data from an archive on a new device.
  *
  * Before swapping anything in, it verifies database integrity and that
- * the contents match the manifest. Existing data is never touched without
+ * the contents match the manifest, and says which doors open the encrypted
+ * words — member passwords, the recovery code — so nobody installs an
+ * archive and only then learns it cannot be read. Existing data is never touched without
  * explicit permission: silently overwriting someone's database is the most
  * expensive surprise there is.
  *
@@ -36,6 +38,23 @@ if (!archive) {
 if (!existsSync(archive)) {
   console.error(`No archive at: ${resolve(archive)}`);
   process.exit(1);
+}
+
+function keyFacts(db) {
+  try {
+    return {
+      family_key: Boolean(db.prepare('SELECT 1 FROM family_key WHERE id = 1').get()),
+      password_envelopes: db
+        .prepare("SELECT count(*) AS n FROM key_envelopes WHERE kind = 'password' AND retired_at IS NULL")
+        .get().n,
+      recovery_envelope: Boolean(
+        db.prepare("SELECT 1 FROM key_envelopes WHERE kind = 'recovery' AND retired_at IS NULL").get(),
+      ),
+    };
+  } catch {
+    // An archive from before migration 033 has no key tables — and no key
+    return { family_key: false, password_envelopes: 0, recovery_envelope: false };
+  }
 }
 
 const dataDir = resolve(process.env.DATA_DIR ?? join(homedir(), '.family-hub'));
@@ -79,6 +98,11 @@ try {
     .prepare('SELECT name FROM _migrations ORDER BY name')
     .all()
     .map((r) => r.name);
+  // The words in the database are ciphertext under the family key (ADR
+  // 0001), and the key travels only wrapped: a password envelope per member
+  // and the recovery envelope. Read off the database, not the manifest —
+  // the manifest is a courtesy, the database is what gets installed.
+  const key = keyFacts(incoming);
   incoming.close();
 
   if (mismatches.length > 0) {
@@ -138,9 +162,27 @@ try {
   }
   console.log(`Attachment files on disk: ${files}`);
   console.log('');
+  if (key.family_key) {
+    console.log('Family key: the words in this database are encrypted (ADR 0001).');
+    console.log(
+      `  Doors that open them: ${key.password_envelopes} member password${key.password_envelopes === 1 ? '' : 's'}` +
+        `${key.recovery_envelope ? ' and the recovery code' : ', no recovery code'}.`,
+    );
+    if (key.password_envelopes === 0 && !key.recovery_envelope) {
+      console.log('');
+      console.log('  WARNING: no live envelope. Nothing in this archive can open the words —');
+      console.log('  only a device that still holds the key can, by sharing a re-admission');
+      console.log('  link from Settings → Family key. The data is imported as it is.');
+    }
+    console.log('');
+  }
   console.log('Next:');
   console.log('  1. npm run dev  — or docker compose up -d --build');
-  console.log('  2. Passwords and accounts came along, no initial setup needed');
+  console.log(
+    key.family_key
+      ? '  2. Everyone signs in with the password they had; the encrypted words open with it (or with the recovery code)'
+      : '  2. Passwords and accounts came along, no initial setup needed',
+  );
   console.log('  3. If HTTPS was set up: ./scripts/setup-https.sh — this device needs its own certificate');
   console.log('  4. sudo pmset repeat wakeorpoweron MTWRFSU 06:30:00');
 } finally {

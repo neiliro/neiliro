@@ -188,9 +188,11 @@ Accounts, sessions, notes, finances — everything moves as-is, the
 family key included: it lives in each member's envelope inside the
 database, so everyone signs in on the new machine with the password they
 had. The alternative without SSH acrobatics is export/import from the
-app's settings — same contents, same caveat that the archive holds
-ciphertext for anything written since the key existed (#224 tracks a
-readable copy).
+app's settings — same contents, and the same rule: the archive holds
+ciphertext for anything written since the key existed, and the key travels
+in it wrapped, so a restored hub opens the words at sign-in. The same
+Settings card offers a readable JSON copy, decrypted in the browser, for
+when the words are needed without a hub.
 
 ## 6. Backups
 

@@ -58,6 +58,34 @@ function countRows(snapshot: Database.Database, table: string): number | null {
   }
 }
 
+/**
+ * What the archive can be opened with (#224). The words inside are
+ * ciphertext under the family key, and the key travels only wrapped: in
+ * each member's password envelope and in the recovery envelope. The
+ * manifest says how many doors the archive carries, so whoever holds it
+ * later knows whether a password or the recovery code will open it — and
+ * import.mjs can warn when neither would.
+ */
+export function keyFacts(snapshot: Database.Database): {
+  family_key: boolean;
+  password_envelopes: number;
+  recovery_envelope: boolean;
+} {
+  try {
+    const family = snapshot.prepare('SELECT 1 FROM family_key WHERE id = 1').get();
+    const passwords = snapshot
+      .prepare("SELECT count(*) AS n FROM key_envelopes WHERE kind = 'password' AND retired_at IS NULL")
+      .get() as { n: number };
+    const recovery = snapshot
+      .prepare("SELECT 1 FROM key_envelopes WHERE kind = 'recovery' AND retired_at IS NULL")
+      .get();
+    return { family_key: Boolean(family), password_envelopes: passwords.n, recovery_envelope: Boolean(recovery) };
+  } catch {
+    // A database from before migration 033 has no key tables — and no key
+    return { family_key: false, password_envelopes: 0, recovery_envelope: false };
+  }
+}
+
 function dirSize(dir: string): { files: number; bytes: number } {
   if (!existsSync(dir)) return { files: 0, bytes: 0 };
   let files = 0;
@@ -153,6 +181,7 @@ export async function registerFamilyRoutes(app: FastifyInstance): Promise<void> 
             EXPORT_TABLES.map((table) => [table, countRows(snapshot, table)]),
           ),
           attachments: dirSize(attachmentsDir),
+          key: keyFacts(snapshot),
         };
         snapshot.close();
         writeFileSync(join(staging, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);

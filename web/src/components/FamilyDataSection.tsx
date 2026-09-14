@@ -7,6 +7,8 @@ import { familyUrl, useFamilyAddress } from '../lib/family-address';
 import { formatStamp } from '../lib/format';
 import { t } from '../lib/i18n';
 import { onEnter } from '../lib/keys';
+import { collectMyData, downloadJson } from '../lib/my-data';
+import { today } from '../lib/tasks';
 import { useDialogs } from './Dialog';
 
 /*
@@ -30,23 +32,67 @@ function startExportDownload() {
   window.location.href = '/api/family/export';
 }
 
+/*
+  Two downloads, because the archive alone stopped being enough (ADR 0001,
+  #224): since the family key exists, the database inside the tar.gz holds
+  ciphertext, and the honest rule is that an export must never silently
+  hand the family a copy it cannot read later. The archive stays the
+  complete, restorable copy — the key travels in it, wrapped in every
+  member's password envelope, so a hub restored from it opens the words
+  at sign-in. The readable copy is the same collection "My data" makes,
+  assembled here in the browser through the ordinary endpoints so the
+  codec opens every envelope on the way — words on disk, for a spreadsheet
+  or a lawyer, without a hub. It holds what this account can see; another
+  member's private rows are not in it because they are not in the answer.
+*/
 function ExportCard() {
+  const { user } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function downloadReadable() {
+    if (!user || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      downloadJson(await collectMyData(user.id), `neiliro-readable-${today()}.json`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="rounded-card border border-line bg-surface p-5">
       <h2 className="eyebrow mb-2">{t('Family archive')}</h2>
       <p className="mb-4 text-sm text-muted">
         {t('The complete archive: the database plus every attachment, as one tar.gz. It restores into a self-hosted hub with the import script — your data is never locked in.')}
       </p>
-      <button
-        type="button"
-        onClick={startExportDownload}
-        className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-2"
-      >
-        {t('Download the archive')}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={startExportDownload}
+          className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-2"
+        >
+          {t('Download the archive')}
+        </button>
+        <button
+          type="button"
+          onClick={downloadReadable}
+          disabled={busy}
+          className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-2 disabled:opacity-60"
+        >
+          {busy ? t('Collecting…') : t('Download a readable copy')}
+        </button>
+      </div>
       <p className="mt-3 text-xs text-muted">
+        {t('The archive holds the words encrypted; a restored hub opens them at sign-in with each member’s password or the recovery code. The readable copy is a JSON of everything this account can see, decrypted in this browser — words only, files stay in the archive.')}
+      </p>
+      <p className="mt-1 text-xs text-muted">
         {t('On a large family this takes a moment — the download starts once the archive is ready.')}
       </p>
+      {error && <p className="mt-2 text-xs text-urgent">{error}</p>}
     </section>
   );
 }
