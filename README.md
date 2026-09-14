@@ -116,6 +116,9 @@ Frontend on `http://localhost:5173`, API on `http://localhost:8787`. Vite listen
 - **[ADR 0001 — client-side encryption](docs/adr/0001-client-side-encryption.md)** —
   why the words are encrypted and the structure is not, what the family
   key is, and the honest list of what stays visible.
+- **[Checking the app you were served](docs/verify.md)** — the published
+  hashes of every release bundle, how to compare them with what your
+  browser loaded, and how to rebuild the list from the tag yourself.
 
 ## Hosted
 
