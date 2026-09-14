@@ -182,7 +182,9 @@ describe('suspension and deletion', () => {
     const family = tenants.createFamily('gone-g1h2');
     tenants.deleteFamilyData(family.familyId);
 
-    expect(existsSync(join(env.dataDir, 'families', family.familyId, 'hub.db'))).toBe(false);
+    // The whole directory, not only the database: a leftover families/<id>/
+    // is what the nightly backup would archive and an operator would trip on
+    expect(existsSync(join(env.dataDir, 'families', family.familyId))).toBe(false);
     // A stranger inheriting the slug would inherit bookmarks and mail
     // addressed to the family that left
     expect(() => tenants.createFamily('gone-g1h2')).toThrow(/already taken/);
