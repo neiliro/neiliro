@@ -262,7 +262,12 @@ export function serviceMailAvailable(): boolean {
   return Boolean(env.mailDomain && env.mailgunApiKey);
 }
 
-export async function sendServiceEmail(to: string, subject: string, text: string): Promise<void> {
+/**
+ * A service letter. Always carries the plain-text part; a laid-out HTML
+ * part (lib/letter.ts) rides alongside as multipart/alternative when the
+ * caller renders one — same words, never a different letter.
+ */
+export async function sendServiceEmail(to: string, subject: string, text: string, html?: string): Promise<void> {
   if (!serviceMailAvailable()) throw new Error('Service mail is not configured');
 
   const form = new FormData();
@@ -270,6 +275,7 @@ export async function sendServiceEmail(to: string, subject: string, text: string
   form.set('to', to);
   form.set('subject', subject);
   form.set('text', text);
+  if (html) form.set('html', html);
   await postToMailgun(form);
 }
 

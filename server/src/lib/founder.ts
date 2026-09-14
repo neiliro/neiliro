@@ -3,6 +3,7 @@ import { db, id, now, runWithTenant } from '../db/index.js';
 import { env } from '../env.js';
 import { hashInviteToken, INVITE_TTL_MS } from '../routes/setup.js';
 import { sendServiceEmail, serviceMailAvailable } from './mail.js';
+import { renderLetterHtml, renderLetterText, type Letter } from './letter.js';
 import { log } from './log.js';
 import { familySlug, tenantForFamily } from './tenants.js';
 
@@ -79,49 +80,59 @@ export async function issueFounderInvite(familyId: string, email: string): Promi
   // without a card, then €4.99 a month or €44.99 a year per family; until
   // payment exists in the app the trial simply continues.
   const apex = env.hostedDomain;
-  await sendServiceEmail(
-    address,
-    'Your Neiliro family is ready',
-    [
-      'Hello.',
-      '',
-      `Your family's hub is waiting at https://${slug}.${apex}/ — this link`,
-      'sets up the first account, which becomes the administrator:',
-      '',
-      url,
-      '',
-      'It works once and for a week. Use this address as your login and it is',
-      'already confirmed for password recovery; you can pick another, and',
-      'we will ask you to confirm that one instead.',
-      '',
-      'First steps, in the order they pay off:',
-      '',
-      `  1. Choose the hub's address. Within the first day you can change`,
-      `     ${slug}.${apex} once — the hub offers this when you sign in. After`,
-      '     that it is final, so pick something you can say aloud.',
-      '  2. Invite the household: Settings → Users → invitation link. Each',
-      '     person joins with their own name and password; for a child without',
-      '     a device, open their link yourself.',
-      '  3. Put it on the phone: open the hub in the phone browser and choose',
-      '     "Add to Home Screen". It keeps working read-only without a signal.',
-      `  4. Your family mailbox is ${slug}@${env.mailDomain}. Send the school`,
-      '     and the bills there — a letter becomes a task in one click.',
-      '',
-      'What to expect. Neiliro is young: it runs with monitoring and nightly',
-      'encrypted backups, but the honest word is best effort — something may',
-      'break, and when it does we want to hear about it. Everything you put in',
-      'stays yours: the complete archive is one click away in Settings, always.',
-      '',
-      'What it costs. The first 30 days are free, no card needed. After that',
-      'one plan covers the whole family: €4.99 a month or €44.99 a year, cancel',
-      'anytime. Until paying is possible inside the hub the free period simply',
-      'continues, and we will write to you before the first charge. The terms',
-      `say the same, authoritatively: https://${apex}/terms`,
-      '',
-      `Questions, or something broke: https://support.${apex} — the form there`,
-      `reaches a person — or write to hello@${apex}.`,
-    ].join('\n'),
-  );
+  const letter: Letter = {
+    title: 'Your family is ready',
+    brand: { name: 'Neiliro', url: `https://${apex}/` },
+    blocks: [
+      {
+        kind: 'p',
+        text: `Your family's hub is waiting at https://${slug}.${apex}/. The link below sets up the first account, which becomes the administrator.`,
+      },
+      { kind: 'button', label: 'Set up your family', url },
+      {
+        kind: 'muted',
+        text: 'It works once and for a week. Use this address as your login and it is already confirmed for password recovery; you can pick another, and we will ask you to confirm that one instead.',
+      },
+      { kind: 'p', text: 'First steps, in the order they pay off:' },
+      {
+        kind: 'steps',
+        items: [
+          {
+            title: "Choose the hub's address.",
+            text: `Within the first day you can change ${slug}.${apex} once — the hub offers this when you sign in. After that it is final, so pick something you can say aloud.`,
+          },
+          {
+            title: 'Invite the household.',
+            text: 'Settings → People → invitation link. Each person joins with their own name and password; for a child without a device, open their link yourself.',
+          },
+          {
+            title: 'Put it on the phone.',
+            text: 'Open the hub in the phone browser and choose "Add to Home Screen". It keeps working read-only without a signal.',
+          },
+          {
+            title: 'Send the paperwork to your family mailbox.',
+            text: `Your address is ${slug}@${env.mailDomain}. Send the school and the bills there — a letter becomes a task, an invitation an event, a bill a transaction, in one click each.`,
+          },
+        ],
+      },
+      {
+        kind: 'p',
+        text: 'What to expect. Neiliro is young: it runs with monitoring and nightly encrypted backups, but the honest word is best effort — something may break, and when it does we want to hear about it. Everything you put in stays yours: the complete archive is one click away in Settings, always.',
+      },
+      {
+        kind: 'p',
+        text: 'What it costs. The first 30 days are free, no card needed. After that one plan covers the whole family: €4.99 a month or €44.99 a year, cancel anytime. We write to you before the free period ends.',
+      },
+      { kind: 'link', text: 'The terms say the same, authoritatively:', url: `https://${apex}/terms` },
+      {
+        kind: 'link',
+        text: `Questions, or something broke — the form there reaches a person, or write to hello@${apex}:`,
+        url: `https://support.${apex}/`,
+      },
+    ],
+    footer: `You received this letter because a Neiliro family was created with this address. It carries no images and no tracking; if you did not ask for a family, ignore it and the link expires on its own.`,
+  };
+  await sendServiceEmail(address, 'Your Neiliro family is ready', renderLetterText(letter), renderLetterHtml(letter));
   log.notice(`founder invitation mailed for ${slug}`);
   return { url, mailed: true };
 }
