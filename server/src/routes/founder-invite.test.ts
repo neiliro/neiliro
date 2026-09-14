@@ -25,6 +25,7 @@ interface Sent {
   to: string;
   subject: string;
   text: string;
+  html: string;
 }
 const sent: Sent[] = [];
 
@@ -32,7 +33,7 @@ vi.stubGlobal(
   'fetch',
   vi.fn(async (_url: string, init: { body: FormData }) => {
     const f = (k: string) => String(init.body.get(k) ?? '');
-    sent.push({ to: f('to'), subject: f('subject'), text: f('text') });
+    sent.push({ to: f('to'), subject: f('subject'), text: f('text'), html: f('html') });
     return { ok: true, status: 200, json: async () => ({ id: '<sent@mail.neiliro.test>' }) };
   }),
 );
@@ -75,6 +76,10 @@ describe('the founder invitation', () => {
     const mail = sent.at(-1)!;
     expect(mail.to).toBe('sam@example.test');
     expect(mail.text).toContain('https://founders-f1a1.neiliro.test/join?token=');
+    // The laid-out part says the same and fetches nothing (lib/letter.ts)
+    expect(mail.html).toContain('href="https://founders-f1a1.neiliro.test/join?token=');
+    expect(mail.html).toContain('founders-f1a1@mail.neiliro.test');
+    expect(mail.html).not.toMatch(/<img|<link|<script/i);
     const token = tokenFrom(mail);
     expect(invite.url).toContain(token);
 
