@@ -610,7 +610,12 @@ export function familySlug(familyId: string): string | null {
  * were alive (seen 2026-09-14).
  */
 export function deleteFamilyData(familyId: string): void {
-  registry!.prepare(`UPDATE families SET status = 'deleted', deleted_at = ? WHERE id = ?`).run(now(), familyId);
+  // founder_email existed to re-issue an unclaimed sign-up's letter; a
+  // deleted family will never need that, and an address is personal data
+  // the row has no reason to keep for the year the slug is held
+  registry!
+    .prepare(`UPDATE families SET status = 'deleted', deleted_at = ?, founder_email = NULL WHERE id = ?`)
+    .run(now(), familyId);
   for (const [slug, entry] of slugCache) {
     if (entry.familyId === familyId) slugCache.delete(slug);
   }
