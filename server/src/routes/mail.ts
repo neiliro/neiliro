@@ -70,7 +70,7 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
     if (!notForKids(req, reply)) return;
     const { id: messageId } = z.object({ id: z.string().uuid() }).parse(req.params);
     const message = db
-      .prepare(`SELECT ${LIST_COLUMNS}, body_text FROM mail_messages WHERE id = ?`)
+      .prepare(`SELECT ${LIST_COLUMNS}, body_text, body_html FROM mail_messages WHERE id = ?`)
       .get(messageId) as { id: string; read_at: string | null } | undefined;
     if (!message) return reply.code(404).send({ error: 'Message not found' });
 
@@ -199,6 +199,7 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
         to_address: z.string().max(4_000).nullable().optional(),
         subject: z.string().max(4_000).optional(),
         body_text: z.string().max(400_000).optional(),
+        body_html: z.string().max(600_000).nullable().optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Check the fields' });
@@ -208,7 +209,7 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
       .prepare(`UPDATE mail_messages SET ${fields.map(([k]) => `${k} = ?`).join(', ')} WHERE id = ?`)
       .run(...fields.map(([, v]) => v as string | null), messageId);
     if (result.changes === 0) return reply.code(404).send({ error: 'Message not found' });
-    return db.prepare(`SELECT ${LIST_COLUMNS}, body_text FROM mail_messages WHERE id = ?`).get(messageId);
+    return db.prepare(`SELECT ${LIST_COLUMNS}, body_text, body_html FROM mail_messages WHERE id = ?`).get(messageId);
   });
 
   /**

@@ -1045,6 +1045,12 @@ export const ru: Record<string, string> = {
   'This is health information. Like everything else here it is encrypted with the family key and readable only inside your family; writing it down is your choice, and it goes with the profile if the account is ever removed.':
     'Это сведения о здоровье. Как и всё здесь, они зашифрованы ключом семьи и читаются только внутри семьи; записывать их — ваш выбор, и они удаляются вместе с профилем, если аккаунт когда-нибудь будет удалён.',
 
+  // ── Mail: the HTML part, sanitized in the browser (#30) ──
+  '{n} remote images were not loaded — they would tell the sender you opened this.':
+    '{n} внешних изображений не загружены — они сообщили бы отправителю, что письмо открыто.',
+  'Show as plain text': 'Показать как текст',
+  'Show formatted': 'Показать с оформлением',
+
   // ── Mail: an invitation becomes an event (#29, #30) ──
   'Add to calendar': 'В календарь',
   'Open the invitation as a new event in the calendar': 'Открыть приглашение как новое событие в календаре',

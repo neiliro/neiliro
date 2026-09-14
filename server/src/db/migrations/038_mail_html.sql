@@ -1,0 +1,11 @@
+-- The HTML part of a letter, kept alongside the text part (#30, "sanitized
+-- HTML rendering"). v1 stored only the text part — or a crude tag strip of
+-- HTML-only mail — because rendering HTML safely was its own fight. That
+-- fight is the browser's now: the column arrives as an e1: field envelope
+-- like body_text (sealed on ingest to the family's public key), and the
+-- reader sanitizes it on the device before showing it. The server never
+-- renders, never parses, never fetches what the HTML points at.
+--
+-- NULL for letters ingested before this column existed and for
+-- plain-text-only mail; the reader falls back to body_text.
+ALTER TABLE mail_messages ADD COLUMN body_html TEXT;

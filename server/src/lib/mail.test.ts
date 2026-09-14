@@ -88,11 +88,13 @@ describe('ingestEmail', () => {
     await runWithDb(db, async () => {
       const rowId = await ingestEmail(RAW_HTML_ONLY);
       const row = db
-        .prepare('SELECT body_text FROM mail_messages WHERE id = ?')
-        .get(rowId) as { body_text: string };
+        .prepare('SELECT body_text, body_html FROM mail_messages WHERE id = ?')
+        .get(rowId) as { body_text: string; body_html: string | null };
       expect(row.body_text).toContain('Your bill is 64.20 EUR');
       expect(row.body_text).toContain('Due by the 25th');
       expect(row.body_text).not.toContain('<');
+      // The HTML part travels as sent for the browser to sanitize (#30)
+      expect(row.body_html).toContain('<b>64.20 EUR</b>');
     });
   });
 });

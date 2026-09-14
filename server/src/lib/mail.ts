@@ -280,6 +280,8 @@ export async function sendServiceEmail(to: string, subject: string, text: string
  * than a run of postal-mime over 25 MB on the shared event loop (#189).
  */
 export const MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
+/** The HTML part kept per letter; anything longer is a newsletter, not paperwork. */
+export const MAX_HTML_CHARS = 400_000;
 
 /**
  * A message that can never be ingested, however many times it is retried:
@@ -364,7 +366,7 @@ export async function ingestEmail(raw: Uint8Array | string): Promise<string | nu
     }
 
     // The words, sealed before the transaction if the family has a key
-    const words = {
+    const words: Record<string, string | null> = {
       from_address: email.from?.address?.slice(0, 300) ?? '(unknown)',
       from_name: email.from?.name?.slice(0, 200) || null,
       to_address: email.to?.[0]?.address?.slice(0, 300) ?? null,
@@ -372,6 +374,10 @@ export async function ingestEmail(raw: Uint8Array | string): Promise<string | nu
       // The text part; when a message is HTML-only, fall back to a crude
       // tag strip so the reader is never left with an empty body
       body_text: (email.text ?? textFromHtml(email.html)).slice(0, 100_000),
+      // The HTML part as sent, for the browser to sanitize and render
+      // (#30); the server never looks inside it. Capped: a newsletter's
+      // markup is not the household's paperwork.
+      body_html: email.html ? email.html.slice(0, MAX_HTML_CHARS) : null,
     };
     if (seal) {
       for (const column of Object.keys(words) as (keyof typeof words)[]) {
@@ -386,8 +392,8 @@ export async function ingestEmail(raw: Uint8Array | string): Promise<string | nu
         if (known()) return null;
         db.prepare(
           `INSERT INTO mail_messages (id, message_id, kind, from_address, from_name, to_address,
-                                      subject, body_text, sent_at, received_at)
-           VALUES (?, ?, 'in', ?, ?, ?, ?, ?, ?, ?)`,
+                                      subject, body_text, body_html, sent_at, received_at)
+           VALUES (?, ?, 'in', ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).run(
           rowId,
           messageId,
@@ -396,6 +402,7 @@ export async function ingestEmail(raw: Uint8Array | string): Promise<string | nu
           words.to_address,
           words.subject,
           words.body_text,
+          words.body_html,
           email.date ? email.date.replace('T', ' ').slice(0, 19) : null,
           now(),
         );
