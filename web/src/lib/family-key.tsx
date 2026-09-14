@@ -11,12 +11,14 @@ import {
   generateFamilyKey,
   generateRecoveryCode,
   handoffWrapKey,
+  importFamilyKey,
   newHandoffSecret,
   recoveryWrapKey,
   unwrapFamilyKey,
   wrapFamilyKey,
   type KeyStore,
 } from './crypto';
+import { fromBase64url } from './crypto/encoding';
 
 /*
   The family key's life in this browser (ADR 0001, #210).
@@ -54,6 +56,8 @@ export interface KeysResponse {
   password_envelope: string | null;
   recovery_envelope: string | null;
   handoffs: Handoff[];
+  /** Demo only: the sandbox's key in the clear — the guest holds it like a family key (#225). */
+  demo_key?: string | null;
 }
 
 export const RECOVERY_PLACE = { kind: 'recovery', owner: 'family' } as const;
@@ -173,6 +177,15 @@ export function KeyProvider({ children, store }: { children: ReactNode; store?: 
       return;
     }
     setPendingHandoffs(keys.handoffs);
+
+    // The demo hands the sandbox's key over directly (server/src/lib/demo-key.ts).
+    // Held before anything stored is trusted: a language switch is a new
+    // sandbox with a new key under the same hostname, and the old one in
+    // the keystore would open nothing.
+    if (keys.demo_key) {
+      await hold(await importFamilyKey(fromBase64url(keys.demo_key)));
+      return;
+    }
     const wrap = currentWrapKey();
 
     if (!keys.family) {

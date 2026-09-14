@@ -680,9 +680,12 @@ export function Settings() {
         <SignInSection />
       </div>
 
-      <div className="mb-5 break-inside-avoid">
-        <KeysSection />
-      </div>
+      {/* The demo's key is the sandbox's and dies with it: nothing to recover, hand on or re-encrypt */}
+      {!service?.demo && (
+        <div className="mb-5 break-inside-avoid">
+          <KeysSection />
+        </div>
+      )}
 
       <div className="mb-5 break-inside-avoid">
         <TotpSection />
