@@ -60,6 +60,15 @@ if [ -d "$DATA_DIR/families" ]; then
   for family_dir in "$DATA_DIR/families"/*/; do
     [ -f "$family_dir/hub.db" ] || continue
     family_id=$(basename "$family_dir")
+    # Only families the registry calls active. A directory the registry has
+    # forgotten (a deleted family's leftover, a stray sqlite3 that created an
+    # empty hub.db) is not a family and must not travel to the bucket.
+    status=$(sqlite3 "$DAY_DIR/registry.db" \
+      "SELECT status FROM families WHERE id = '$family_id';" 2>/dev/null || true)
+    if [ "$status" != "active" ]; then
+      echo "skipping $family_id: registry says '${status:-not registered}'" >&2
+      continue
+    fi
 
     # Archives are named by the family's id alone. The slug is often a
     # surname, and these names travel to the off-site bucket; the id is the

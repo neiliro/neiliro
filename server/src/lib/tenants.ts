@@ -590,9 +590,14 @@ export function familySlug(familyId: string): string | null {
  * The row stays in the registry as status='deleted' rather than being
  * removed: the slug must never be re-registered by strangers (bookmarks
  * and mail addressed to it would land in their hands), and the control
- * plane reads the status to finish its own bookkeeping. Backups are
- * deliberately left alone — they are encrypted and expire within 14
- * days on their own, exactly as the privacy policy promises.
+ * plane reads the status to finish its own bookkeeping. The nightly
+ * archives under DATA_DIR/backups are deliberately left alone — they are
+ * encrypted and expire on their own, exactly as the privacy policy
+ * promises. The family's own directory goes entirely, per-family backups/
+ * included: a leftover families/<id>/ is a trap — anything that so much
+ * as stats a hub.db in it (an operator's sqlite3, a script) brings back an
+ * empty file, and the nightly backup then archives it as if the family
+ * were alive (seen 2026-09-14).
  */
 export function deleteFamilyData(familyId: string): void {
   registry!.prepare(`UPDATE families SET status = 'deleted' WHERE id = ?`).run(familyId);
@@ -601,10 +606,6 @@ export function deleteFamilyData(familyId: string): void {
   }
   closeTenant(familyId);
 
-  const dir = join(familiesDir, familyId);
-  for (const suffix of ['', '-wal', '-shm']) {
-    rmSync(join(dir, `hub.db${suffix}`), { force: true });
-  }
-  rmSync(join(dir, 'attachments'), { recursive: true, force: true });
+  rmSync(join(familiesDir, familyId), { recursive: true, force: true });
   log.notice(`family deleted: ${familyId}`);
 }

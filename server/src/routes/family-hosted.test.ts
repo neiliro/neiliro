@@ -200,13 +200,9 @@ describe('family self-deletion', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
 
-    // Database files (all three WAL-mode ones) and attachments are gone;
-    // backups stay — they are encrypted and expire on their own
-    for (const suffix of ['', '-wal', '-shm']) {
-      expect(existsSync(join(familyDir, `hub.db${suffix}`))).toBe(false);
-    }
-    expect(existsSync(join(familyDir, 'attachments'))).toBe(false);
-    expect(existsSync(join(familyDir, 'backups'))).toBe(true);
+    // The whole directory: nothing left for a nightly backup to archive or
+    // an operator to trip on (see deleteFamilyData)
+    expect(existsSync(familyDir)).toBe(false);
 
     const registry = new Database(join(env.dataDir, 'registry.db'), { readonly: true });
     const row = registry
