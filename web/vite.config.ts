@@ -18,6 +18,12 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 const BUILD_SHA = (process.env.BUILD_SHA ?? '').slice(0, 7);
 
 export default defineConfig({
+  /*
+    Both values are compiled into the bundle, which makes them part of what
+    the published hashes cover: repeating a release build has to pass the
+    same BUILD_SHA=<commit>, or the output differs by a string and matches
+    nothing (docs/verify.md).
+  */
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_SHA__: JSON.stringify(BUILD_SHA),

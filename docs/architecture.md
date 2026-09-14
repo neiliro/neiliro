@@ -129,19 +129,22 @@ The same worker solves the long-lived-tab problem: a kiosk that stays open for w
 
 ### Which build is running
 
-Settings → About and the foot of the sidebar name the version and the commit the bundle was built from. The version comes from the root `package.json` at build time; the commit arrives as the `BUILD_SHA` Docker build argument, because `.dockerignore` keeps `.git` out of the image. A build from source shows the version alone — a dev bundle has no commit worth quoting.
+The foot of the sidebar names the version and the commit the bundle was built from (the tooltip carries both in full). The version comes from the root `package.json` at build time; the commit arrives as the `BUILD_SHA` Docker build argument, because `.dockerignore` keeps `.git` out of the image. A build from source shows the version alone — a dev bundle has no commit worth quoting.
 
 Both are visible only behind the sign-in screen. `/api/health` withholds the version from the public internet deliberately, and a line under the login box would have handed it to every scanner instead.
 
 A hand-rolled `docker build` should pass `--build-arg BUILD_SHA=…`; without it the commit line simply disappears.
 
+Naming the build is one thing; proving the browser got that build is another, and it matters here because the words are encrypted in the browser. Every release publishes `hashes.txt` — the SHA-256 of every file in `web/dist` — and the release run builds the frontend twice, on the runner and inside the image, refusing to publish a list the two disagree on. [Checking the app you were served](verify.md) is the page for whoever wants to do the comparison.
+
 ### Cutting a release
 
 1. Everything merged and the docs caught up — both are written in the same pull requests as the code, not gathered up afterwards.
-2. Bump the version in all three `package.json` files in that day's last pull request, before tagging. Settings → About and the sidebar read it, so a manifest left behind announces the wrong release.
+2. Bump the version in all three `package.json` files in that day's last pull request, before tagging. The sidebar reads it, so a manifest left behind announces the wrong release.
 3. `git tag vX.Y.Z && git push origin vX.Y.Z`.
 4. The tag starts `release.yml`: a multi-arch image (amd64 + arm64) to GHCR, 6–9 minutes, most of it arm64 under emulation.
-5. Write the release page by hand — [v1.0.0](https://github.com/neiliro/neiliro/releases/tag/v1.0.0) is the shape: a title that names the release, what it means in a paragraph, a section per headline feature, and an **Upgrading** block naming the migrations that will run and the exact image to pull. Generated notes do not do that job.
-6. Close the milestone, if one is open.
+5. A second job rebuilds the frontend, compares it with the one in the published image and attaches `hashes.txt` to the release for the tag — creating it as a **draft** if the page is not written yet. The workflow never publishes a release, so a draft waiting for its notes is the normal state between the tag and the next step; if the two builds disagree the job fails, and that is a bug to find before anyone verifies against the list.
+6. Write the release page by hand — [v1.0.0](https://github.com/neiliro/neiliro/releases/tag/v1.0.0) is the shape: a title that names the release, what it means in a paragraph, a section per headline feature, and an **Upgrading** block naming the migrations that will run and the exact image to pull. Generated notes do not do that job.
+7. Close the milestone, if one is open.
 
 The git tag carries a `v` and the image tag does not — `v1.1.0` in the repository, `ghcr.io/neiliro/neiliro:1.1.0` in the registry. That is `docker/metadata-action` following registry convention (`node:22`, `postgres:16` carry no prefix), not a prefix going missing. It reads like a bug often enough to be worth writing down.

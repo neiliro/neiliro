@@ -12,13 +12,14 @@ on:
   push:
     tags: ['v*']
 
-permissions:
-  contents: read
-  packages: write
-
 jobs:
   image:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
@@ -66,4 +67,78 @@ jobs:
           gh api repos/neiliro/cloud/dispatches \
             -f event_type=app-release \
             -F client_payload[version]="$VERSION"
+
+  # The frontend is built twice — once here on the runner, once inside the
+  # image — and the two have to agree. The words in the hub are encrypted in
+  # the browser, so whoever serves the bundle can take the key; the only
+  # answer a web app has is a build anyone can repeat and a list of hashes to
+  # check against (ADR 0001, docs/verify.md). A list nobody can reproduce is
+  # worth nothing, so a disagreement fails the release instead of shipping a
+  # list that sends people looking for a break-in that never happened.
+  hashes:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # attaches hashes.txt to the release for the tag
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      # Same commit, same BUILD_SHA: the value is compiled into the bundle,
+      # so a rebuild with a different one cannot match by construction.
+      - name: Build the frontend on the runner
+        env:
+          BUILD_SHA: ${{ github.sha }}
+        run: |
+          npm run build --workspace=web
+          scripts/bundle-hashes.sh web/dist > hashes.txt
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # amd64 only: the two halves of the manifest are built from the same
+      # sources by the same Dockerfile, and the frontend is platform-neutral
+      # JavaScript — checking one is checking both.
+      - name: Take the frontend back out of the published image
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}:${{ needs.image.outputs.version }}
+        run: |
+          docker create --platform linux/amd64 --name shipped "$IMAGE"
+          docker cp shipped:/app/web/dist ./image-dist
+          docker rm shipped
+          scripts/bundle-hashes.sh image-dist > image-hashes.txt
+
+      - name: The two builds must agree
+        run: diff hashes.txt image-hashes.txt
+
+      # The release page itself is written by hand (docs/architecture.md,
+      # "Cutting a release"), so the draft created here carries no notes and
+      # is never published by the workflow — it exists only to hold the file
+      # when the tag is pushed before the page is written.
+      - name: Publish the hashes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          {
+            echo "### SHA-256 of every file in web/dist"
+            echo
+            echo '```'
+            cat hashes.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --title "$TAG" \
+              --notes "Release notes are written by hand. hashes.txt lists SHA-256 of every asset in web/dist for this tag."
+          fi
+          gh release upload "$TAG" hashes.txt --clobber
 
