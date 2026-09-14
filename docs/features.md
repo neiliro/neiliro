@@ -236,6 +236,15 @@ mailbox, so the whole thread stays in one place. There is no
 compose-from-scratch: a paperwork desk answers letters, it does not
 start correspondence.
 
+The desk is the adults': a kid account does not see the Mail section, and
+the server refuses it the mailbox — bills, school letters and bookings are
+addressed to the household, not to the child. Any adult can **delete a
+letter**; its replies and files go with it, and a task made from it stays
+on the board with its own excerpt. Settings → Family mailbox → **Keep
+letters for** sets an age (3 months to 2 years, or forever, the default):
+a daily sweep removes older letters the same way, because a paperwork
+desk is not an archive and handled letters name people.
+
 An invitation attached to a letter (`.ics`, as schools, doctors and
 booking systems send them) gets an **Add to calendar** button: the file
 is opened in the browser — it is sealed like every attachment — and the
@@ -245,8 +254,16 @@ recurring invitation is added as a single event and says so; a file
 with several events offers the first. Times in UTC are moved to your
 wall-clock; a time with a named zone is taken as written.
 
-v1 renders the plain-text part of a message; HTML rendering and
-invoice-to-transaction are tracked in the
+A letter's HTML part is shown when it says more than the text does — a
+table of charges, a link to the portal, an inline image — and only after
+the browser has rebuilt it from an allowlist: scripts, styles, forms,
+frames and every attribute but a safe link target never exist in what
+is shown. **Remote images are never loaded**; each one is the sender
+learning that the letter was opened and from where, so they are counted
+and named instead. The plain-text part is one click away. Like every
+attachment, the HTML arrives sealed and is opened only in the browser.
+
+Invoice-to-transaction is tracked in the
 [family mail epic](https://github.com/neiliro/neiliro/issues/30).
 
 ### Mail and the family key

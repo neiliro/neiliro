@@ -49,7 +49,7 @@ export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   // #223 — sealed by the server on ingest to the family public key (`s1:`),
   // or by the browser (`e1:`) when the job rewrites old plaintext; the codec
   // opens both. Every header a person reads is here.
-  mail_messages: ['from_address', 'from_name', 'to_address', 'subject', 'body_text'],
+  mail_messages: ['from_address', 'from_name', 'to_address', 'subject', 'body_text', 'body_html'],
 };
 
 /** Text columns of the tables above that stay readable, and why. */

@@ -65,8 +65,18 @@ const signup = (body: unknown, headers: Record<string, string> = SIGNUP) =>
 
 describe('self-serve sign-up', () => {
   beforeAll(async () => {
+    // The fuse counts within a fixed clock hour (routes/signup.ts). A run
+    // that starts at xx:59:45 crosses into the next hour mid-file and the
+    // count restarts — CI hit exactly that on 2026-09-14. Pin the clock
+    // to the middle of an hour for the whole file; Date only, so Fastify's
+    // own timers keep running.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-14T10:30:00.000Z') });
     tenants.initHosted();
     app = await buildApp();
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
   });
 
   it('exists only on signup.<apex> and only with the bearer', async () => {

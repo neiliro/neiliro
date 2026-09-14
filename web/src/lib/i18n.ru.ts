@@ -1003,6 +1003,26 @@ export const ru: Record<string, string> = {
   'The link carries the family key for this one event: the server opens it for whoever follows the link.':
     'В ссылке едет ключ семьи для этого одного события: сервер открывает его тому, кто перейдёт по ссылке.',
 
+  // ── Mail: the adults' desk, deleting a letter, how long letters stay (#30) ──
+  'The family mailbox is not shown to kid accounts.': 'Семейная почта детским аккаунтам не показывается.',
+  'The family mailbox is not shown to kid accounts': 'Семейная почта детским аккаунтам не показывается',
+  'Delete this letter?': 'Удалить это письмо?',
+  'The letter, its replies and its files are deleted. The task made from it stays.':
+    'Письмо, ответы на него и его файлы будут удалены. Задача, созданная из письма, останется.',
+  'The letter, its replies and its files are deleted. There is no undo.':
+    'Письмо, ответы на него и его файлы будут удалены. Отменить нельзя.',
+  'Delete letter': 'Удалить письмо',
+  'Keep letters for': 'Хранить письма',
+  'Keep forever': 'Всегда',
+  '3 months': '3 месяца',
+  '6 months': '6 месяцев',
+  '1 year': '1 год',
+  '2 years': '2 года',
+  'Letters are kept until someone deletes them.': 'Письма хранятся, пока кто-нибудь их не удалит.',
+  'Older letters are removed once a day, replies and files included.': 'Старые письма удаляются раз в день, вместе с ответами и файлами.',
+  'A paperwork desk is not an archive: handled letters name people and pile up. A task made from a letter stays when the letter goes.':
+    'Стол с бумагами — не архив: разобранные письма называют людей и копятся. Задача, созданная из письма, остаётся, когда письмо уходит.',
+
   // ── My data: a readable copy and the door out (Settings); removing a member (People) ──
   'My data': 'Мои данные',
   'A readable copy of everything this account can see, as one JSON file: your account, your notes, tasks, events, money and lists, opened on this device. Files are not included.':
@@ -1029,6 +1049,12 @@ export const ru: Record<string, string> = {
   'Make it a transaction': 'Сделать операцией',
   "Open a new transaction with this letter's amount, sender and document filled in":
     'Открыть новую операцию с суммой, отправителем и документом из этого письма',
+
+  // ── Mail: the HTML part, sanitized in the browser (#30) ──
+  '{n} remote images were not loaded — they would tell the sender you opened this.':
+    '{n} внешних изображений не загружены — они сообщили бы отправителю, что письмо открыто.',
+  'Show as plain text': 'Показать как текст',
+  'Show formatted': 'Показать с оформлением',
 
   // ── Mail: an invitation becomes an event (#29, #30) ──
   'Add to calendar': 'В календарь',
