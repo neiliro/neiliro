@@ -7,6 +7,7 @@ when changing any of this, see [CONTRIBUTING.md](../CONTRIBUTING.md).
 Decisions large enough to deserve their own record live in [adr/](adr/):
 
 - [ADR 0001 — Client-side encryption of what people write](adr/0001-client-side-encryption.md): the words are encrypted in the browser with a key the server never holds; dates, amounts and links stay computable. Read it before adding any server-side handling of text a person wrote.
+- [ADR 0002 — More than one machine: a gateway, a control node, shards](adr/0002-nodes-gateway-control-shards.md) (proposed): a family lives on exactly one node; the gateway routes hostnames from a placement map, control owns the registry of every family and the reserved hosts, shards own their families. Read it before adding anything that assumes the family is on this machine.
 
 ## Layout
 
