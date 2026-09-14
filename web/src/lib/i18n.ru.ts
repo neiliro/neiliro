@@ -1014,10 +1014,11 @@ export const ru: Record<string, string> = {
     'Удаляет аккаунт навсегда: личные заметки, личные календари и личные счета, профиль, сессии и ключ. Что вы добавили в общие разделы, остаётся у семьи без вашего имени. Отменить нельзя.',
   'Delete my account…': 'Удалить мой аккаунт…',
   'Delete my account forever': 'Удалить мой аккаунт навсегда',
-  'Remove {name} for good?': 'Удалить {name} навсегда?',
+  'Delete user {name}?': 'Удалить пользователя {name}?',
+  'Delete user': 'Удалить пользователя',
   'Their private notes, personal calendars and personal accounts, profile, sessions and key are deleted. What they added to shared spaces stays without their name. There is no undo.':
     'Личные заметки, личные календари и личные счета, профиль, сессии и ключ будут удалены. Что они добавили в общие разделы, останется без их имени. Отменить нельзя.',
-  'Remove for good': 'Удалить навсегда',
+  'Delete for good': 'Удалить навсегда',
   'You cannot remove yourself here — use "Delete my account"': 'Себя здесь удалить нельзя — используйте «Удалить мой аккаунт»',
   'The last administrator cannot leave — delete the family, or make someone else an administrator first':
     'Последний администратор не может уйти — удалите семью или сначала сделайте администратором кого-то другого',

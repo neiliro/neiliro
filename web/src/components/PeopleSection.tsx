@@ -292,9 +292,9 @@ export function PeopleSection() {
   */
   async function remove(member: ManagedUser) {
     const ok = await dialogs.confirm({
-      title: t('Remove {name} for good?', { name: member.name }),
+      title: t('Delete user {name}?', { name: member.name }),
       message: t('Their private notes, personal calendars and personal accounts, profile, sessions and key are deleted. What they added to shared spaces stays without their name. There is no undo.'),
-      confirmLabel: t('Remove for good'),
+      confirmLabel: t('Delete for good'),
       danger: true,
     });
     if (!ok) return;
@@ -408,7 +408,7 @@ export function PeopleSection() {
                   onClick={() => void remove(u)}
                   className="text-xs text-urgent underline underline-offset-2"
                 >
-                  {t('Remove')}
+                  {t('Delete user')}
                 </button>
               )}
             </li>
