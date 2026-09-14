@@ -5,6 +5,7 @@ import { currentTenant, db, id, now } from '../db/index.js';
 import { env } from '../env.js';
 import { log } from '../lib/log.js';
 import { sendServiceEmail, serviceMailAvailable } from '../lib/mail.js';
+import { renderLetterHtml, renderLetterText, type Letter } from '../lib/letter.js';
 import { familySlug } from '../lib/tenants.js';
 
 /*
@@ -79,22 +80,20 @@ export async function sendVerificationEmail(userId: string): Promise<void> {
     })();
 
     const url = `https://${slug}.${env.hostedDomain}/verify-email?token=${token}`;
-    await sendServiceEmail(
-      user.email,
-      'Confirm your Neiliro address',
-      [
-        `Hello, ${user.name}.`,
-        '',
-        'Confirm this address so it can be used to recover your account if',
-        'you ever forget your password:',
-        '',
-        url,
-        '',
-        'The link works for a week. Until it is used, password recovery by',
-        'email stays unavailable for this account — which is deliberate: an',
-        'unconfirmed address is not proof of anything.',
-      ].join('\n'),
-    );
+    const letter: Letter = {
+      title: 'Confirm your address',
+      brand: { name: 'Neiliro', url: `https://${env.hostedDomain}/` },
+      blocks: [
+        { kind: 'p', text: `${user.name}, confirm this address so it can be used to recover your account if you ever forget your password.` },
+        { kind: 'button', label: 'Confirm this address', url },
+        {
+          kind: 'muted',
+          text: 'The link works for a week. Until it is used, password recovery by email stays unavailable for this account — which is deliberate: an unconfirmed address is not proof of anything.',
+        },
+      ],
+      footer: 'You received this letter because an account on a Neiliro family hub was created with this address. It carries no images and no tracking.',
+    };
+    await sendServiceEmail(user.email, 'Confirm your Neiliro address', renderLetterText(letter), renderLetterHtml(letter));
   } catch (err) {
     // Never fails the flow that triggered it — signing up must not break
     // because a mail provider hiccuped.

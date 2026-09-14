@@ -2,6 +2,7 @@ import { db, runWithTenant } from '../db/index.js';
 import { env } from '../env.js';
 import { log } from './log.js';
 import { sendServiceEmail, serviceMailAvailable } from './mail.js';
+import { renderLetterHtml, renderLetterText, type Letter } from './letter.js';
 import { entitlement, type Entitlement } from './plan.js';
 import { deleteFamilyData, familiesWithPlans, recordPlanLetter, tenantForFamily } from './tenants.js';
 
@@ -27,67 +28,87 @@ function adminAddresses(familyId: string): string[] {
   );
 }
 
-interface Letter {
+interface PlanLetter {
   kind: string;
   subject: string;
-  text: string;
+  letter: Letter;
 }
 
-function letterFor(e: Entitlement, family: { id: string; slug: string }, nowMs: number): Letter | null {
-  const { slug } = family;
+function planLetter(
+  family: { id: string; slug: string },
+  kind: string,
+  subject: string,
+  title: string,
+  opening: string,
+): PlanLetter {
   const apex = env.hostedDomain;
-  const hub = `https://${slug}.${apex}/settings`;
+  const hub = `https://${family.slug}.${apex}/settings`;
   // The checkout names the family by its internal id — the webhook looks
   // the id up, and a slug there would leave a paid family read-only
   const checkout = `https://${apex}/checkout?family=${encodeURIComponent(family.id)}`;
+  return {
+    kind,
+    subject,
+    letter: {
+      title,
+      brand: { name: 'Neiliro', url: `https://${apex}/` },
+      blocks: [
+        { kind: 'p', text: opening },
+        { kind: 'button', label: 'Subscribe', url: checkout },
+        { kind: 'link', text: 'Or from the hub, Settings → Plan:', url: hub },
+        {
+          kind: 'muted',
+          text: 'One plan covers the whole family: €4.99 a month or €44.99 a year, cancel anytime. Everything you have put in stays yours — the complete archive is one click away in Settings, always.',
+        },
+        { kind: 'link', text: 'Questions:', url: `https://support.${apex}/` },
+      ],
+      footer: "You received this letter because you administer a family on Neiliro and its plan is changing state, as the terms promise. It carries no images and no tracking.",
+    },
+  };
+}
+
+function letterFor(e: Entitlement, family: { id: string; slug: string }, nowMs: number): PlanLetter | null {
   const day = (iso: string) => iso.slice(0, 10);
-  const closing = [
-    '',
-    `Subscribe from Settings → Plan (${hub}) or directly: ${checkout}`,
-    'One plan covers the whole family: €4.99 a month or €44.99 a year, cancel anytime.',
-    'Everything you have put in stays yours — the complete archive is one click away in Settings, always.',
-    '',
-    `Questions: https://support.${apex}`,
-  ];
 
   if (!e.readOnly && e.until && !e.subscribed) {
     const left = (Date.parse(e.until) - nowMs) / DAY_MS;
     if (left <= 1) {
-      return {
-        kind: `ends-1d:${day(e.until)}`,
-        subject: 'Your free period ends tomorrow',
-        text: ['Hello.', '', `The free period of your family's hub ends on ${day(e.until)}. After that the hub`,
-          'becomes read-only: everyone can still sign in, read everything and export the archive,',
-          'but nothing can be added or changed — for 60 days, then the data is removed.', ...closing].join('\n'),
-      };
+      return planLetter(
+        family,
+        `ends-1d:${day(e.until)}`,
+        'Your free period ends tomorrow',
+        'Your free period ends tomorrow',
+        `The free period of your family's hub ends on ${day(e.until)}. After that the hub becomes read-only: everyone can still sign in, read everything and export the archive, but nothing can be added or changed — for 60 days, then the data is removed.`,
+      );
     }
     if (left <= 7) {
-      return {
-        kind: `ends-7d:${day(e.until)}`,
-        subject: 'Your free period ends in a week',
-        text: ['Hello.', '', `The free period of your family's hub ends on ${day(e.until)}. Nothing happens`,
-          'before then; afterwards the hub is read-only until the family subscribes.', ...closing].join('\n'),
-      };
+      return planLetter(
+        family,
+        `ends-7d:${day(e.until)}`,
+        'Your free period ends in a week',
+        'Your free period ends in a week',
+        `The free period of your family's hub ends on ${day(e.until)}. Nothing happens before then; afterwards the hub is read-only until the family subscribes.`,
+      );
     }
   }
   if (e.readOnly && e.until && e.deleteAt) {
     const untilDelete = (Date.parse(e.deleteAt) - nowMs) / DAY_MS;
     if (untilDelete <= 7) {
-      return {
-        kind: `delete-7d:${day(e.deleteAt)}`,
-        subject: "Your family's data will be removed in a week",
-        text: ['Hello.', '', `Your family's hub has been read-only since ${day(e.until)}. On ${day(e.deleteAt)} the data`,
-          'is removed, as the terms say. Until then everything can still be exported from Settings,',
-          'and subscribing brings the hub back exactly as it was.', ...closing].join('\n'),
-      };
+      return planLetter(
+        family,
+        `delete-7d:${day(e.deleteAt)}`,
+        "Your family's data will be removed in a week",
+        'Your data will be removed in a week',
+        `Your family's hub has been read-only since ${day(e.until)}. On ${day(e.deleteAt)} the data is removed, as the terms say. Until then everything can still be exported from Settings, and subscribing brings the hub back exactly as it was.`,
+      );
     }
-    return {
-      kind: `read-only:${day(e.until)}`,
-      subject: "Your family's hub is now read-only",
-      text: ['Hello.', '', `Your family's hub became read-only on ${day(e.until)}: everyone can sign in, read and`,
-        `export, but nothing can be added or changed. It stays that way until ${day(e.deleteAt)}, when the`,
-        'data is removed. Subscribing at any point before then brings everything back.', ...closing].join('\n'),
-      };
+    return planLetter(
+      family,
+      `read-only:${day(e.until)}`,
+      "Your family's hub is now read-only",
+      'Your hub is now read-only',
+      `Your family's hub became read-only on ${day(e.until)}: everyone can sign in, read and export, but nothing can be added or changed. It stays that way until ${day(e.deleteAt)}, when the data is removed. Subscribing at any point before then brings everything back.`,
+    );
   }
   return null;
 }
@@ -116,7 +137,7 @@ export async function sweepPlans(nowMs = Date.now()): Promise<{ letters: number;
     if (!recordPlanLetter(family.id, letter.kind)) continue;
     for (const to of recipients) {
       try {
-        await sendServiceEmail(to, letter.subject, letter.text);
+        await sendServiceEmail(to, letter.subject, renderLetterText(letter.letter), renderLetterHtml(letter.letter));
         letters += 1;
       } catch (err) {
         log.error(`plan: letter "${letter.kind}" to ${family.slug} failed`, err);

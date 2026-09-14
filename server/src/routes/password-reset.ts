@@ -6,6 +6,7 @@ import { env } from '../env.js';
 import { destroyAllSessions, ensureKdfSalt } from '../lib/auth.js';
 import { log } from '../lib/log.js';
 import { sendServiceEmail, serviceMailAvailable } from '../lib/mail.js';
+import { renderLetterHtml, renderLetterText, type Letter } from '../lib/letter.js';
 import { hashPassword } from '../lib/password.js';
 import { AUTH_KEY_PATTERN } from '../lib/kdf.js';
 import { retirePasswordEnvelope } from '../lib/keys.js';
@@ -165,21 +166,20 @@ export async function registerPasswordResetRoutes(app: FastifyInstance): Promise
       })();
 
       const url = `https://${slug}.${env.hostedDomain}/reset?token=${token}`;
-      await sendServiceEmail(
-        email,
-        'Reset your Neiliro password',
-        [
-          `Hello, ${user.name}.`,
-          '',
-          'Someone asked to reset the password for this address. If it was you,',
-          'open the link below within the next hour:',
-          '',
-          url,
-          '',
-          'The link works once. If it was not you, ignore this message —',
-          'nothing has changed, and your current password still works.',
-        ].join('\n'),
-      );
+      const letter: Letter = {
+        title: 'Reset your password',
+        brand: { name: 'Neiliro', url: `https://${env.hostedDomain}/` },
+        blocks: [
+          { kind: 'p', text: `${user.name}, someone asked to reset the password for this address. If it was you, open the link below within the next hour.` },
+          { kind: 'button', label: 'Choose a new password', url },
+          {
+            kind: 'muted',
+            text: 'The link works once. If it was not you, ignore this message — nothing has changed, and your current password still works. A reset changes the password only: two-factor codes stay on.',
+          },
+        ],
+        footer: 'You received this letter because a password reset was requested for this address on a Neiliro family hub. It carries no images and no tracking.',
+      };
+      await sendServiceEmail(email, 'Reset your Neiliro password', renderLetterText(letter), renderLetterHtml(letter));
     } catch (err) {
       // The requester is told nothing either way, so a failure here has to
       // be visible to the operator or it is invisible entirely.
