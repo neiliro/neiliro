@@ -230,6 +230,15 @@ mailbox, so the whole thread stays in one place. There is no
 compose-from-scratch: a paperwork desk answers letters, it does not
 start correspondence.
 
+An invitation attached to a letter (`.ics`, as schools, doctors and
+booking systems send them) gets an **Add to calendar** button: the file
+is opened in the browser — it is sealed like every attachment — and the
+calendar opens a new event already written, title, place, description
+and time, on the invitation's day; you pick the calendar and save. A
+recurring invitation is added as a single event and says so; a file
+with several events offers the first. Times in UTC are moved to your
+wall-clock; a time with a named zone is taken as written.
+
 A letter's HTML part is shown when it says more than the text does — a
 table of charges, a link to the portal, an inline image — and only after
 the browser has rebuilt it from an allowlist: scripts, styles, forms,

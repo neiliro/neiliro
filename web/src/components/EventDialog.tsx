@@ -7,16 +7,25 @@ import { onEnter } from '../lib/keys';
 import { familyKeySuffix } from '../lib/token-key';
 import { clearBlankOnBlur } from '../lib/forms';
 import { timeOf } from '../lib/format';
+import type { IcsEvent } from '../lib/ics';
 import { dialogGhost, inlineDanger, Modal, useDialogs } from './Dialog';
 
 const field =
   'w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent';
 const label = 'mb-1.5 block text-sm font-medium text-ink';
 
+/** What an invitation brings to a new event (lib/ics.ts): words and when, nothing else. */
+export type EventPrefill = Pick<
+  IcsEvent,
+  'title' | 'description' | 'location' | 'all_day' | 'start_date' | 'end_date' | 'start_time' | 'end_time'
+> & { rrule?: string | null };
+
 interface Props {
   /** An existing occurrence or a date for a new event. */
   occurrence: Occurrence | null;
   defaultDate: string;
+  /** A new event that arrives already written — from an .ics attachment in Mail (#30). */
+  prefill?: EventPrefill | null;
   calendars: Calendar[];
   members: HouseholdMember[];
   projects: Project[];
@@ -27,6 +36,7 @@ interface Props {
 export function EventDialog({
   occurrence,
   defaultDate,
+  prefill = null,
   calendars,
   members,
   projects,
@@ -42,14 +52,14 @@ export function EventDialog({
 
   const [draft, setDraft] = useState(() => ({
     calendar_id: occurrence?.calendar_id ?? calendars[0]?.id ?? '',
-    title: occurrence?.title ?? '',
-    description: occurrence?.description ?? '',
-    location: occurrence?.location ?? '',
-    all_day: occurrence ? occurrence.all_day === 1 : true,
-    start_date: occurrence?.date ?? defaultDate,
-    end_date: occurrence?.ends_at.slice(0, 10) ?? defaultDate,
-    start_time: occurrence ? timeOf(occurrence.starts_at) || '10:00' : '10:00',
-    end_time: occurrence ? timeOf(occurrence.ends_at) || '11:00' : '11:00',
+    title: occurrence?.title ?? prefill?.title ?? '',
+    description: occurrence?.description ?? prefill?.description ?? '',
+    location: occurrence?.location ?? prefill?.location ?? '',
+    all_day: occurrence ? occurrence.all_day === 1 : prefill ? prefill.all_day : true,
+    start_date: occurrence?.date ?? prefill?.start_date ?? defaultDate,
+    end_date: occurrence?.ends_at.slice(0, 10) ?? prefill?.end_date ?? defaultDate,
+    start_time: occurrence ? timeOf(occurrence.starts_at) || '10:00' : prefill?.start_time || '10:00',
+    end_time: occurrence ? timeOf(occurrence.ends_at) || '11:00' : prefill?.end_time || '11:00',
     // Fetched below: a series occurrence carries no recurrence rule
     recurrence_rule: '',
     project_id: occurrence?.project_id ?? '',
