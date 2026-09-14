@@ -284,6 +284,28 @@ export function PeopleSection() {
     }
   }
 
+  /*
+    Remove for good (GDPR art. 17, asked for by the administrator). The
+    dialog says what goes and what the family keeps, because the person
+    clicking is deciding on someone else's behalf; the rule itself is the
+    server's (lib/erase-member.ts).
+  */
+  async function remove(member: ManagedUser) {
+    const ok = await dialogs.confirm({
+      title: t('Remove {name} for good?', { name: member.name }),
+      message: t('Their private notes, personal calendars and personal accounts, profile, sessions and key are deleted. What they added to shared spaces stays without their name. There is no undo.'),
+      confirmLabel: t('Remove for good'),
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/users/${member.id}`);
+      await load();
+    } catch (err) {
+      reportFailure(err instanceof Error ? err.message : t('Could not save'));
+    }
+  }
+
   async function toggle(user: ManagedUser) {
     try {
       await api.post(`/users/${user.id}/toggle`, {});
@@ -380,6 +402,15 @@ export function PeopleSection() {
               >
                 {u.disabled_at ? t('Enable') : t('Disable')}
               </button>
+              {u.id !== user?.id && (
+                <button
+                  type="button"
+                  onClick={() => void remove(u)}
+                  className="text-xs text-urgent underline underline-offset-2"
+                >
+                  {t('Remove')}
+                </button>
+              )}
             </li>
           ))}
         </ul>

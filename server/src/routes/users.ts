@@ -1,7 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db, now } from '../db/index.js';
-import { destroyAllSessions, requireAdmin, ensureKdfSalt } from '../lib/auth.js';
+import { clearSessionCookie, consumeTotp, destroyAllSessions, requireAdmin, ensureKdfSalt } from '../lib/auth.js';
+import { verifyPassword } from '../lib/password.js';
+import { AUTH_KEY_PATTERN } from '../lib/kdf.js';
+import { eraseMember, otherAdminsExist } from '../lib/erase-member.js';
 import { log } from '../lib/log.js';
 import { generatePassword, hashPassword } from '../lib/password.js';
 import { deriveAuthKey } from '../lib/kdf.js';
@@ -19,7 +22,7 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
                 EXISTS (SELECT 1 FROM key_envelopes k
                          WHERE k.user_id = users.id AND k.kind = 'password' AND k.retired_at IS NULL)
                   AS key_envelope
-           FROM users ORDER BY role, name`,
+           FROM users WHERE deleted_at IS NULL ORDER BY role, name`,
       )
       .all() as { email_verified: number }[];
 
@@ -175,5 +178,63 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     if (disabled) destroyAllSessions(userId);
 
     return { disabled: Boolean(disabled) };
+  });
+
+  /*
+    Remove a member for good (GDPR art. 17). What goes and what stays is
+    lib/erase-member.ts; this route decides who may ask. The administrator
+    may remove anyone but themselves — their own exit is either the route
+    below or, for the last administrator, deleting the family, because a
+    hub with no administrator has no one to add the next one.
+  */
+  app.delete('/api/users/:id', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const { id: userId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    if (userId === req.user?.id) {
+      return reply.code(400).send({ error: 'You cannot remove yourself here — use "Delete my account"' });
+    }
+    const user = db.prepare('SELECT deleted_at FROM users WHERE id = ?').get(userId) as
+      | { deleted_at: string | null }
+      | undefined;
+    if (!user || user.deleted_at) return reply.code(404).send({ error: 'Member not found' });
+    await eraseMember(userId);
+    return { ok: true };
+  });
+
+  /*
+    Leave the family (GDPR art. 17, exercised by the person themselves).
+    Proven with the password and the second factor, like family deletion:
+    a stolen session must not be enough to erase someone. The last
+    administrator is refused — the family cannot be left without one — and
+    is pointed at family deletion instead.
+  */
+  const eraseInput = z.object({
+    auth_key: z.string().regex(AUTH_KEY_PATTERN, 'Invalid credentials'),
+    code: z.string().trim().min(6).max(8).optional(),
+  });
+  app.post('/api/users/me/erase', async (req, reply) => {
+    const parsed = eraseInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Check the fields' });
+    const me = req.user!;
+    if (me.role === 'admin' && !otherAdminsExist(me.id)) {
+      return reply
+        .code(400)
+        .send({ error: 'The last administrator cannot leave — delete the family, or make someone else an administrator first' });
+    }
+    const user = db
+      .prepare('SELECT password_hash, totp_secret, totp_confirmed_at FROM users WHERE id = ?')
+      .get(me.id) as { password_hash: string; totp_secret: string | null; totp_confirmed_at: string | null };
+    if (!(await verifyPassword(parsed.data.auth_key, user.password_hash))) {
+      return reply.code(400).send({ error: 'The current password is incorrect' });
+    }
+    if (user.totp_confirmed_at && user.totp_secret) {
+      if (!parsed.data.code) return reply.code(400).send({ error: 'Enter the code' });
+      if (!consumeTotp(me.id, user.totp_secret, parsed.data.code)) {
+        return reply.code(401).send({ error: 'Wrong code' });
+      }
+    }
+    await eraseMember(me.id);
+    clearSessionCookie(reply);
+    return { ok: true };
   });
 }

@@ -20,7 +20,8 @@ import { log } from './log.js';
   restarts and template rebuilds.
 
   Privacy: no IPs and no visitor identifiers are stored — the referrer
-  host and a user agent string are as personal as it gets. Stats are
+  host and the kind of device (phone / tablet / desktop, never the
+  user-agent string itself) are as personal as it gets. Stats are
   also strictly best-effort: a failure here must never break the demo
   itself, so every write swallows its errors into a warn line.
 */
@@ -131,6 +132,21 @@ export function apiModule(url: string): string | null {
   return MODULE_BY_PREFIX[seg] ?? seg;
 }
 
+/**
+ * The one thing the counters want from a user-agent string — was this a
+ * phone, a tablet or a desktop — without keeping the string itself. A raw
+ * user agent is a fingerprint in all but name (browser build, OS version,
+ * device model), which is more than "anonymous counters about demo
+ * visits" may hold. The column keeps its historical name.
+ */
+export function deviceClass(userAgent: string | null | undefined): 'phone' | 'tablet' | 'desktop' | null {
+  if (!userAgent) return null;
+  const ua = userAgent.toLowerCase();
+  if (/ipad|tablet|(android(?!.*mobile))/.test(ua)) return 'tablet';
+  if (/mobi|iphone|ipod|android/.test(ua)) return 'phone';
+  return 'desktop';
+}
+
 /** Records a fresh sandbox; returns the row id to close later (null when stats are off). */
 export function statsSessionStarted(
   referrer: string | null | undefined,
@@ -140,7 +156,7 @@ export function statsSessionStarted(
   try {
     const result = statsDb
       .prepare('INSERT INTO sandbox_sessions (created_at, referrer, user_agent) VALUES (?, ?, ?)')
-      .run(localNow(), normalizeReferrer(referrer), userAgent ? userAgent.slice(0, 300) : null);
+      .run(localNow(), normalizeReferrer(referrer), deviceClass(userAgent));
     return Number(result.lastInsertRowid);
   } catch (err) {
     log.warn('demo stats: session start failed to record', err);

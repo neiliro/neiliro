@@ -86,7 +86,8 @@ describe('sandbox session lifecycle', () => {
 
     expect(row.created_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
     expect(row.referrer).toBe('github.com/neiliro/neiliro');
-    expect(row.user_agent).toBe('TestAgent/1.0');
+    // The string itself is never kept — only what kind of device it was
+    expect(row.user_agent).toBe('desktop');
     expect(row.ended_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
     expect(row.end_reason).toBe('logout');
     expect(row.requests).toBe(7);
@@ -99,5 +100,16 @@ describe('sandbox session lifecycle', () => {
     expect(() =>
       statsSessionEnded(null, 'idle', { requests: 0, writes: 0, modules: new Set() }),
     ).not.toThrow();
+  });
+});
+
+describe('deviceClass', () => {
+  it('keeps the kind of device and nothing else', async () => {
+    const { deviceClass } = await import('./demo-stats.js');
+    expect(deviceClass('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1')).toBe('phone');
+    expect(deviceClass('Mozilla/5.0 (Linux; Android 14; Pixel Tablet) AppleWebKit/537.36 Chrome/120 Safari/537.36')).toBe('tablet');
+    expect(deviceClass('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36')).toBe('phone');
+    expect(deviceClass('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Safari/605.1.15')).toBe('desktop');
+    expect(deviceClass(null)).toBeNull();
   });
 });
