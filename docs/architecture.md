@@ -131,7 +131,7 @@ The same worker solves the long-lived-tab problem: a kiosk that stays open for w
 
 ### Which build is running
 
-Settings → About and the foot of the sidebar name the version and the commit the bundle was built from. The version comes from the root `package.json` at build time; the commit arrives as the `BUILD_SHA` Docker build argument, because `.dockerignore` keeps `.git` out of the image. A build from source shows the version alone — a dev bundle has no commit worth quoting.
+The foot of the sidebar names the version and the commit the bundle was built from (the tooltip carries both in full). The version comes from the root `package.json` at build time; the commit arrives as the `BUILD_SHA` Docker build argument, because `.dockerignore` keeps `.git` out of the image. A build from source shows the version alone — a dev bundle has no commit worth quoting.
 
 Both are visible only behind the sign-in screen. `/api/health` withholds the version from the public internet deliberately, and a line under the login box would have handed it to every scanner instead.
 
@@ -142,7 +142,7 @@ Naming the build is one thing; proving the browser got that build is another, an
 ### Cutting a release
 
 1. Everything merged and the docs caught up — both are written in the same pull requests as the code, not gathered up afterwards.
-2. Bump the version in all three `package.json` files in that day's last pull request, before tagging. Settings → About and the sidebar read it, so a manifest left behind announces the wrong release.
+2. Bump the version in all three `package.json` files in that day's last pull request, before tagging. The sidebar reads it, so a manifest left behind announces the wrong release.
 3. `git tag vX.Y.Z && git push origin vX.Y.Z`.
 4. The tag starts `release.yml`: a multi-arch image (amd64 + arm64) to GHCR, 6–9 minutes, most of it arm64 under emulation.
 5. A second job rebuilds the frontend, compares it with the one in the published image and attaches `hashes.txt` to the release for the tag — creating it as a **draft** if the page is not written yet. The workflow never publishes a release, so a draft waiting for its notes is the normal state between the tag and the next step; if the two builds disagree the job fails, and that is a bug to find before anyone verifies against the list.

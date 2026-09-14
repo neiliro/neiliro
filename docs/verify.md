@@ -24,9 +24,9 @@ the ones that ran.
 ## Which version you are on
 
 The foot of the sidebar names the version and the commit the bundle was
-built from; **Settings → About** shows the same. Both are behind the sign-in
-screen on purpose — `/api/health` withholds the version from the public
-internet, and printing it under the login box would have handed it back.
+built from (hover it for both in full). It sits behind the sign-in screen on
+purpose — `/api/health` withholds the version from the public internet, and
+printing it under the login box would have handed it back.
 
 ## Listing what the page asks for
 
