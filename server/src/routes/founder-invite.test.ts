@@ -80,6 +80,13 @@ describe('the founder invitation', () => {
     expect(mail.html).toContain('href="https://founders-f1a1.neiliro.test/join?token=');
     expect(mail.html).toContain('founders-f1a1@mail.neiliro.test');
     expect(mail.html).not.toMatch(/<img|<link|<script/i);
+    // Two days, not a member invitation's week: the link opens an empty hub
+    const fdb = familyDb(familyId);
+    const { expires_at } = fdb.prepare("SELECT expires_at FROM invites WHERE role = 'admin'").get() as { expires_at: string };
+    fdb.close();
+    const hours = (Date.parse(expires_at.replace(' ', 'T') + 'Z') - Date.now()) / 3_600_000;
+    expect(hours).toBeGreaterThan(47);
+    expect(hours).toBeLessThanOrEqual(48);
     const token = tokenFrom(mail);
     expect(invite.url).toContain(token);
 
