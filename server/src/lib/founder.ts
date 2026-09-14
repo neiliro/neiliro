@@ -112,6 +112,10 @@ export async function issueFounderInvite(familyId: string, email: string): Promi
             text: `Within the first day you can change ${slug}.${apex} once — the hub offers this when you sign in. After that it is final, so pick something you can say aloud.`,
           },
           {
+            title: 'Keep the recovery code.',
+            text: 'When you set up the first account, the hub shows a recovery code once. What your family writes is encrypted in the browser with a key we never hold — the code is the spare key. Without your password and without the code the words are gone for good, and nobody can bring them back, us included. Put it where you keep the passports.',
+          },
+          {
             title: 'Invite the household.',
             text: 'Settings → People → invitation link. Each person joins with their own name and password; for a child without a device, open their link yourself.',
           },
@@ -127,7 +131,7 @@ export async function issueFounderInvite(familyId: string, email: string): Promi
       },
       {
         kind: 'p',
-        text: 'What to expect. Neiliro is young: it runs with monitoring and nightly encrypted backups, but the honest word is best effort — something may break, and when it does we want to hear about it. Everything you put in stays yours: the complete archive is one click away in Settings, always.',
+        text: 'What to expect. Neiliro is young: it runs with monitoring and nightly encrypted backups, but the honest word is best effort — something may break, and when it does we want to hear about it. Everything you put in stays yours: the complete archive and a readable copy are one click away in Settings, always.',
       },
       {
         kind: 'p',
