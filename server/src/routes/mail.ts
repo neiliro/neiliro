@@ -12,6 +12,23 @@ import {
   sendReply,
 } from '../lib/mail.js';
 import { log } from '../lib/log.js';
+import { deleteMessage } from '../lib/mail-retention.js';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+
+/*
+  The mailbox is the adults' desk (#30, "visibility for kids"). Bills,
+  school letters and bookings are addressed to the household, not to the
+  child, and a kid account is a way to give a child their tasks and the
+  shared calendar — not the family's correspondence. Every mail route
+  refuses the role; the navigation hides the section for the same reason.
+*/
+function notForKids(req: FastifyRequest, reply: FastifyReply): boolean {
+  if (req.user?.role === 'kid') {
+    reply.code(403).send({ error: 'The family mailbox is not shown to kid accounts' });
+    return false;
+  }
+  return true;
+}
 
 /** The seeded Inbox project (migration 004) — the natural home for mail-born tasks. */
 const INBOX_PROJECT_ID = '00000000-0000-4000-8000-000000000001';
@@ -20,7 +37,8 @@ const LIST_COLUMNS = `id, kind, from_address, from_name, to_address, subject, se
                       received_at, read_at, task_id, in_reply_to, sent_by`;
 
 export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/mail', () => {
+  app.get('/api/mail', (req, reply) => {
+    if (!notForKids(req, reply)) return;
     const messages = db
       .prepare(
         `SELECT ${LIST_COLUMNS},
@@ -49,6 +67,7 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/api/mail/:id', (req, reply) => {
+    if (!notForKids(req, reply)) return;
     const { id: messageId } = z.object({ id: z.string().uuid() }).parse(req.params);
     const message = db
       .prepare(`SELECT ${LIST_COLUMNS}, body_text FROM mail_messages WHERE id = ?`)
@@ -83,6 +102,7 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
    * can read the subject (#223) — and hands the id over here to be linked.
    */
   app.post('/api/mail/:id/task', (req, reply) => {
+    if (!notForKids(req, reply)) return;
     const { id: messageId } = z.object({ id: z.string().uuid() }).parse(req.params);
     const parsed = z.object({ task_id: z.string().uuid().optional() }).safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: 'Check the fields' });
@@ -125,6 +145,7 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/mail/:id/reply', async (req, reply) => {
+    if (!notForKids(req, reply)) return;
     const { id: messageId } = z.object({ id: z.string().uuid() }).parse(req.params);
     // The browser names the recipient and the subject: for a sealed letter
     // the server cannot read either (#223). A plaintext letter from before
@@ -169,6 +190,7 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
 
   /** Rewriting a letter's words — for the one-time job that brings old plaintext under the key (#223). */
   app.patch('/api/mail/:id', (req, reply) => {
+    if (!notForKids(req, reply)) return;
     const { id: messageId } = z.object({ id: z.string().uuid() }).parse(req.params);
     const parsed = z
       .object({
@@ -187,6 +209,18 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
       .run(...fields.map(([, v]) => v as string | null), messageId);
     if (result.changes === 0) return reply.code(404).send({ error: 'Message not found' });
     return db.prepare(`SELECT ${LIST_COLUMNS}, body_text FROM mail_messages WHERE id = ?`).get(messageId);
+  });
+
+  /**
+   * A letter leaves the desk (#30). Any adult may do it — the desk is shared,
+   * and so is the tidying. Replies and files go with it; a task made from
+   * the letter stays on the board with its own excerpt.
+   */
+  app.delete('/api/mail/:id', async (req, reply) => {
+    if (!notForKids(req, reply)) return;
+    const { id: messageId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    if (!(await deleteMessage(messageId))) return reply.code(404).send({ error: 'Message not found' });
+    return { ok: true };
   });
 
   /** Mailbox connection settings — administrator only, password write-only. */
@@ -246,6 +280,7 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
 
   /** Manual poll — doubles as the connection test after saving settings. */
   app.post('/api/mail/sync', async (req, reply) => {
+    if (!notForKids(req, reply)) return;
     if (!requireAdmin(req, reply)) return;
     // Service mode has nothing to poll — the webhook pushes instead.
     if (!getMailAccount()) {

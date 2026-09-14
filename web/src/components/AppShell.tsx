@@ -290,7 +290,10 @@ export function AppShell() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [settings, setSettings] = useState<Record<string, string>>({});
-  const sidebarNav = [...NAV, ...SECONDARY];
+  // The mailbox is the adults' desk (#30): a kid account does not see the
+  // section, and the server refuses it anyway
+  const visibleNav = user?.role === 'kid' ? NAV.filter((item) => item.to !== '/mail') : NAV;
+  const sidebarNav = [...visibleNav, ...SECONDARY];
   const { state: service } = useServiceState();
   const help = supportLink(service ? service.hosted : null, window.location.hostname);
 
@@ -423,7 +426,7 @@ export function AppShell() {
 
       {/* Bottom navigation: phone */}
       <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-6 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
-        {NAV.map((item) => (
+        {visibleNav.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

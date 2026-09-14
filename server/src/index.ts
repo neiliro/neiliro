@@ -44,6 +44,13 @@ if (env.hostedMode) {
 }
 
 await eachFamily(pruneSessions);
+
+// Letters older than the family's chosen age leave the desk (#30). Daily,
+// per family, like the session pruner; a family that chose nothing keeps
+// everything.
+const { sweepMailRetention } = await import('./lib/mail-retention.js');
+void eachFamily(sweepMailRetention);
+setInterval(() => void eachFamily(sweepMailRetention), 24 * 60 * 60_000).unref();
 // Boot-only pruning was enough while every deploy restarted the process,
 // but a home server can stay up for months — repeat daily so expiry and
 // the 30-day idle rule actually retire rows from the Devices list.

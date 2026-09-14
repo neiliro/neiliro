@@ -230,6 +230,15 @@ mailbox, so the whole thread stays in one place. There is no
 compose-from-scratch: a paperwork desk answers letters, it does not
 start correspondence.
 
+The desk is the adults': a kid account does not see the Mail section, and
+the server refuses it the mailbox — bills, school letters and bookings are
+addressed to the household, not to the child. Any adult can **delete a
+letter**; its replies and files go with it, and a task made from it stays
+on the board with its own excerpt. Settings → Family mailbox → **Keep
+letters for** sets an age (3 months to 2 years, or forever, the default):
+a daily sweep removes older letters the same way, because a paperwork
+desk is not an archive and handled letters name people.
+
 An invitation attached to a letter (`.ics`, as schools, doctors and
 booking systems send them) gets an **Add to calendar** button: the file
 is opened in the browser — it is sealed like every attachment — and the

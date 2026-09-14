@@ -164,6 +164,35 @@ export function Mail() {
     }
   }
 
+  /*
+    A letter leaves the desk (#30). Replies and files go with it; a task
+    made from it stays on the board with its own excerpt, which the dialog
+    says so nobody hesitates over a handled bill.
+  */
+  async function deleteLetter() {
+    if (!message) return;
+    const ok = await dialogs.confirm({
+      title: t('Delete this letter?'),
+      message: message.task_id
+        ? t('The letter, its replies and its files are deleted. The task made from it stays.')
+        : t('The letter, its replies and its files are deleted. There is no undo.'),
+      confirmLabel: t('Delete letter'),
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.delete(`/mail/${message.id}`);
+      setMessage(null);
+      setList((prev) => (prev ? { ...prev, messages: prev.messages.filter((m) => m.id !== message.id) } : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('Could not save'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendReply() {
     if (!message || !replyText.trim()) return;
     setBusy(true);
@@ -183,6 +212,16 @@ export function Mail() {
     } finally {
       setBusy(false);
     }
+  }
+
+  // The desk is the adults' (#30): the navigation hides it and the server
+  // refuses it; a kid who types the address gets a sentence, not a spinner
+  if (user?.role === 'kid') {
+    return (
+      <Page title={t('Mail')}>
+        <Empty>{t('The family mailbox is not shown to kid accounts.')}</Empty>
+      </Page>
+    );
   }
 
   if (!list) {
@@ -322,6 +361,15 @@ export function Mail() {
                     {t('Make it a task')}
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => void deleteLetter()}
+                  disabled={busy}
+                  className="rounded-lg border border-line px-3 py-1.5 text-sm text-muted hover:text-urgent disabled:opacity-50"
+                  title={t('Delete letter')}
+                >
+                  {t('Delete')}
+                </button>
               </div>
             </div>
 
