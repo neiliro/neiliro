@@ -240,6 +240,20 @@ lifecycle rule for how long to keep, and set `BACKUP_KEEP_DAYS` to a
 couple of days so the local disk is no longer the backup. A failed upload
 fails the run, and the dead-man switch below reports it.
 
+Two details of the hosted layout, both from [ADR 0002](../docs/adr/0002-nodes-gateway-control-shards.md).
+The registry snapshot is named `registry-<NODE_NAME>.db.age` (default
+`registry-hosted01.db.age`): family archives are named by id and are
+unique by construction, the registry's is the one name two nodes writing
+the same day's prefix would collide on. And `backup.sh --changed-only`
+runs the same script over only the families whose database — or its WAL —
+changed since the last *successful* run: same archive names, same
+`<date>/` layout, same key, same upload; a run that finds nothing changed
+uploads nothing. It does **not** ping the dead-man switch — the nightly
+full run stays the one that must keep pinging, or a quarter-hourly job
+would keep the check green over a dead nightly. With an off-site bucket, a
+cron line every fifteen minutes shrinks the writes a dead disk can take
+from a day to a quarter of an hour.
+
 Every couple of months, pull a random archive and verify that it
 decrypts and opens — and since the words inside are encrypted with the
 family key, "opens" means restoring the database into a hub and signing
