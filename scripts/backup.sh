@@ -3,10 +3,34 @@
 # Goes into cron at 03:00. Attachments are not included — Time Machine covers them.
 # On a hosted server (a families/ directory in DATA_DIR) the shape changes:
 # one encrypted archive per family, attachments included — see below.
+#
+#   backup.sh                 the full set: every active family, the registry
+#   backup.sh --changed-only  hosted only: just the families whose database
+#                             changed since the last successful run (ADR 0002)
 set -euo pipefail
+
+CHANGED_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+    --changed-only) CHANGED_ONLY=1 ;;
+    *) echo "usage: backup.sh [--changed-only]" >&2; exit 2 ;;
+  esac
+done
 
 DATA_DIR="${DATA_DIR:-$HOME/.family-hub}"
 BACKUP_DIR="$DATA_DIR/backups"
+# Which node of the hosted service this is (ADR 0002). Two nodes write the
+# same <date>/ prefix in the bucket, and the registry archive is the one
+# file whose name is not already unique — a family archive is named by its
+# id. NULL-node rows in a registry are "here", so this name is the only
+# thing that tells one node's registry.db from another's once both travel.
+NODE_NAME="${NODE_NAME:-hosted01}"
+# The incremental run's memory: the mtime of .last-run is when the previous
+# SUCCESSFUL run began. A run stamps .last-run.new first and promotes it
+# only at the end, so a run that dies half-way leaves the marker where it
+# was and the next run picks up everything since the last good one.
+MARK="$BACKUP_DIR/.last-run"
+MARK_NEW="$MARK.new"
 REPO_DIR="${BACKUP_REPO_DIR:-$HOME/family-hub-backup}"
 AGE_RECIPIENT="${AGE_RECIPIENT:-}"
 STAMP=$(date +%Y-%m-%d)
@@ -16,6 +40,10 @@ STAMP=$(date +%Y-%m-%d)
 # one failure mode a nightly cron hides best. The app container ships no
 # curl; node is always there.
 PING_URL="${BACKUP_PING_URL:-}"
+# Only the nightly full run pings. The dead-man switch asks "does a
+# complete set still get made"; a quarter-hourly run answering it would
+# keep the check green while the nightly one had quietly died.
+[ "$CHANGED_ONLY" -eq 1 ] && PING_URL=""
 # How many daily sets stay on this disk. Fourteen is right for a
 # self-hosted machine whose disk is the backup; a hosted server that ships
 # every set off-site (below) keeps two — enough for a restore of
@@ -31,7 +59,7 @@ report() {
   node -e "fetch(process.argv[1], { signal: AbortSignal.timeout(10000) }).catch(() => {})" \
     "$PING_URL$1" 2>/dev/null || true
 }
-trap 'status=$?; if [ "$status" -eq 0 ]; then report ""; else report "/fail"; fi' EXIT
+trap 'status=$?; if [ "$status" -eq 0 ]; then report ""; else rm -f "$MARK_NEW"; report "/fail"; fi' EXIT
 
 mkdir -p "$BACKUP_DIR"
 
@@ -53,13 +81,27 @@ if [ -d "$DATA_DIR/families" ]; then
 
   DAY_DIR="$BACKUP_DIR/$STAMP"
   mkdir -p "$DAY_DIR"
+  # Stamped before anything is read: a write that lands while this run is
+  # scanning is newer than the marker and travels with the next run rather
+  # than falling between two of them
+  touch "$MARK_NEW"
 
   sqlite3 "$DATA_DIR/registry.db" ".backup '$DAY_DIR/registry.db'"
 
   count=0
+  unchanged=0
   for family_dir in "$DATA_DIR/families"/*/; do
     [ -f "$family_dir/hub.db" ] || continue
     family_id=$(basename "$family_dir")
+    # Changed since the last successful run? The database file or its WAL:
+    # in WAL mode a write lands in hub.db-wal and hub.db itself keeps its
+    # mtime until a checkpoint, so looking at hub.db alone would miss every
+    # write of a quiet family. No marker yet = first incremental run = all.
+    if [ "$CHANGED_ONLY" -eq 1 ] && [ -f "$MARK" ] &&
+      ! find "$family_dir" -maxdepth 1 \( -name hub.db -o -name hub.db-wal \) -newer "$MARK" | grep -q .; then
+      unchanged=$((unchanged + 1))
+      continue
+    fi
     # Only families the registry calls active. A directory the registry has
     # forgotten (a deleted family's leftover, a stray sqlite3 that created an
     # empty hub.db) is not a family and must not travel to the bucket.
@@ -92,7 +134,17 @@ if [ -d "$DATA_DIR/families" ]; then
     count=$((count + 1))
   done
 
-  age -r "$AGE_RECIPIENT" -o "$DAY_DIR/registry.db.age" "$DAY_DIR/registry.db"
+  # Nothing changed, nothing travels: the registry snapshot exists to map
+  # the archives written today, and none were. Promote the marker — this
+  # run did look — and leave the bucket exactly as it was.
+  if [ "$CHANGED_ONLY" -eq 1 ] && [ "$count" -eq 0 ]; then
+    rm -f "$DAY_DIR/registry.db" "$DAY_DIR/registry.db-wal" "$DAY_DIR/registry.db-shm"
+    mv -f "$MARK_NEW" "$MARK"
+    echo "Hosted backup $STAMP (changed only): nothing changed since the last run, $unchanged families unchanged."
+    exit 0
+  fi
+
+  age -r "$AGE_RECIPIENT" -o "$DAY_DIR/registry-$NODE_NAME.db.age" "$DAY_DIR/registry.db"
   # WAL mode is persisted in the file, so the snapshot may leave -wal/-shm
   # companions — sweep them together with the plaintext snapshot.
   rm -f "$DAY_DIR/registry.db" "$DAY_DIR/registry.db-wal" "$DAY_DIR/registry.db-shm"
@@ -102,7 +154,10 @@ if [ -d "$DATA_DIR/families" ]; then
     # RCLONE_CONFIG_R2_PROVIDER=Cloudflare, RCLONE_CONFIG_R2_ENDPOINT,
     # RCLONE_CONFIG_R2_ACCESS_KEY_ID, RCLONE_CONFIG_R2_SECRET_ACCESS_KEY
     # (compose passes them; nothing is written to disk). One directory per
-    # day in the bucket, same layout as here; the bucket expires them.
+    # day in the bucket, same layout as here; the bucket expires them. An
+    # incremental run rewrites only the archives of families that changed,
+    # and copy skips files whose size and mtime the bucket already has —
+    # so a quiet quarter-hour costs one registry archive and nothing else.
     # --s3-no-head: skip the HEAD rclone makes after each upload to read the
     # object back. On R2 that HEAD answered 501 intermittently (first run in
     # production, 2026-09-14: every file failed attempt 1 and passed on
@@ -117,7 +172,15 @@ if [ -d "$DATA_DIR/families" ]; then
   # days with one — the operator sets it next to the bucket
   find "$BACKUP_DIR" -maxdepth 1 -type d -name '20*' -mtime +"$KEEP_DAYS" -exec rm -rf {} + 2>/dev/null || true
 
-  echo "Hosted backup $STAMP is ready: $count families."
+  # Every family that changed since the last good run is in the bucket:
+  # only now does "the last good run" move forward
+  mv -f "$MARK_NEW" "$MARK"
+
+  if [ "$CHANGED_ONLY" -eq 1 ]; then
+    echo "Hosted backup $STAMP (changed only): $count families archived, $unchanged unchanged."
+  else
+    echo "Hosted backup $STAMP is ready: $count families."
+  fi
   exit 0
 fi
 

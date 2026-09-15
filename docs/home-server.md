@@ -85,7 +85,7 @@ crontab -e
 0 3 * * * cd /path/to/neiliro && AGE_RECIPIENT=age1... ./scripts/backup.sh
 ```
 
-Attachments do not go to git — a machine-level backup (e.g. Time Machine) covers them.
+Attachments do not go to git — a machine-level backup (e.g. Time Machine) covers them. (The script's `--changed-only` mode is for the hosted layout with many families; a single family's nightly set is already small.)
 
 Once a quarter, restore a backup into a separate hub and sign in — the words are encrypted with the family key, so "it opens" means you can read your notes there, not that the file unpacks. A backup that has never been restored is a backup only nominally.
 
