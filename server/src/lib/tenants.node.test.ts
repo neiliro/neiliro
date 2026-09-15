@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -19,6 +19,7 @@ process.env.HOSTED_DOMAIN = 'neiliro.test';
 process.env.NODE_NAME = 'hosted01';
 
 const tenants = await import('./tenants.js');
+const { routeMapPath } = await import('./route-map.js');
 const { env } = await import('../env.js');
 const { db } = await import('../db/index.js');
 
@@ -86,5 +87,54 @@ describe('a family placed on another node', () => {
 
   it('leaves the slug ledger global: the remote slug is taken here too', () => {
     expect(() => tenants.createFamily('jones-there')).toThrow(/already taken/);
+  });
+
+  describe('the route map control writes for the gateway (#297)', () => {
+    const map = () => readFileSync(routeMapPath(), 'utf8');
+
+    it('names the remote family with its node url and not the local one', () => {
+      tenants.writeRouteMap();
+      expect(map()).toBe('jones-there.neiliro.test 10.110.0.5:8787\n');
+    });
+
+    it('follows a rename and a deletion of the remote family', () => {
+      const r = registry();
+      r.prepare("UPDATE families SET slug = 'jones-moved' WHERE id = ?").run(remoteId);
+      r.close();
+      tenants.writeRouteMap();
+      expect(map()).toBe('jones-moved.neiliro.test 10.110.0.5:8787\n');
+      // a suspended family stays routed to its owner; a deleted one drops out
+      const r2 = registry();
+      r2.prepare("UPDATE families SET status = 'suspended' WHERE id = ?").run(remoteId);
+      r2.close();
+      tenants.writeRouteMap();
+      expect(map()).toContain('jones-moved');
+      const r3 = registry();
+      r3.prepare("UPDATE families SET status = 'deleted' WHERE id = ?").run(remoteId);
+      r3.close();
+      tenants.writeRouteMap();
+      expect(map()).toBe('');
+    });
+
+    it('keeps the previous map when a placement cannot be rendered', () => {
+      writeFileSync(routeMapPath(), 'sentinel\n');
+      const r = registry();
+      r.prepare(
+        "INSERT INTO families (id, slug, status, created_at, node) VALUES ('lost-0000-1111-2222-333333333333', 'lost-family', 'active', '2020-01-01 00:00:00', 'hosted09')",
+      ).run();
+      r.close();
+      tenants.writeRouteMap(); // hosted09 is not in nodes — logged, not written
+      expect(map()).toBe('sentinel\n');
+      const r2 = registry();
+      r2.prepare("DELETE FROM families WHERE id = 'lost-0000-1111-2222-333333333333'").run();
+      r2.close();
+    });
+
+    it('is rewritten by the placement changes a local family goes through, and stays empty of it', () => {
+      const { familyId } = tenants.createFamily('local-born');
+      expect(map()).toBe('');
+      tenants.deleteFamilyData(familyId);
+      expect(existsSync(routeMapPath())).toBe(true);
+    });
   });
 });

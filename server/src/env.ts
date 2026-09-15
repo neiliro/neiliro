@@ -79,6 +79,11 @@ export const env = {
   // leaves the machine: the startup log, the route map control exports,
   // the per-node registry archive. One node today, hence the default.
   nodeName: (process.env.NODE_NAME ?? 'hosted01').trim().toLowerCase(),
+  // Where control is, as this node reaches it inside the VPC — set on a
+  // shard, empty on control itself. Phase 0 uses it for one decision:
+  // a shard never writes the gateway's route map. Phase 1 puts the
+  // shard → control calls (rename, delete) behind it.
+  controlUrl: (process.env.CONTROL_URL ?? '').trim().replace(/\/$/, ''),
   // ── Family mail on the service's own domain (#30, milestone C) ──────────
   // The domain family addresses hang off: <slug>@<domain>. The address is
   // derived from the slug, never stored — a rename must not leave a stale
@@ -139,6 +144,12 @@ if (env.hostedMode && env.demoMode) {
 }
 if (env.hostedMode && !/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(env.hostedDomain)) {
   throw new Error('HOSTED_MODE=true requires HOSTED_DOMAIN (the apex domain, e.g. example.com)');
+}
+if (env.controlUrl && !env.hostedMode) {
+  throw new Error('CONTROL_URL is for a hosted shard — a self-hosted hub has no control node');
+}
+if (env.controlUrl && !/^https?:\/\/[^\s/]+$/.test(env.controlUrl)) {
+  throw new Error('CONTROL_URL must be an http(s)://host[:port] origin with no path (e.g. http://10.110.0.2:8787)');
 }
 // The node name ends up in a file name (the registry archive) and in a
 // Caddyfile (the route map): a hostname's alphabet keeps it safe in both.

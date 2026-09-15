@@ -7,6 +7,7 @@ import { env } from '../env.js';
 import { initHostedStats, shutdownHostedStats } from './hosted-stats.js';
 import { log } from './log.js';
 import type { PlanRow } from './plan.js';
+import { renderRouteMap, writeRouteMapFile, type Placement } from './route-map.js';
 
 /*
   Hosted mode: many families on one server, routed by the Host header.
@@ -181,8 +182,42 @@ export function initHosted(): void {
       `, on *.${env.hostedDomain}`,
   );
 
+  // The gateway reads placement from a file this node writes (ADR 0002).
+  // At startup so a rebuilt control has a map before its first request;
+  // after every placement change below so the gateway is never behind.
+  writeRouteMap();
+
   initHostedStats();
   setInterval(closeIdle, IDLE_SWEEP_MS).unref();
+}
+
+// ── The gateway's route map (lib/route-map.ts) ───────────────────────────
+
+/** Families on other nodes, with the address the gateway reaches each node at. */
+function remotePlacements(): Placement[] {
+  return registry!
+    .prepare(
+      `SELECT f.slug, f.node, n.url
+         FROM families f LEFT JOIN nodes n ON n.name = f.node
+        WHERE f.node IS NOT NULL AND f.status != 'deleted'`,
+    )
+    .all() as Placement[];
+}
+
+/**
+ * Rewrite the route map from the registry. Control only: a shard's registry
+ * holds its own families and says nothing about where the others are.
+ * A map that cannot be rendered (a family on an unknown node, an upstream
+ * that would not tokenize) is logged and NOT written — the previous file
+ * keeps serving, exactly as a refused reload would leave it.
+ */
+export function writeRouteMap(): void {
+  if (env.controlUrl) return;
+  try {
+    writeRouteMapFile(renderRouteMap(remotePlacements()));
+  } catch (err) {
+    log.error('route map not rewritten — the gateway keeps the previous one', err);
+  }
 }
 
 /** Every family that lives on this node, whatever its status. */
@@ -466,6 +501,7 @@ export function createFamily(slug: string): { familyId: string; url: string } {
   // the family's first visit gets the ordinary first-run screen and
   // creates its own admin — the same onboarding as a fresh install.
   runWithTenant(tenantFor(familyId), migrate);
+  writeRouteMap();
   log.notice(`family created: ${slug} (${familyId})`);
   return { familyId, url: `https://${slug}.${env.hostedDomain}/` };
 }
@@ -634,6 +670,7 @@ export function renameFamily(familyId: string, newSlug: string): { url: string }
 
   slugCache.delete(current.slug);
   slugCache.delete(newSlug);
+  writeRouteMap();
   log.notice(`family renamed: ${current.slug} → ${newSlug} (${familyId})`);
   return { url: `https://${newSlug}.${env.hostedDomain}/` };
 }
@@ -684,6 +721,7 @@ export function deleteFamilyData(familyId: string): void {
     if (entry.familyId === familyId) slugCache.delete(slug);
   }
   closeTenant(familyId);
+  writeRouteMap();
 
   rmSync(join(familiesDir, familyId), { recursive: true, force: true });
   log.notice(`family deleted: ${familyId}`);
