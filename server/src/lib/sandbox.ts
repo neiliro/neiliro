@@ -42,7 +42,24 @@ export const SANDBOX_COOKIE = 'hub_sandbox';
 const TTL_MS = 2 * 60 * 60_000; // two hours idle
 const SWEEP_MS = 10 * 60_000;
 const TEMPLATE_REBUILD_MS = 24 * 60 * 60_000;
-const MAX_SANDBOXES = 100;
+/*
+  How many guests can look around at once.
+
+  It was 100, which is a comfortable number for a demo nobody has heard
+  of and the wrong one for the day a launch sends a crowd: past the
+  ceiling every new visitor evicts the least recently seen sandbox, and
+  the person it belonged to loses their family mid-sentence — the one
+  impression the demo exists to make.
+
+  300 is bounded by the two resources a sandbox actually costs, not by
+  taste. Descriptors: each open database is three (db, -wal, -shm), so
+  900 of them, which is why the demo container now asks for a real nofile
+  limit instead of the default 1024 (docker-compose.demo.yml) — running
+  out of descriptors kills the process, not the sandbox. Memory: each
+  connection is capped below, so the ceiling is ~150 MB on a machine that
+  keeps ~1.1 GB free. Both numbers move together; neither is guesswork.
+*/
+const MAX_SANDBOXES = 300;
 // An emergency brake against one sandbox ballooning from a write loop.
 // The template weighs hundreds of kilobytes; honest poking around
 // will never accumulate that much.
@@ -158,6 +175,11 @@ export function createSandbox(
   // The template is plaintext and shared; the copy becomes this guest's
   // hub, so its words go under a key that exists only for this sandbox
   const db = openDatabase(file);
+  // A family's connection may cache freely; three hundred guests may not.
+  // The template is a few hundred kilobytes and a visitor pokes at a
+  // fraction of it, so the default 2 MB per connection buys nothing here
+  // and would put the ceiling at 600 MB on a 2 GB machine.
+  db.pragma('cache_size = -512');
   const raw = generateGuestKey();
   const admin = db.prepare(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`).get() as { id: string };
   encryptSandbox(db, raw, admin.id, now());

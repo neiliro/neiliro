@@ -38,5 +38,14 @@ services:
       DEMO_MODE: "true"
     volumes:
       - ${DEMO_DATA_DIR:-/srv/family-hub/demo-data}:/data
+    # Every guest holds an open SQLite database — three descriptors each
+    # (db, -wal, -shm) — and the demo keeps up to 300 of them alive
+    # (lib/sandbox.ts). Docker's default 1024 would be reached by a busy
+    # afternoon, and running out of descriptors takes down the process
+    # rather than one sandbox.
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     expose:
       - "8787"
