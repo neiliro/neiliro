@@ -110,7 +110,11 @@ export async function issueFounderInvite(familyId: string, email: string): Promi
       { kind: 'button', label: 'Set up your family', url },
       {
         kind: 'muted',
-        text: 'It works once and for two days; if it has expired, ask for the family again from the website and a fresh link arrives. Use this address as your login and it is already confirmed for password recovery; you can pick another, and we will ask you to confirm that one instead.',
+        // The life is interpolated, not spelled out: the letter said "two
+        // days" for the hour after the link started living a week (2.3.1),
+        // which is the one sentence a reader acts on — somebody told the
+        // link was dead does not try it.
+        text: `It works once and for ${FOUNDER_INVITE_TTL_MS / 86_400_000} days; if it has expired, ask for the family again from the website and a fresh link arrives. Use this address as your login and it is already confirmed for password recovery; you can pick another, and we will ask you to confirm that one instead.`,
       },
       { kind: 'p', text: 'First steps, in the order they pay off:' },
       {
