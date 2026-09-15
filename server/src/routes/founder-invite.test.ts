@@ -80,6 +80,12 @@ describe('the founder invitation', () => {
     expect(mail.html).toContain('href="https://founders-f1a1.neiliro.test/join?token=');
     expect(mail.html).toContain('founders-f1a1@mail.neiliro.test');
     expect(mail.html).not.toMatch(/<img|<link|<script/i);
+    // And the letter states that life rather than a number of its own:
+    // it said "two days" for an hour after the link started living a
+    // week, and the sentence a reader acts on has to be the true one
+    const ttlDays = founder.FOUNDER_INVITE_TTL_MS / 86_400_000;
+    expect(mail.text).toContain(`for ${ttlDays} days`);
+
     // The link carries a life, and it is the one the module declares
     const fdb = familyDb(familyId);
     const { expires_at } = fdb.prepare("SELECT expires_at FROM invites WHERE role = 'admin'").get() as { expires_at: string };
