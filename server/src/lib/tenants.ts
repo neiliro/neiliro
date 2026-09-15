@@ -38,7 +38,21 @@ interface FamilyRow {
   id: string;
   slug: string;
   status: string;
+  /** The node that owns the family; NULL is this one. See LOCAL below. */
+  node: string | null;
 }
+
+/*
+  Where a family lives (ADR 0002). The registry on any node can hold a row
+  for a family that is not here — control holds one for every family in
+  the service — and every reader that means "the population" has to say
+  which population. This is the one spelling of "here": NULL, on every
+  node, so that placement never depends on a node knowing its own name
+  and renaming a machine is an env change. A non-NULL value names a
+  remote node, and a family whose row says so must be refused, not
+  created — tenantFor() would otherwise build an empty hub for it.
+*/
+const LOCAL = 'node IS NULL';
 
 /** Open (or create) the registry. Idempotent — the CLI calls it too. */
 export function initHosted(): void {
@@ -92,6 +106,23 @@ export function initHosted(): void {
     registry.exec('ALTER TABLE families ADD COLUMN deleted_at TEXT');
   }
   registry.prepare("UPDATE families SET deleted_at = ? WHERE status = 'deleted' AND deleted_at IS NULL").run(now());
+  // Which node owns the family (ADR 0002, phase 0). NULL = this node, so
+  // every row that exists when the column appears is local by construction.
+  if (!columns.includes('node')) {
+    registry.exec('ALTER TABLE families ADD COLUMN node TEXT');
+  }
+  // The nodes control knows about: where to route a family placed there
+  // (url, the app's address inside the VPC) and whether new sign-ups may
+  // be placed there. Empty on a single machine — the local node is not a
+  // row, it is the absence of one, like the families' NULL.
+  registry.exec(`
+    CREATE TABLE IF NOT EXISTS nodes (
+      name       TEXT PRIMARY KEY,
+      url        TEXT NOT NULL,
+      accepting  INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )
+  `);
   // Every Paddle event exactly once: Paddle retries anything that did not
   // answer 200, and a replayed event must not move the state twice
   registry.exec(`
@@ -141,14 +172,22 @@ export function initHosted(): void {
       log.error(`family ${family.slug}: migration failed — skipped`, err);
     }
   }
-  log.notice(`hosted mode: ${migrated} families on *.${env.hostedDomain}`);
+  const { remote } = registry.prepare(`SELECT count(*) AS remote FROM families WHERE NOT (${LOCAL})`).get() as {
+    remote: number;
+  };
+  log.notice(
+    `hosted mode: node ${env.nodeName}, ${migrated} families here` +
+      (remote > 0 ? `, ${remote} on other nodes` : '') +
+      `, on *.${env.hostedDomain}`,
+  );
 
   initHostedStats();
   setInterval(closeIdle, IDLE_SWEEP_MS).unref();
 }
 
+/** Every family that lives on this node, whatever its status. */
 function allFamilies(): FamilyRow[] {
-  return registry!.prepare('SELECT id, slug, status FROM families').all() as FamilyRow[];
+  return registry!.prepare(`SELECT id, slug, status, node FROM families WHERE ${LOCAL}`).all() as FamilyRow[];
 }
 
 // ── Slug → family ─────────────────────────────────────────────────────────
@@ -180,8 +219,12 @@ function familyIdBySlug(slug: string): string | null {
   const cached = slugCache.get(slug);
   if (cached && Date.now() - cached.at < SLUG_TTL_MS) return cached.familyId;
 
+  // A remote family's slug resolves to nothing here on purpose: the
+  // gateway routes its hostname to the owning node, and a request that
+  // arrives anyway meets the ghost like any unknown name — from outside,
+  // where a family lives is not observable (ADR 0002, Routing).
   const row = registry!
-    .prepare("SELECT id FROM families WHERE slug = ? AND status = 'active'")
+    .prepare(`SELECT id FROM families WHERE slug = ? AND status = 'active' AND ${LOCAL}`)
     .get(slug) as { id: string } | undefined;
   const familyId = row?.id ?? null;
 
@@ -224,6 +267,18 @@ function tenantFor(familyId: string): Tenant {
   }
 
   if (openTenants.size >= MAX_OPEN) evictOldest();
+
+  // Opening a family creates its directory and an empty hub.db when they
+  // are missing — right for a family that is ours and has not been
+  // touched yet, and exactly wrong for one whose row says it lives
+  // elsewhere: the blank hub would answer on its address here while the
+  // real one lives there. A row that names another node is refused.
+  const placed = registry!.prepare('SELECT node FROM families WHERE id = ?').get(familyId) as
+    | { node: string | null }
+    | undefined;
+  if (placed?.node) {
+    throw new Error(`family ${familyId} lives on node ${placed.node}, not here`);
+  }
 
   const dir = join(familiesDir, familyId);
   const attachmentsDir = join(dir, 'attachments');
@@ -421,7 +476,13 @@ export function recordFounderEmail(familyId: string, email: string): void {
   registry!.prepare('UPDATE families SET founder_email = ? WHERE id = ?').run(email.trim().toLowerCase(), familyId);
 }
 
-/** The most recent active family signed up with this address, if any. */
+/**
+ * The most recent active family signed up with this address, if any —
+ * on ANY node. Deliberately not filtered to LOCAL: sign-up is control's
+ * flow and control holds a row for every family, so this is the one
+ * reader that must see the whole service, or a repeat sign-up would mint
+ * a second family for an address whose first one was placed on a shard.
+ */
 export function pendingFamilyByFounderEmail(email: string): string | null {
   const row = registry!
     .prepare("SELECT id FROM families WHERE founder_email = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1")
@@ -432,7 +493,10 @@ export function pendingFamilyByFounderEmail(email: string): string | null {
 /** Active sign-up families older than the cutoff — the reaper's candidates. */
 export function signupFamiliesCreatedBefore(cutoff: string): FamilyRow[] {
   return registry!
-    .prepare("SELECT id, slug, status FROM families WHERE founder_email IS NOT NULL AND status = 'active' AND created_at < ?")
+    .prepare(
+      `SELECT id, slug, status, node FROM families
+        WHERE founder_email IS NOT NULL AND status = 'active' AND created_at < ? AND ${LOCAL}`,
+    )
     .all(cutoff) as FamilyRow[];
 }
 
@@ -497,8 +561,8 @@ export function recordPlanLetter(familyId: string, kind: string): boolean {
 export function familiesWithPlans(): (FamilyRow & PlanRow)[] {
   return registry!
     .prepare(
-      `SELECT id, slug, status, created_at, plan, plan_until, subscription_status, paddle_customer_id, paddle_subscription_id
-         FROM families WHERE status = 'active'`,
+      `SELECT id, slug, status, node, created_at, plan, plan_until, subscription_status, paddle_customer_id, paddle_subscription_id
+         FROM families WHERE status = 'active' AND ${LOCAL}`,
     )
     .all() as (FamilyRow & PlanRow)[];
 }

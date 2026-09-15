@@ -73,6 +73,12 @@ export const env = {
   // The apex all family subdomains hang off (e.g. neiliro.com):
   // a request to <slug>.<domain> is routed to that family's database.
   hostedDomain: (process.env.HOSTED_DOMAIN ?? '').trim().toLowerCase(),
+  // Which node of the hosted service this process is (ADR 0002). The
+  // registry never consults it for placement — a family that is here has
+  // node IS NULL in its row, on every node — so the name exists for what
+  // leaves the machine: the startup log, the route map control exports,
+  // the per-node registry archive. One node today, hence the default.
+  nodeName: (process.env.NODE_NAME ?? 'hosted01').trim().toLowerCase(),
   // ── Family mail on the service's own domain (#30, milestone C) ──────────
   // The domain family addresses hang off: <slug>@<domain>. The address is
   // derived from the slug, never stored — a rename must not leave a stale
@@ -133,6 +139,11 @@ if (env.hostedMode && env.demoMode) {
 }
 if (env.hostedMode && !/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(env.hostedDomain)) {
   throw new Error('HOSTED_MODE=true requires HOSTED_DOMAIN (the apex domain, e.g. example.com)');
+}
+// The node name ends up in a file name (the registry archive) and in a
+// Caddyfile (the route map): a hostname's alphabet keeps it safe in both.
+if (env.hostedMode && !/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(env.nodeName)) {
+  throw new Error('NODE_NAME must be 1–32 chars of [a-z0-9-], letters or digits at the edges (e.g. hosted02)');
 }
 
 // A mail domain with no signing key would accept inbound from anyone, and
