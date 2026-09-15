@@ -27,14 +27,23 @@ import { familySlug, tenantForFamily } from './tenants.js';
 */
 
 /**
- * How long the founder's link lives. Shorter than a member invitation's
- * week (routes/setup.ts): this link opens an empty hub to whoever holds
- * it, it was mailed to the one person who asked for a family minutes
- * ago, and a re-issue is one request (sign-up form) or one command
- * (invite-admin.mjs) away. Decided 2026-09-14 after a family sat
- * unclaimed for twelve days.
+ * How long the founder's link lives — a member invitation's week
+ * (routes/setup.ts).
+ *
+ * It was two days until 2026-09-15, set when families were handed out by
+ * an operator who knew the address was live and the person was waiting.
+ * Self-serve sign-up made the assumption false: somebody creates a family
+ * from a phone on Friday evening and sits down at a computer on Monday,
+ * which is ordinary behaviour, not neglect. The short window turned that
+ * into a dead link, and then the reaper took the family — and nobody
+ * writes to support about it, they just leave.
+ *
+ * The risk the two days guarded against is unchanged and small: the link
+ * opens an EMPTY hub, and it was mailed to the one address that asked for
+ * one. A week of exposure for a hub with nothing in it buys back the
+ * people who read their mail on their own schedule.
  */
-export const FOUNDER_INVITE_TTL_MS = 48 * 60 * 60_000;
+export const FOUNDER_INVITE_TTL_MS = 7 * 24 * 60 * 60_000;
 
 export interface FounderInvite {
   url: string;

@@ -35,7 +35,7 @@ vi.stubGlobal(
 );
 
 const tenants = await import('../lib/tenants.js');
-const { reapUnclaimedFamilies } = await import('../lib/reaper.js');
+const { reapUnclaimedFamilies, REAP_GRACE_MS } = await import('../lib/reaper.js');
 const { buildApp } = await import('../app.js');
 const { env } = await import('../env.js');
 
@@ -173,8 +173,10 @@ describe('the reaper', () => {
     const unclaimed = rowByEmail('home@example.test')[0]!.id;
     const claimed = rowByEmail('sam@example.test').find((r) => r.slug.startsWith('petrovy-'))!.id;
     const young = rowByEmail('six@example.test')[0]!.id;
-    age(unclaimed, 9);
-    age(claimed, 9); // has an administrator — stays
+    // Past the grace period by a day, whatever the invitation's life is set to
+    const stale = REAP_GRACE_MS / 86_400_000 + 1;
+    age(unclaimed, stale);
+    age(claimed, stale); // has an administrator — stays
     // an operator-created family, never signed up, with no user: stays
     const { familyId: operators } = tenants.createFamily('operators-qa01');
     new Database(join(env.dataDir, 'registry.db')).prepare('UPDATE families SET created_at = ? WHERE id = ?').run('2020-01-01 00:00:00', operators);
