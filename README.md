@@ -164,3 +164,7 @@ from an ordinary mail app.
 
 [AGPL-3.0](LICENSE). Run it, change it, share it — but if you offer a
 modified version to others as a service, its source must be open too.
+
+<p align="center">
+  <a href="https://alternativeto.net/software/neiliro/about/?utm_source=badge&utm_medium=referral"><img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="Neiliro on AlternativeTo" height="48"></a>
+</p>
