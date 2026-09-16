@@ -1,3 +1,4 @@
+<a href="https://alternativeto.net/software/neiliro/about/?utm_source=badge&utm_medium=referral"><img align="right" width="136" height="44" hspace="6" src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="Neiliro on AlternativeTo"></a><a href="https://www.producthunt.com/products/neiliro-your-family-s-home-base/reviews/new?utm_source=badge-product_review&utm_medium=badge"><img align="right" width="204" height="44" hspace="6" src="https://api.producthunt.com/widgets/embed-image/v1/product_review.svg?product_id=1318443&theme=dark" alt="Neiliro on Product Hunt"></a>
 # Neiliro
 
 [![CI](https://img.shields.io/github/actions/workflow/status/neiliro/neiliro/ci.yml?branch=master&style=flat-square&labelColor=131c24)](https://github.com/neiliro/neiliro/actions/workflows/ci.yml)
@@ -164,8 +165,3 @@ from an ordinary mail app.
 
 [AGPL-3.0](LICENSE). Run it, change it, share it — but if you offer a
 modified version to others as a service, its source must be open too.
-
-<p align="center">
-  <a href="https://www.producthunt.com/products/neiliro-your-family-s-home-base/reviews/new?utm_source=badge-product_review&utm_medium=badge"><img src="https://api.producthunt.com/widgets/embed-image/v1/product_review.svg?product_id=1318443&theme=dark" alt="Neiliro on Product Hunt" width="222" height="48"></a>&ensp;
-  <a href="https://alternativeto.net/software/neiliro/about/?utm_source=badge&utm_medium=referral"><img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="Neiliro on AlternativeTo" height="48"></a>
-</p>
