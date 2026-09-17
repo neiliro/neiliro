@@ -4,6 +4,7 @@ import { api, type HouseholdMember, type Project, type Task } from '../lib/api';
 import { onEnter } from '../lib/keys';
 import { clearBlankOnBlur } from '../lib/forms';
 import { TaskDetail } from './TaskDetail';
+import { ScrollLock } from './Dialog';
 import { INBOX_ID, projectTitle } from '../lib/tasks';
 
 /**
@@ -78,14 +79,17 @@ export function QuickAdd({ onAdded }: { onAdded: () => void }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed right-5 bottom-24 z-20 grid size-13 place-items-center rounded-full bg-accent text-2xl text-white shadow-lg md:right-8 md:bottom-8"
+        className="fixed right-5 bottom-[calc(6rem+var(--vv-bottom,0px))] z-20 grid size-13 place-items-center rounded-full bg-accent text-2xl text-white shadow-lg md:right-8 md:bottom-8"
         aria-label={t('Add task')}
       >
         +
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-40 flex items-start justify-center px-5 pt-24">
+        <div className="fixed inset-0 z-40 flex items-start justify-center px-5 pt-3 md:pt-24">
+          {/* Same reason as GlobalSearch: the page must not scroll under a
+              focused input in a fixed overlay, or the form slides off-screen */}
+          <ScrollLock />
           <button
             type="button"
             aria-label={t('Close')}
