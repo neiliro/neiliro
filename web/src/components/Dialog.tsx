@@ -33,6 +33,12 @@ import { clearBlankOnBlur } from '../lib/forms';
 */
 let scrollLocks = 0;
 
+/** The lock as an element, for an overlay rendered inside `open && (…)`: hooks cannot be conditional, a child can. */
+export function ScrollLock(): null {
+  useScrollLock();
+  return null;
+}
+
 export function useScrollLock(): void {
   useEffect(() => {
     if (scrollLocks === 0) {

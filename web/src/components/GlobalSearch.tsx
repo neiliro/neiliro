@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { formatDate } from '../lib/format';
 import { projectTitle } from '../lib/tasks';
 import { search, type SearchResult as Result } from '../lib/search';
+import { ScrollLock } from './Dialog';
 
 const KIND_LABEL: Record<Result['kind'], string> = {
   task: t('Task'),
@@ -123,7 +124,11 @@ export function GlobalSearch({
   return (
     <>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center px-5 pt-20">
+        <div className="fixed inset-0 z-50 flex items-start justify-center px-5 pt-3 md:pt-20">
+          {/* Locked while open: on iOS, focusing an input inside a fixed
+              overlay scrolls the PAGE to reveal it, and the overlay's top —
+              the input itself — slides off under the browser toolbar */}
+          <ScrollLock />
           <button
             type="button"
             aria-label={t('Close')}
@@ -131,7 +136,7 @@ export function GlobalSearch({
             className="absolute inset-0 bg-black/40"
           />
 
-          <div className="relative flex max-h-[70vh] w-full max-w-2xl flex-col overflow-hidden rounded-card border border-line bg-surface shadow-xl">
+          <div className="relative flex max-h-[70dvh] w-full max-w-2xl flex-col overflow-hidden rounded-card border border-line bg-surface shadow-xl">
             <input
               ref={inputRef}
               value={query}
@@ -198,7 +203,8 @@ export function GlobalSearch({
               </ul>
             )}
 
-            <p className="border-t border-line px-5 py-2.5 font-mono text-xs text-muted">
+            {/* A keyboard hint is for a keyboard: phones get none */}
+            <p className="hidden border-t border-line px-5 py-2.5 font-mono text-xs text-muted md:block">
               {t('Cmd + Shift + F · arrows and Enter')}
             </p>
           </div>

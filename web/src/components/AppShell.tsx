@@ -5,6 +5,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useEffect, useState, type ReactNode } from 'react';
 import { ADDRESS_ANCHOR } from './FamilyDataSection';
 import { Modal, dialogGhost, dialogPrimary } from './Dialog';
+import { useVisualViewportOffset } from '../lib/viewport';
 import { useFamilyAddress, familyUrl } from '../lib/family-address';
 import { usePlan } from '../lib/plan';
 import { loadLocal, saveLocal } from '../lib/storage';
@@ -204,7 +205,7 @@ function FailureToast() {
   const failure = useFailure();
   if (!failure) return null;
   return (
-    <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 md:right-6 md:bottom-6 md:left-auto md:translate-x-0">
+    <div className="fixed bottom-[calc(5rem+var(--vv-bottom,0px))] left-1/2 z-50 -translate-x-1/2 md:right-6 md:bottom-6 md:left-auto md:translate-x-0">
       <div className="flex items-center gap-3 rounded-full border border-urgent/40 bg-surface py-2 pr-2 pl-4 shadow-xl">
         <span className="text-sm text-ink">{failure.message}</span>
         <button
@@ -234,7 +235,7 @@ function UpdateToast() {
 
   if (!show) return null;
   return (
-    <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 md:right-6 md:bottom-6 md:left-auto md:translate-x-0">
+    <div className="fixed bottom-[calc(5rem+var(--vv-bottom,0px))] left-1/2 z-50 -translate-x-1/2 md:right-6 md:bottom-6 md:left-auto md:translate-x-0">
       <div className="flex items-center gap-3 rounded-full border border-line bg-surface py-2 pr-2 pl-4 shadow-xl">
         <span className="text-sm whitespace-nowrap text-ink">{t('The hub was updated')}</span>
         <button
@@ -289,6 +290,9 @@ export function AppShell() {
   // and there is no sidebar there at all.
   const [searchOpen, setSearchOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  // Keeps the bottom bar, the sheet and the floating buttons on the screen's
+  // real bottom edge on iOS (lib/viewport.ts)
+  useVisualViewportOffset();
   const [settings, setSettings] = useState<Record<string, string>>({});
   // The mailbox is the adults' desk (#30): a kid account does not see the
   // section, and the server refuses it anyway
@@ -406,7 +410,9 @@ export function AppShell() {
       </aside>
 
       {/* Content */}
-      <main className="flex-1 pb-20 md:pb-0">
+      {/* pb-40: the tab bar takes 5rem and the quick-add button floats
+          another 3.25rem above it — the last row of a page must clear both */}
+      <main className="flex-1 pb-40 md:pb-0">
         <ConfirmAddressNotice />
         <PolicyChangeNotice />
         <LockedKeyNotice />
@@ -425,7 +431,7 @@ export function AppShell() {
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
 
       {/* Bottom navigation: phone */}
-      <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-6 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav className="fixed inset-x-0 bottom-[var(--vv-bottom,0px)] z-10 grid grid-cols-6 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
         {visibleNav.map((item) => (
           <NavLink
             key={item.to}
@@ -468,7 +474,7 @@ export function AppShell() {
             onClick={() => setMoreOpen(false)}
             className="absolute inset-0 bg-black/40"
           />
-          <div className="absolute inset-x-0 bottom-0 rounded-t-card border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
+          <div className="absolute inset-x-0 bottom-[var(--vv-bottom,0px)] rounded-t-card border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
             <button
               type="button"
               onClick={() => {
