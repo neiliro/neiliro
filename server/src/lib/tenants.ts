@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
@@ -111,6 +112,24 @@ export function initHosted(): void {
   // every row that exists when the column appears is local by construction.
   if (!columns.includes('node')) {
     registry.exec('ALTER TABLE families ADD COLUMN node TEXT');
+  }
+  // Referrals (#336). A family's own code is minted on demand and never
+  // derived from its slug: the link is shared with people who have no
+  // business learning the family's address. referred_by is the family
+  // whose link brought this one; bonus_days lengthens a free period
+  // (lib/plan.ts); rewarded_at is set on the INVITED family when its
+  // first payment has paid the inviter, so a retried webhook cannot pay
+  // twice.
+  if (!columns.includes('referral_code')) {
+    registry.exec(`
+      ALTER TABLE families ADD COLUMN referral_code TEXT;
+      ALTER TABLE families ADD COLUMN referred_by TEXT;
+      ALTER TABLE families ADD COLUMN bonus_days INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE families ADD COLUMN referral_rewarded_at TEXT;
+    `);
+    // Unique where present: two families must never share a code, and a
+    // partial index leaves the NULLs of families that never asked alone.
+    registry.exec('CREATE UNIQUE INDEX IF NOT EXISTS families_referral_code ON families (referral_code) WHERE referral_code IS NOT NULL');
   }
   // The nodes control knows about: where to route a family placed there
   // (url, the app's address inside the VPC) and whether new sign-ups may
@@ -536,12 +555,147 @@ export function signupFamiliesCreatedBefore(cutoff: string): FamilyRow[] {
     .all(cutoff) as FamilyRow[];
 }
 
+// ── Referrals (#336) ─────────────────────────────────────────────────────
+
+/*
+  A family invites another family and both gain a free month: the invited
+  one before it ever pays, the inviter only once the invited family has
+  actually subscribed.
+
+  Three decisions live in this section, and each one is load-bearing.
+
+  The code is random, not derived. A referral link travels to people who
+  are not in the family — a colleague, a parents' chat — and a code spelled
+  from the slug would hand them the family's address, which is the one
+  thing the ghost exists to keep unguessable.
+
+  The inviter is paid on the invited family's first payment, never on its
+  sign-up. Paying on sign-up would let one person with five mailboxes
+  extend their own free period for ever; paying on payment means a fraud
+  costs €4.99 to earn a month worth €4.99.
+
+  The inviter learns counts, never names. Who signed up through a link is
+  another family's business — an inviter who could see "the Petrovs joined"
+  would be learning a household's existence from us.
+*/
+
+/** No 0/O/1/l/I: the code is read aloud and typed by hand. */
+const CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+const CODE_LENGTH = 8;
+/** Days a referral is worth, to each side. */
+export const REFERRAL_BONUS_DAYS = 30;
+/*
+  A ceiling on what one family can earn, as a fuse rather than a policy:
+  twelve rewards is a free year, and a family earning more than that in a
+  year is a story the operator should see before it becomes a bill.
+*/
+const MAX_REWARDS_PER_FAMILY = 12;
+
+function drawCode(): string {
+  const bytes = randomBytes(CODE_LENGTH);
+  let code = '';
+  for (const byte of bytes) code += CODE_ALPHABET[byte % CODE_ALPHABET.length];
+  return code;
+}
+
+/**
+ * The family's referral code, minted on first use and stable afterwards —
+ * a link already shared must not stop working.
+ */
+export function referralCode(familyId: string): string {
+  const row = registry!.prepare('SELECT referral_code FROM families WHERE id = ?').get(familyId) as
+    | { referral_code: string | null }
+    | undefined;
+  if (!row) throw new Error('No such family');
+  if (row.referral_code) return row.referral_code;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = drawCode();
+    try {
+      registry!.prepare('UPDATE families SET referral_code = ? WHERE id = ?').run(code, familyId);
+      return code;
+    } catch (err) {
+      if ((err as { code?: string }).code !== 'SQLITE_CONSTRAINT_UNIQUE') throw err;
+    }
+  }
+  throw new Error('Could not mint a referral code');
+}
+
+/**
+ * The family a code belongs to, or null. Deleted and suspended families
+ * do not recruit: a link outliving the family that shared it would give
+ * a stranger a free month in the name of nobody.
+ */
+export function familyByReferralCode(code: string): string | null {
+  const row = registry!
+    .prepare("SELECT id FROM families WHERE referral_code = ? AND status = 'active'")
+    .get(code.trim().toLowerCase()) as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
+/** Record who brought this family in, and hand it its own bonus days. */
+export function recordReferral(familyId: string, referrerId: string, days = REFERRAL_BONUS_DAYS): void {
+  registry!
+    .prepare('UPDATE families SET referred_by = ?, bonus_days = bonus_days + ? WHERE id = ?')
+    .run(referrerId, days, familyId);
+}
+
+/**
+ * Pay the family that invited this one, once, when this one first pays.
+ * Returns the inviter's id when something was paid — the caller logs it.
+ *
+ * Idempotent through referral_rewarded_at on the INVITED family: Paddle
+ * retries an event until it is answered, and subscription.activated can
+ * legitimately arrive more than once over a family's life (a resubscribe
+ * after a cancellation). The stamp says "this family has already paid its
+ * inviter", which is true exactly once.
+ */
+export function rewardReferrer(familyId: string, days = REFERRAL_BONUS_DAYS): string | null {
+  const row = registry!
+    .prepare('SELECT referred_by, referral_rewarded_at FROM families WHERE id = ?')
+    .get(familyId) as { referred_by: string | null; referral_rewarded_at: string | null } | undefined;
+  if (!row?.referred_by || row.referral_rewarded_at) return null;
+
+  const inviter = registry!
+    .prepare("SELECT id, bonus_days FROM families WHERE id = ? AND status = 'active'")
+    .get(row.referred_by) as { id: string; bonus_days: number } | undefined;
+  // The inviter may be gone by now: the invited family keeps its own bonus,
+  // and the stamp goes down so nothing tries again.
+  registry!.prepare('UPDATE families SET referral_rewarded_at = ? WHERE id = ?').run(now(), familyId);
+  if (!inviter) return null;
+
+  if (inviter.bonus_days >= MAX_REWARDS_PER_FAMILY * days) {
+    log.warn(`referral: family ${inviter.id} is at the reward ceiling (${inviter.bonus_days} days) — not granting more`);
+    return null;
+  }
+  registry!.prepare('UPDATE families SET bonus_days = bonus_days + ? WHERE id = ?').run(days, inviter.id);
+  return inviter.id;
+}
+
+/**
+ * What an inviter may see about its own link: how many families came
+ * through it and how many of those have paid — counts only, never who.
+ */
+export function referralStats(familyId: string): { joined: number; subscribed: number; bonusDays: number } {
+  const counts = registry!
+    .prepare(
+      `SELECT count(*) AS joined,
+              sum(CASE WHEN referral_rewarded_at IS NOT NULL THEN 1 ELSE 0 END) AS subscribed
+         FROM families WHERE referred_by = ? AND status != 'deleted'`,
+    )
+    .get(familyId) as { joined: number; subscribed: number | null };
+  const own = registry!.prepare('SELECT bonus_days FROM families WHERE id = ?').get(familyId) as
+    | { bonus_days: number }
+    | undefined;
+  return { joined: counts.joined, subscribed: counts.subscribed ?? 0, bonusDays: own?.bonus_days ?? 0 };
+}
+
 // ── Billing (routes/billing.ts, routes/family.ts, lib/plan.ts) ────────────
 
 export function planRow(familyId: string): PlanRow | null {
   return (registry!
     .prepare(
-      `SELECT created_at, plan, plan_until, subscription_status, paddle_customer_id, paddle_subscription_id
+      `SELECT created_at, plan, plan_until, subscription_status, paddle_customer_id, paddle_subscription_id, bonus_days
          FROM families WHERE id = ? AND status != 'deleted'`,
     )
     .get(familyId) as PlanRow | undefined) ?? null;
@@ -597,7 +751,7 @@ export function recordPlanLetter(familyId: string, kind: string): boolean {
 export function familiesWithPlans(): (FamilyRow & PlanRow)[] {
   return registry!
     .prepare(
-      `SELECT id, slug, status, node, created_at, plan, plan_until, subscription_status, paddle_customer_id, paddle_subscription_id
+      `SELECT id, slug, status, node, created_at, plan, plan_until, subscription_status, paddle_customer_id, paddle_subscription_id, bonus_days
          FROM families WHERE status = 'active' AND ${LOCAL}`,
     )
     .all() as (FamilyRow & PlanRow)[];

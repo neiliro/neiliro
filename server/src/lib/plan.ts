@@ -35,6 +35,8 @@ export interface PlanRow {
   subscription_status: string | null;
   paddle_customer_id: string | null;
   paddle_subscription_id: string | null;
+  /** Free days earned through referrals (#336) — added to a free period, never to a paid one. */
+  bonus_days?: number | null;
 }
 
 export type PlanState = 'trial' | 'active' | 'grace' | 'canceling' | 'legacy_free' | 'read_only';
@@ -49,6 +51,12 @@ export interface Entitlement {
   deleteAt: string | null;
   /** Whether a Paddle subscription exists to manage. */
   subscribed: boolean;
+  /**
+   * Referral days counted into `until` above (#336). Zero for most
+   * families; on a paid plan the days are owed but not yet spendable —
+   * see the note in entitlement().
+   */
+  bonusDays: number;
 }
 
 /** SQLite's 'YYYY-MM-DD HH:MM:SS' (UTC) or an ISO string → epoch ms. */
@@ -59,44 +67,57 @@ const iso = (ms: number): string => new Date(ms).toISOString();
 
 export function entitlement(row: PlanRow, nowMs = Date.now()): Entitlement {
   const plan = row.plan ?? 'trial';
+  /*
+    Referral days (#336) lengthen a FREE period — a trial or a
+    grandfathered one — and nothing else. On a paid plan the family is
+    not waiting for a date we control: the next charge is Paddle's, and
+    shortening it means a credit there, not arithmetic here. The days
+    stay on the row, visible in the card, and the operator settles them
+    with the provider; lib/referral-debt.ts would be the automation, and
+    it does not exist while no paying family has earned one.
+  */
+  const bonus = Math.max(0, row.bonus_days ?? 0) * DAY_MS;
   const readOnlyFrom = (sinceMs: number): Entitlement => ({
     state: 'read_only',
     readOnly: true,
     until: iso(sinceMs),
     deleteAt: iso(sinceMs + READ_ONLY_DAYS * DAY_MS),
     subscribed: Boolean(row.paddle_subscription_id),
+    bonusDays: Math.max(0, row.bonus_days ?? 0),
   });
+  const owed = Math.max(0, row.bonus_days ?? 0);
 
   if (plan === 'paid' && row.paddle_subscription_id) {
     const periodEnd = row.plan_until ? toMs(row.plan_until) : null;
     const status = row.subscription_status ?? 'active';
     if (status === 'active' || status === 'trialing') {
-      return { state: 'active', readOnly: false, until: periodEnd ? iso(periodEnd) : null, deleteAt: null, subscribed: true };
+      return { state: 'active', readOnly: false, until: periodEnd ? iso(periodEnd) : null, deleteAt: null, subscribed: true, bonusDays: owed };
     }
     if (status === 'past_due') {
       // Paddle retries the payment for a while; the family keeps writing
       // through the grace window measured from the period that was not paid
       const graceEnd = (periodEnd ?? nowMs) + GRACE_DAYS * DAY_MS;
-      if (nowMs < graceEnd) return { state: 'grace', readOnly: false, until: iso(graceEnd), deleteAt: null, subscribed: true };
+      if (nowMs < graceEnd) return { state: 'grace', readOnly: false, until: iso(graceEnd), deleteAt: null, subscribed: true, bonusDays: owed };
       return readOnlyFrom(graceEnd);
     }
     // canceled or paused: the paid period is honoured, then read-only
     if (periodEnd && nowMs < periodEnd) {
-      return { state: 'canceling', readOnly: false, until: iso(periodEnd), deleteAt: null, subscribed: true };
+      return { state: 'canceling', readOnly: false, until: iso(periodEnd), deleteAt: null, subscribed: true, bonusDays: owed };
     }
     return readOnlyFrom(periodEnd ?? nowMs);
   }
 
   if (plan === 'legacy_free') {
-    const until = row.plan_until ? toMs(row.plan_until) : null;
+    const until = row.plan_until ? toMs(row.plan_until) + bonus : null;
     if (!until || nowMs < until) {
-      return { state: 'legacy_free', readOnly: false, until: until ? iso(until) : null, deleteAt: null, subscribed: false };
+      return { state: 'legacy_free', readOnly: false, until: until ? iso(until) : null, deleteAt: null, subscribed: false, bonusDays: owed };
     }
     return readOnlyFrom(until);
   }
 
-  // trial — from creation, whatever plan_until says (it is derived, not set)
-  const trialEnd = toMs(row.created_at) + TRIAL_DAYS * DAY_MS;
-  if (nowMs < trialEnd) return { state: 'trial', readOnly: false, until: iso(trialEnd), deleteAt: null, subscribed: false };
+  // trial — from creation plus whatever referrals added, whatever
+  // plan_until says (it is derived, not set)
+  const trialEnd = toMs(row.created_at) + TRIAL_DAYS * DAY_MS + bonus;
+  if (nowMs < trialEnd) return { state: 'trial', readOnly: false, until: iso(trialEnd), deleteAt: null, subscribed: false, bonusDays: owed };
   return readOnlyFrom(trialEnd);
 }

@@ -20,6 +20,8 @@ export interface FamilyPlan {
   /** ISO: when the data is removed, once read-only. */
   delete_at: string | null;
   subscribed: boolean;
+  /** Free days earned through referrals and counted into `until` (#336). */
+  bonus_days: number;
   /** The checkout page on the apex, already naming this family. */
   checkout_url: string;
   /** Whether a customer-portal link can be minted. */

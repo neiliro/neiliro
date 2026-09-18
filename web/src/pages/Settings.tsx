@@ -18,6 +18,7 @@ import { TotpSection } from '../components/TotpSection';
 import { CalendarFeedSection } from '../components/CalendarFeedSection';
 import { FamilyDataSection } from '../components/FamilyDataSection';
 import { PlanSection } from '../components/PlanSection';
+import { ReferralSection } from '../components/ReferralSection';
 import { MyDataSection } from '../components/MyDataSection';
 import { useServiceState } from '../lib/service';
 
@@ -733,6 +734,7 @@ export function Settings() {
             <PeopleSection />
           </>
         )}
+        <ReferralSection />
         <div className="grid gap-5 lg:grid-cols-2">
           <PaletteSection />
         <section className="rounded-card border border-line bg-surface p-5">
