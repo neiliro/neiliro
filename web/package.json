@@ -2,7 +2,7 @@
   "name": "@hub/web",
   "private": true,
   "license": "AGPL-3.0-only",
-  "version": "2.3.3",
+  "version": "2.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
