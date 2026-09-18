@@ -18,11 +18,15 @@ const buttonClass =
 const primaryClass =
   'rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover';
 
+/* `trial_referred` is not a server state: the card says it when a trial
+   carries referral days, so the longer date does not read as a mistake. */
 function describe(state: string, until: string | null, deleteAt: string | null): string {
   const day = planDay(until);
   switch (state) {
     case 'trial':
       return t('Free period — until {day}. No card needed until then.', { day });
+    case 'trial_referred':
+      return t('Free period — until {day}, a month of it earned through referrals. No card needed until then.', { day });
     case 'legacy_free':
       return until
         ? t('Free, as promised to the first families — until {day}.', { day })
@@ -75,7 +79,13 @@ export function PlanSection() {
       className={`rounded-card border p-5 ${plan.read_only ? 'border-urgent/40 bg-surface' : 'border-line bg-surface'}`}
     >
       <h2 className={`eyebrow mb-2 ${plan.read_only ? 'text-urgent' : ''}`}>{t('Plan')}</h2>
-      <p className="mb-4 text-sm text-muted">{describe(plan.state, plan.until, plan.delete_at)}</p>
+      <p className="mb-4 text-sm text-muted">
+        {describe(
+          plan.state === 'trial' && plan.bonus_days > 0 ? 'trial_referred' : plan.state,
+          plan.until,
+          plan.delete_at,
+        )}
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         {!plan.subscribed && (
           <>

@@ -1105,6 +1105,12 @@ export const ru: Record<string, string> = {
   'The hub is read-only until the family subscribes': 'Хаб только для чтения, пока семья не оформит подписку',
   'The family has no subscription yet': 'У семьи пока нет подписки',
   'The billing portal is not available right now': 'Личный кабинет плательщика сейчас недоступен',
+  // Referrals (#336)
+  'Invite another family': 'Пригласить другую семью',
+  'A family that starts here through your link gets two months free instead of one. When they subscribe, your own free period grows by a month.': 'Семья, которая заведёт хаб по вашей ссылке, получит два месяца бесплатно вместо одного. Когда она оформит подписку, ваш бесплатный период вырастет на месяц.',
+  '{n} joined through your link, {paid} subscribed.': 'По вашей ссылке пришло: {n}, оформило подписку: {paid}.',
+  'You have earned {days} of free hub.': 'Вы заработали {days} бесплатного хаба.',
+  'Free period — until {day}, a month of it earned through referrals. No card needed until then.': 'Бесплатный период — до {day}, месяц из них заработан по реферальной ссылке. Карта до этого не нужна.',
 };
 
 /** one / few / many, keyed by the English singular used in plural() calls. */
@@ -1113,6 +1119,7 @@ export const ruPlurals: Record<string, [string, string, string]> = {
   week: ['неделю', 'недели', 'недель'],
   month: ['месяц', 'месяца', 'месяцев'],
   year: ['год', 'года', 'лет'],
+  family: ['семья', 'семьи', 'семей'],
   task: ['задача', 'задачи', 'задач'],
   'active session': ['активная сессия', 'активные сессии', 'активных сессий'],
   'session closed': ['сессия закрыта', 'сессии закрыты', 'сессий закрыто'],

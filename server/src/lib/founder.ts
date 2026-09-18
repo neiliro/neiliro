@@ -5,7 +5,8 @@ import { hashInviteToken } from '../routes/setup.js';
 import { sendServiceEmail, serviceMailAvailable } from './mail.js';
 import { renderLetterHtml, renderLetterText, type Letter } from './letter.js';
 import { log } from './log.js';
-import { familySlug, tenantForFamily } from './tenants.js';
+import { familySlug, planRow, tenantForFamily } from './tenants.js';
+import { TRIAL_DAYS } from './plan.js';
 
 /*
   The founder invitation (#157): how a hosted family meets its hub.
@@ -64,6 +65,14 @@ export interface FounderInvite {
 export async function issueFounderInvite(familyId: string, email: string): Promise<FounderInvite> {
   const slug = familySlug(familyId);
   if (!slug) throw new Error('No such family');
+  /*
+    How long this family's free period actually is. Written from the
+    registry rather than from the constant, because a family that arrived
+    through a referral link (#336) has more — and the letter is where a
+    founder learns what they were given.
+  */
+  const plan = planRow(familyId);
+  const freeDays = TRIAL_DAYS + Math.max(0, plan?.bonus_days ?? 0);
   const address = email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) throw new Error(`"${email}" is not an email address`);
 
@@ -148,7 +157,9 @@ export async function issueFounderInvite(familyId: string, email: string): Promi
       },
       {
         kind: 'p',
-        text: 'What it costs. The first 30 days are free, no card needed. After that one plan covers the whole family: €4.99 a month or €44.99 a year, cancel anytime. We write to you before the free period ends.',
+        text: `What it costs. The first ${freeDays} days are free, no card needed${
+          freeDays > TRIAL_DAYS ? ' — the extra month is the referral link you arrived through' : ''
+        }. After that one plan covers the whole family: €4.99 a month or €44.99 a year, cancel anytime. We write to you before the free period ends.`,
       },
       { kind: 'link', text: 'The terms say the same, authoritatively:', url: `https://${apex}/terms` },
       {

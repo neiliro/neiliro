@@ -265,10 +265,33 @@ export async function registerFamilyRoutes(app: FastifyInstance): Promise<void> 
       until: e.until,
       delete_at: e.deleteAt,
       subscribed: e.subscribed,
+      bonus_days: e.bonusDays,
       checkout_url: checkout.toString(),
       // The portal link is minted on demand (POST below) and only exists
       // once there is a subscription and the API key is configured
       portal: e.subscribed && Boolean(env.paddleApiKey),
+    };
+  });
+
+  /*
+    The family's referral link and what it has earned (#336). Any member
+    may read it: inviting another family is not an administrative act,
+    and the card is in everyone's Settings.
+
+    Counts only — never who joined. A family that signed up through this
+    link is another household, and its existence is not ours to report.
+  */
+  app.get('/api/family/referral', async (req, reply) => {
+    if (!env.hostedMode) return notHosted(reply);
+    const { familyId } = currentTenant();
+    if (!familyId || !req.user) return notHosted(reply);
+    const { referralCode, referralStats } = await import('../lib/tenants.js');
+    const stats = referralStats(familyId);
+    return {
+      url: `https://${env.hostedDomain}/?ref=${referralCode(familyId)}`,
+      joined: stats.joined,
+      subscribed: stats.subscribed,
+      bonus_days: stats.bonusDays,
     };
   });
 

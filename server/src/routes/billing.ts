@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { env } from '../env.js';
 import { log } from '../lib/log.js';
-import { planRow, recordBillingEvent, recordSubscription } from '../lib/tenants.js';
+import { planRow, recordBillingEvent, recordSubscription, rewardReferrer } from '../lib/tenants.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -113,6 +113,18 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
       periodEnd,
     });
     log.notice(`billing: family ${familyId} subscription ${data.id} is ${data.status} (${event.event_type})`);
+
+    /*
+      The family that invited this one is paid here and nowhere else
+      (#336): a subscription that Paddle calls active is the first moment
+      money has actually moved. rewardReferrer is idempotent on the
+      invited family, so Paddle's retries and a later resubscribe are
+      both no-ops.
+    */
+    if (data.status === 'active') {
+      const inviter = rewardReferrer(familyId);
+      if (inviter) log.notice(`referral: family ${inviter} earned a free month — family ${familyId} subscribed`);
+    }
     return reply.code(200).send({ ok: true });
   });
 }

@@ -9,8 +9,10 @@ import { log } from '../lib/log.js';
 import { defaultSlug } from '../lib/slug.js';
 import {
   createFamily,
+  familyByReferralCode,
   pendingFamilyByFounderEmail,
   recordFounderEmail,
+  recordReferral,
   tenantForFamily,
 } from '../lib/tenants.js';
 
@@ -49,6 +51,12 @@ const SLUG_ATTEMPTS = 3;
 const bodySchema = z.object({
   family_name: z.string().trim().min(1, 'The family needs a name').max(80, 'That name is too long'),
   email: z.string().trim().toLowerCase().email('That is not an email address').max(120),
+  /*
+    A referral code (#336), if the visitor arrived through a family's link.
+    Shaped here and checked against the registry below; an unknown code is
+    NOT an error — see the note at the call site.
+  */
+  ref: z.string().trim().toLowerCase().regex(/^[a-z2-9]{8}$/).optional(),
 });
 
 // Fixed one-hour window, reset when it ends. Good enough for a fuse: the
@@ -105,7 +113,17 @@ export async function registerSignupRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(503).send({ error: 'Sign-up is busy right now, please try again in an hour' });
     }
 
-    const { family_name: name, email } = parsed.data;
+    const { family_name: name, email, ref } = parsed.data;
+    /*
+      An unknown or stale code costs the visitor nothing: the family is
+      created with the ordinary free period and the letter says so. The
+      alternative — refusing the sign-up — would turn a mistyped link, or
+      one whose family has since left, into a closed door for somebody who
+      wants to start a family here. It also keeps the endpoint from
+      answering "is this code real?", which is the only question a
+      brute-forcer would have.
+    */
+    const referrer = ref ? familyByReferralCode(ref) : null;
     const pending = pendingFamilyByFounderEmail(email);
     let familyId = pending && !familyHasUsers(pending) ? pending : null;
 
@@ -121,10 +139,17 @@ export async function registerSignupRoutes(app: FastifyInstance): Promise<void> 
         }
       }
       recordFounderEmail(familyId!, email);
+      // Only a family created right now: re-issuing the invitation for an
+      // unclaimed family must not stack another bonus onto it, and a
+      // family that already exists was never brought in by this link.
+      if (referrer && referrer !== familyId) recordReferral(familyId!, referrer);
     }
 
     await issueFounderInvite(familyId!, email);
-    log.notice(`signup: ${pending && pending === familyId ? 're-issued invitation for' : 'created'} family ${familyId} (${name.length} chars in the name)`);
+    log.notice(
+      `signup: ${pending && pending === familyId ? 're-issued invitation for' : 'created'} family ${familyId}` +
+        ` (${name.length} chars in the name)${referrer ? ', through a referral link' : ''}`,
+    );
     return reply.code(202).send({ ok: true });
   });
 }

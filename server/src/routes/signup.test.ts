@@ -158,6 +158,46 @@ describe('self-serve sign-up', () => {
   });
 });
 
+describe('a sign-up through a referral link (#336)', () => {
+  it('gives the new family two months and never says whether the code was real', async () => {
+    const inviter = tenants.createFamily('inviters-k1x2').familyId;
+    const code = tenants.referralCode(inviter);
+
+    const good = await signup({ family_name: 'Referred', email: 'ref@example.test', ref: code });
+    expect(good.statusCode).toBe(202);
+    const referred = rowByEmail('ref@example.test')[0]!.id;
+    expect(tenants.planRow(referred)!.bonus_days).toBe(tenants.REFERRAL_BONUS_DAYS);
+
+    // A code nobody owns is not an error, and the answer is byte-identical:
+    // the endpoint must not become a way to test codes
+    const unknown = await signup({ family_name: 'Plain', email: 'plain@example.test', ref: 'zzzzzzzz' });
+    expect(unknown.statusCode).toBe(202);
+    expect(unknown.body).toBe(good.body);
+    expect(tenants.planRow(rowByEmail('plain@example.test')[0]!.id)!.bonus_days).toBe(0);
+
+    // The inviter is paid only when the referred family subscribes
+    expect(tenants.planRow(inviter)!.bonus_days).toBe(0);
+    expect(tenants.rewardReferrer(referred)).toBe(inviter);
+    expect(tenants.planRow(inviter)!.bonus_days).toBe(tenants.REFERRAL_BONUS_DAYS);
+  });
+
+  it('does not stack a bonus when the same address signs up again', async () => {
+    const inviter = tenants.createFamily('inviters-p9q8').familyId;
+    const code = tenants.referralCode(inviter);
+    await signup({ family_name: 'Twice', email: 'twice@example.test', ref: code });
+    const family = rowByEmail('twice@example.test')[0]!.id;
+    // The second call re-issues the invitation for the same unclaimed family
+    await signup({ family_name: 'Twice', email: 'twice@example.test', ref: code });
+    expect(rowByEmail('twice@example.test')).toHaveLength(1);
+    expect(tenants.planRow(family)!.bonus_days).toBe(tenants.REFERRAL_BONUS_DAYS);
+  });
+
+  it('refuses a malformed code as a bad request, so a typo is not silently a lie', async () => {
+    const res = await signup({ family_name: 'Bad', email: 'bad@example.test', ref: 'NOT A CODE' });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 describe('the reaper', () => {
   const age = (familyId: string, days: number) => {
     const past = new Date(Date.now() - days * 86_400_000).toISOString().replace('T', ' ').slice(0, 19);
