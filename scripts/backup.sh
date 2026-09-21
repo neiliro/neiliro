@@ -63,6 +63,35 @@ trap 'status=$?; if [ "$status" -eq 0 ]; then report ""; else rm -f "$MARK_NEW";
 
 mkdir -p "$BACKUP_DIR"
 
+# ── One run at a time ───────────────────────────────────────────────────────
+# The nightly run and the quarter-hourly one both fire at 03:00, and on
+# 2026-09-19 they met: two sqlite3 .backup calls on the same registry
+# ("database is locked"), two runs racing for the same marker file
+# ("mv: cannot stat .last-run.new"). The damage was silent — see the
+# registry check below — so the lock is only half the fix.
+#
+# The incremental run gives way (there is another in fifteen minutes);
+# the nightly one waits, because a full set is the one that must exist,
+# and gives up loudly if the wait is hopeless.
+# flock is util-linux: it is in the container this runs in on a hosted
+# server, and absent on the Mac a self-hosted family may run this from.
+# (Testing this in Docker Desktop on a Mac will mislead you: flock on a
+# bind-mounted macOS directory always succeeds. Verified working on the
+# production volume and inside the image's own filesystem.)
+# There, the two runs cannot collide anyway — a single-family install has
+# no quarter-hourly job — so the lock is taken when it can be, and the
+# incremental run says so when it cannot.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$BACKUP_DIR/.lock"
+  if [ "$CHANGED_ONLY" -eq 1 ]; then
+    flock -n 9 || { echo "another backup run is in progress — skipping this one"; exit 0; }
+  else
+    flock -w 900 9 || { echo "another backup run held the lock for 15 minutes — giving up" >&2; exit 1; }
+  fi
+elif [ "$CHANGED_ONLY" -eq 1 ]; then
+  echo "flock is not available: this run cannot tell whether another is in progress" >&2
+fi
+
 # ── Hosted: one server, many families ───────────────────────────────────────
 # family = subdomain = one SQLite file in families/<id>/ (see
 # docs/architecture.md, "Hosted mode"). Each family becomes its own
@@ -86,7 +115,20 @@ if [ -d "$DATA_DIR/families" ]; then
   # than falling between two of them
   touch "$MARK_NEW"
 
-  sqlite3 "$DATA_DIR/registry.db" ".backup '$DAY_DIR/registry.db'"
+  # A busy registry is normal (the app writes to it); waiting is not an error.
+  sqlite3 -cmd ".timeout 10000" "$DATA_DIR/registry.db" ".backup '$DAY_DIR/registry.db'"
+
+  # Everything below asks this snapshot whether a directory is a live family,
+  # and a failed snapshot answers "no" for every one of them — which archives
+  # nothing and reports success. That is exactly what happened on 2026-09-19:
+  # three families went unarchived for two days and the dead-man switch stayed
+  # green, because the run exited 0. An unreadable or empty registry is now a
+  # failed run, which is what the dead-man switch is for.
+  registered=$(sqlite3 -cmd ".timeout 10000" "$DAY_DIR/registry.db" 'SELECT count(*) FROM families;' 2>/dev/null || echo 0)
+  if [ "${registered:-0}" -eq 0 ]; then
+    echo "registry snapshot is unreadable or has no families — refusing to write a backup that archives nothing" >&2
+    exit 1
+  fi
 
   count=0
   unchanged=0
@@ -120,7 +162,12 @@ if [ -d "$DATA_DIR/families" ]; then
 
     snap_dir="$DAY_DIR/$family_id.snap"
     mkdir -p "$snap_dir"
-    sqlite3 "$family_dir/hub.db" ".backup '$snap_dir/hub.db'"
+    if ! sqlite3 -cmd ".timeout 10000" "$family_dir/hub.db" ".backup '$snap_dir/hub.db'"; then
+      # One family's database being unreadable must not silently shrink the
+      # set: the run fails, and the operator is told which family it was.
+      echo "family $family_id: snapshot failed — the set for $STAMP is incomplete" >&2
+      exit 1
+    fi
 
     if [ -d "$family_dir/attachments" ]; then
       tar -czf "$DAY_DIR/$name.tar.gz" -C "$snap_dir" hub.db -C "$family_dir" attachments
@@ -172,9 +219,16 @@ if [ -d "$DATA_DIR/families" ]; then
   # days with one — the operator sets it next to the bucket
   find "$BACKUP_DIR" -maxdepth 1 -type d -name '20*' -mtime +"$KEEP_DAYS" -exec rm -rf {} + 2>/dev/null || true
 
+  if [ "$CHANGED_ONLY" -eq 0 ] && [ "$count" -eq 0 ]; then
+    echo "no family was archived although the registry lists $registered — refusing to call this a backup" >&2
+    exit 1
+  fi
+
   # Every family that changed since the last good run is in the bucket:
-  # only now does "the last good run" move forward
-  mv -f "$MARK_NEW" "$MARK"
+  # only now does "the last good run" move forward. The marker may be gone
+  # if a run was killed between the touch and here; -f keeps that from
+  # failing a run whose work is already in the bucket.
+  [ -f "$MARK_NEW" ] && mv -f "$MARK_NEW" "$MARK"
 
   if [ "$CHANGED_ONLY" -eq 1 ]; then
     echo "Hosted backup $STAMP (changed only): $count families archived, $unchanged unchanged."
