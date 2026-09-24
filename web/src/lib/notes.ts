@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { familyTimezone } from './timezone';
 import { today } from './tasks';
 
@@ -72,4 +73,22 @@ export function applyPlaceholders(text: string, authorName: string, locale?: str
     author: authorName,
   };
   return text.replace(/\{\{\s*([\wа-яёА-ЯЁ_]+)\s*\}\}/gu, (match, rawKey: string) => values[rawKey.toLowerCase()] ?? match);
+}
+
+/*
+  The names a note gets when nobody has named it yet (Notes.tsx). They are
+  a placeholder wearing the clothes of a value: the field really contains
+  "Untitled", so renaming meant selecting the word and deleting it first.
+
+  Both languages of both names count, because a note created while the hub
+  was in English keeps "Untitled" after the person switches to Russian —
+  matching only the current translation would leave those notes behaving
+  the old way for no reason a person could see.
+*/
+const DEFAULT_TITLES = ['Untitled', 'New template'];
+
+export function isDefaultNoteTitle(title: string): boolean {
+  const value = title.trim();
+  if (value === '') return false;
+  return DEFAULT_TITLES.some((key) => value === key || value === t(key));
 }
