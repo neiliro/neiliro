@@ -12,7 +12,7 @@ import { Editor, type UploadedFile } from '../components/Editor';
 import { EntityDialog } from '../components/EntityDialog';
 import { inlineDanger, useDialogs } from '../components/Dialog';
 import { useKeys } from '../lib/family-key';
-import { applyPlaceholders } from '../lib/notes';
+import { applyPlaceholders, isDefaultNoteTitle } from '../lib/notes';
 import { noteIdByTitle } from '../lib/codec';
 import { invalidateSearchCorpus } from '../lib/search';
 import { uploadAttachments } from '../lib/files';
@@ -109,6 +109,8 @@ export function Notes() {
   );
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteRef = useRef<Note | null>(null);
+  /** The default title taken out of the field on focus, to put back if nothing was typed. */
+  const clearedDefault = useRef<string | null>(null);
   noteRef.current = note;
   // flush is declared below openNote, so it is reached through a ref
   const flushRef = useRef<() => Promise<void>>(async () => {});
@@ -580,8 +582,31 @@ export function Notes() {
                 key={note.id}
                 defaultValue={note.title}
                 readOnly={locked}
+                /*
+                  A note nobody named is called "Untitled", and that word sat
+                  in the field like a real value: renaming meant deleting it
+                  by hand first. Focusing an untouched default clears it, so
+                  typing starts at the beginning of an empty line.
+
+                  Leaving without typing puts it back, untouched and unsaved —
+                  a click on the title must not be able to cost a note its
+                  name. Deleting the word by hand still does what it did.
+                */
+                onFocus={(e) => {
+                  if (!isDefaultNoteTitle(e.target.value)) return;
+                  clearedDefault.current = e.target.value;
+                  e.target.value = '';
+                }}
                 onChange={(e) => queueSave({ title: e.target.value })}
-                onBlur={clearBlankOnBlur(() => queueSave({ title: '' }))}
+                onBlur={(e) => {
+                  const cleared = clearedDefault.current;
+                  clearedDefault.current = null;
+                  if (cleared !== null && e.target.value === '') {
+                    e.target.value = cleared;
+                    return;
+                  }
+                  clearBlankOnBlur(() => queueSave({ title: '' }))(e);
+                }}
                 onKeyDown={onEnter(() => void flush())}
                 className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1.5 font-display text-lg font-semibold text-ink outline-none focus:border-line"
               />

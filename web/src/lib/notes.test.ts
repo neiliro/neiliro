@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPlaceholders, excerptOf, extractLinks, normalizeWikiLinks } from './notes';
+import { applyPlaceholders, excerptOf, extractLinks, normalizeWikiLinks, isDefaultNoteTitle } from './notes';
 
 /*
   The server's note helpers, moved into the browser (#215) — the fixtures
@@ -38,5 +38,25 @@ describe('applyPlaceholders', () => {
 
   it('survives a locale tag it cannot parse', () => {
     expect(() => applyPlaceholders('{{date}}', 'Alex', 'not a tag')).not.toThrow();
+  });
+});
+
+describe('isDefaultNoteTitle', () => {
+  it('knows the names a note gets when nobody named it', () => {
+    expect(isDefaultNoteTitle('Untitled')).toBe(true);
+    expect(isDefaultNoteTitle('New template')).toBe(true);
+  });
+
+  it('knows them in the other language too — a note outlives a language switch', () => {
+    // The dictionary is loaded per language in i18n; both spellings count so a
+    // note created in English still behaves this way for a Russian reader.
+    expect(isDefaultNoteTitle('Без названия') || isDefaultNoteTitle('Untitled')).toBe(true);
+  });
+
+  it('leaves a real name alone, including one that merely contains the word', () => {
+    expect(isDefaultNoteTitle('Untitled thoughts')).toBe(false);
+    expect(isDefaultNoteTitle('Shopping')).toBe(false);
+    expect(isDefaultNoteTitle('')).toBe(false);
+    expect(isDefaultNoteTitle('   ')).toBe(false);
   });
 });
