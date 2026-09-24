@@ -43,6 +43,10 @@ afterAll(() => {
   for (const k of ['HOSTED_MODE', 'HOSTED_DOMAIN', 'MAIL_DOMAIN', 'MAILGUN_SIGNING_KEY', 'MAILGUN_API_KEY', 'SIGNUP_TOKEN', 'SIGNUP_HOURLY_CAP'])
     delete process.env[k];
   vi.unstubAllGlobals();
+  // Released here rather than at the end of the first describe: the reaper
+  // suite below judges families this file created, and it has to judge them
+  // by the same clock they were created on. See the comment on the pin.
+  vi.useRealTimers();
   tenants.shutdownHosted();
 });
 
@@ -65,18 +69,25 @@ const signup = (body: unknown, headers: Record<string, string> = SIGNUP) =>
 
 describe('self-serve sign-up', () => {
   beforeAll(async () => {
-    // The fuse counts within a fixed clock hour (routes/signup.ts). A run
-    // that starts at xx:59:45 crosses into the next hour mid-file and the
-    // count restarts — CI hit exactly that on 2026-09-14. Pin the clock
-    // to the middle of an hour for the whole file; Date only, so Fastify's
-    // own timers keep running.
+    /*
+      The fuse counts within a fixed clock hour (routes/signup.ts). A run
+      that starts at xx:59:45 crosses into the next hour mid-file and the
+      count restarts — CI hit exactly that on 2026-09-14. Pin the clock to
+      the middle of an hour; Date only, so Fastify's own timers keep
+      running.
+
+      The pin is released in this FILE's afterAll, not this describe's.
+      Releasing it early let the reaper suite below judge families created
+      at the pinned date by the wall clock of whoever ran the tests: on
+      2026-09-22, eight days later, families this file had just created
+      fell past the reaper's grace window and the suite began failing —
+      everywhere at once, from the calendar rather than from a change. A
+      test that reads two different clocks has an expiry date printed on
+      it in invisible ink.
+    */
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-14T10:30:00.000Z') });
     tenants.initHosted();
     app = await buildApp();
-  });
-
-  afterAll(() => {
-    vi.useRealTimers();
   });
 
   it('exists only on signup.<apex> and only with the bearer', async () => {
@@ -159,6 +170,13 @@ describe('self-serve sign-up', () => {
 });
 
 describe('a sign-up through a referral link (#336)', () => {
+  // An hour later on the pinned clock: the suite above deliberately spends
+  // the hourly fuse (SIGNUP_HOURLY_CAP=6), and these sign-ups are a
+  // different hour's worth rather than the same hour's overflow.
+  beforeAll(() => {
+    vi.setSystemTime(new Date('2026-09-14T11:30:00.000Z'));
+  });
+
   it('gives the new family two months and never says whether the code was real', async () => {
     const inviter = tenants.createFamily('inviters-k1x2').familyId;
     const code = tenants.referralCode(inviter);
